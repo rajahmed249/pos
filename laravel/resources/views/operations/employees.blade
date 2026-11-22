@@ -1,0 +1,86 @@
+@extends('layouts.app')
+
+@section('title', 'Employee & Salary — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Peoples / Employee & Salary')
+
+@section('content')
+@php $cur = $appSettings['currency'] ?? '৳'; @endphp
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+        <h2 class="font-display text-base font-bold text-slate-900 mb-4">Add Employee</h2>
+        <form method="POST" action="{{ route('employees.store') }}" class="space-y-3 text-sm">
+            @csrf
+            <input type="text" name="name" placeholder="Full Name" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+            <input type="text" name="phone" placeholder="Phone Number" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+            <input type="text" name="designation" placeholder="Designation (e.g. Sales Executive)" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+            <input type="text" name="department" placeholder="Department" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+            <input type="number" name="salary" step="0.01" min="0" placeholder="Monthly Salary" required class="w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums">
+            <input type="date" name="joining_date" value="{{ now()->toDateString() }}" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+            <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold">Save Employee</button>
+        </form>
+    </div>
+
+    <div class="lg:col-span-2 min-w-0 space-y-6">
+        <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-5 shadow-xs overflow-x-auto">
+            <h2 class="font-display text-base font-bold text-slate-900 mb-4">Staff Roster &amp; Payroll</h2>
+            <table class="w-full text-sm text-left">
+                <thead>
+                    <tr class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                        <th class="py-2 pr-3">Employee</th>
+                        <th class="py-2 pr-3">Role</th>
+                        <th class="py-2 pr-3 text-right">Salary</th>
+                        <th class="py-2 pr-3">Status</th>
+                        <th class="py-2 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    @forelse($employees as $emp)
+                        <tr>
+                            <td class="py-2.5 pr-3">
+                                <div class="font-medium text-slate-900">{{ $emp->name }}</div>
+                                <div class="text-xs text-slate-500">{{ $emp->employee_id }} &middot; {{ $emp->phone ?: '—' }}</div>
+                            </td>
+                            <td class="py-2.5 pr-3 text-xs text-slate-600">{{ $emp->designation ?: 'Staff' }}</td>
+                            <td class="py-2.5 pr-3 text-right font-semibold tabular-nums">{{ $cur }}{{ number_format((float) $emp->salary, 2) }}</td>
+                            <td class="py-2.5 pr-3">
+                                <span class="px-2 py-0.5 rounded-full text-xs font-semibold {{ $emp->status ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500' }}">
+                                    {{ $emp->status ? 'Active' : 'Inactive' }}
+                                </span>
+                            </td>
+                            <td class="py-2.5 text-right space-x-1.5 whitespace-nowrap">
+                                <form method="POST" action="{{ route('employees.salary', $emp) }}" class="inline">
+                                    @csrf
+                                    <input type="hidden" name="amount" value="{{ $emp->salary }}">
+                                    <input type="hidden" name="month" value="{{ now()->format('F Y') }}">
+                                    <button type="submit" class="text-xs px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium">Pay Salary</button>
+                                </form>
+                                <form method="POST" action="{{ route('employees.toggle', $emp) }}" class="inline">
+                                    @csrf
+                                    @method('PATCH')
+                                    <button type="submit" class="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50">Toggle</button>
+                                </form>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="5" class="py-6 text-center text-slate-400">No employees added yet.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-xs overflow-x-auto">
+            <h3 class="font-display text-sm font-bold text-slate-900 mb-3">Recent Salary Payouts</h3>
+            <div class="divide-y divide-slate-100 text-xs">
+                @forelse($salaryExpenses as $exp)
+                    <div class="py-2 flex justify-between items-center">
+                        <span>{{ $exp->description }} <span class="text-slate-400">({{ $exp->expense_date?->format('d M Y') }})</span></span>
+                        <span class="font-semibold text-indigo-600 tabular-nums">{{ $cur }}{{ number_format((float) $exp->amount, 2) }}</span>
+                    </div>
+                @empty
+                    <div class="py-4 text-slate-400">No salary payouts recorded yet.</div>
+                @endforelse
+            </div>
+        </div>
+    </div>
+</div>
+@endsection

@@ -1,0 +1,68 @@
+@extends('layouts.app')
+
+@section('title', 'Owners — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Main / Owners')
+
+@section('content')
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+        <h2 class="font-display text-base font-bold text-slate-900 mb-3">Add Business Owner</h2>
+        <p class="text-xs text-slate-500 mb-4">Active Equity Total: <strong class="text-indigo-600">{{ number_format($totalShare, 2) }}%</strong></p>
+        <form method="POST" action="{{ route('owners.store') }}" class="space-y-3 text-sm">
+            @csrf
+            <input type="text" name="name" placeholder="Owner Full Name" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+            <input type="text" name="phone" placeholder="Phone Number" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+            <input type="email" name="email" placeholder="Email Address" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+            <input type="number" name="share_percent" step="0.01" min="0" max="100" value="50" placeholder="Share %" required class="w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums">
+            <input type="text" name="address" placeholder="Address" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+            <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold">Add Owner</button>
+        </form>
+    </div>
+
+    <div class="lg:col-span-2 min-w-0 bg-white border border-slate-200 rounded-xl p-5 shadow-xs overflow-x-auto">
+        <h2 class="font-display text-base font-bold text-slate-900 mb-4">Partner &amp; Owner List</h2>
+        <table class="w-full text-sm text-left">
+            <thead>
+                <tr class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                    <th class="py-2 pr-3">Name</th>
+                    <th class="py-2 pr-3">Contact</th>
+                    <th class="py-2 pr-3">Share</th>
+                    <th class="py-2 pr-3">Status</th>
+                    <th class="py-2 text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                @forelse($owners as $owner)
+                    <tr>
+                        <td class="py-2.5 pr-3 font-medium text-slate-900">{{ $owner->name }}</td>
+                        <td class="py-2.5 pr-3 text-xs text-slate-600">
+                            <div>{{ $owner->phone ?: '—' }}</div>
+                            <div>{{ $owner->email ?: '' }}</div>
+                        </td>
+                        <td class="py-2.5 pr-3 font-semibold tabular-nums">{{ number_format((float) $owner->share_percent, 2) }}%</td>
+                        <td class="py-2.5 pr-3">
+                            <span class="px-2 py-0.5 rounded-full text-xs font-semibold {{ $owner->is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500' }}">
+                                {{ $owner->is_active ? 'Active' : 'Inactive' }}
+                            </span>
+                        </td>
+                        <td class="py-2.5 text-right space-x-2 whitespace-nowrap">
+                            <form method="POST" action="{{ route('owners.toggle', $owner) }}" class="inline">
+                                @csrf
+                                @method('PATCH')
+                                <button type="submit" class="text-xs px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-50">Toggle</button>
+                            </form>
+                            <form method="POST" action="{{ route('owners.destroy', $owner) }}" class="inline">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="text-xs px-2.5 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                @empty
+                    <tr><td colspan="5" class="py-6 text-center text-slate-400">No owners recorded yet.</td></tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+</div>
+@endsection

@@ -1,0 +1,50 @@
+@extends('layouts.app')
+
+@section('title', 'Units — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Product Information / Unit')
+
+@section('content')
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+        <h2 class="font-display text-base font-bold text-slate-900 mb-4">Add Measurement Unit</h2>
+        <form method="POST" action="{{ route('units.store') }}" class="space-y-3 text-sm">
+            @csrf
+            <input type="text" name="name" placeholder="Unit Name (e.g. Pcs, Box, Meter)" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+            <input type="text" name="description" placeholder="Description" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+            <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold">Add Unit</button>
+        </form>
+    </div>
+
+    <div class="lg:col-span-2 min-w-0 bg-white border border-slate-200 rounded-xl p-5 shadow-xs overflow-x-auto">
+        <h2 class="font-display text-base font-bold text-slate-900 mb-4">Product Units</h2>
+        <table class="w-full text-sm text-left">
+            <thead>
+                <tr class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                    <th class="py-2 pr-3">Unit</th>
+                    <th class="py-2 pr-3">Description</th>
+                    <th class="py-2 pr-3 text-right">Products</th>
+                    <th class="py-2 text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                @forelse($units as $u)
+                    <tr>
+                        <td class="py-2.5 pr-3 font-medium text-slate-900">{{ $u->name }}</td>
+                        <td class="py-2.5 pr-3 text-slate-600">{{ $u->description ?: '—' }}</td>
+                        <td class="py-2.5 pr-3 text-right tabular-nums">{{ $u->products_count }}</td>
+                        <td class="py-2.5 text-right">
+                            <form method="POST" action="{{ route('units.destroy', $u) }}" class="inline">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="text-xs px-2.5 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                @empty
+                    <tr><td colspan="4" class="py-6 text-center text-slate-400">No units found.</td></tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+</div>
+@endsection

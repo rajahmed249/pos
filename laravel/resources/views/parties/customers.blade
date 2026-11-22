@@ -1,0 +1,46 @@
+@extends('layouts.app')
+
+@section('title', 'Customers — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Parties / Customers')
+
+@section('content')
+@php $cur = $appSettings['currency'] ?? '৳'; @endphp
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-4 h-fit">
+        <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">Add Customer</h2>
+        <form method="POST" action="{{ route('customers.store') }}" class="space-y-3 text-sm">
+            @csrf
+            <input type="text" name="name" required placeholder="Customer name" class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
+            <input type="text" name="phone" placeholder="Phone number" class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
+            <input type="email" name="email" placeholder="Email" class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
+            <textarea name="address" rows="2" placeholder="Address" class="w-full px-3 py-1.5 border border-slate-300 rounded-md"></textarea>
+            <button type="submit" class="w-full py-2 bg-slate-900 text-white rounded-md font-medium">Save Customer</button>
+        </form>
+    </div>
+    <div class="lg:col-span-3 min-w-0 bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-slate-50 text-xs text-slate-500 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-2.5 text-left">Customer</th>
+                        <th class="px-4 py-2.5 text-left">Phone</th>
+                        <th class="px-4 py-2.5 text-right">Billed</th>
+                        <th class="px-4 py-2.5 text-right">Due Balance</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    @foreach($customers as $customer)
+                        <tr>
+                            <td class="px-4 py-2.5 font-medium text-slate-900">{{ $customer->name }}</td>
+                            <td class="px-4 py-2.5 text-xs text-slate-600 font-mono whitespace-nowrap">{{ $customer->phone ?: '-' }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums whitespace-nowrap">{{ $cur }}{{ number_format((float) $customer->total_billed, 2) }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums whitespace-nowrap {{ ($customer->total_due ?? 0) > 0 ? 'text-red-600 font-medium' : 'text-slate-400' }}">{{ $cur }}{{ number_format((float) $customer->total_due, 2) }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+        <div class="p-4 border-t border-slate-200">{{ $customers->links() }}</div>
+    </div>
+</div>
+@endsection

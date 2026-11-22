@@ -1,0 +1,122 @@
+@extends('layouts.app')
+
+@section('title', 'Product Management — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Product Management')
+
+@section('content')
+@php $cur = $appSettings['currency'] ?? '৳'; @endphp
+
+<div class="space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div class="w-11 h-11 sm:w-[56px] sm:h-[56px] shrink-0 rounded-2xl flex items-center justify-center text-white text-xl sm:text-2xl shadow-[0_8px_24px_rgba(79,70,229,0.35)]"
+                 style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                <i class="fas fa-cubes shrink-0"></i>
+            </div>
+            <div class="min-w-0">
+                <h1 class="text-xl sm:text-[26px] font-extrabold text-[#0f172a] truncate">
+                    Product <span class="bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] bg-clip-text text-transparent">Management</span>
+                </h1>
+                <p class="text-[12px] sm:text-[13px] text-[#64748b] mt-0.5"><i class="far fa-calendar-alt mr-1"></i>{{ date('d F, Y') }} &bull; <i class="far fa-clock mr-1"></i>{{ date('h:i A') }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div class="min-w-0 bg-white rounded-[20px] p-5 border border-[#f1f5f9] shadow-xs h-fit">
+            <h2 class="text-base font-bold text-[#1e293b] mb-3 pb-2 border-b border-[#f1f5f9]">Add Product</h2>
+            <form method="POST" action="{{ route('products.store') }}" class="space-y-3 text-sm">
+                @csrf
+                <input type="text" name="name" required placeholder="Product Name *" class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px]">
+                <input type="text" name="sku" placeholder="SKU" class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px]">
+                <select name="category_id" class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px]">
+                    <option value="">Category</option>
+                    @foreach($categories as $cat)
+                        <option value="{{ $cat->id }}">{{ $cat->name }}</option>
+                    @endforeach
+                </select>
+                <select name="brand_id" class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px]">
+                    <option value="">Brand</option>
+                    @foreach($brands as $brand)
+                        <option value="{{ $brand->id }}">{{ $brand->name }}</option>
+                    @endforeach
+                </select>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input type="number" step="0.01" min="0" name="purchase_price" required placeholder="Cost ({{ $cur }})" class="w-full min-w-0 px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px] tabular-nums">
+                    <input type="number" step="0.01" min="0" name="selling_price" required placeholder="Price ({{ $cur }})" class="w-full min-w-0 px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px] tabular-nums">
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input type="number" min="0" name="quantity" value="0" required placeholder="Stock" class="w-full min-w-0 px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px] tabular-nums">
+                    <input type="text" name="warranty" placeholder="Warranty" class="w-full min-w-0 px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px]">
+                </div>
+                <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" class="w-full py-2.5 rounded-[10px] text-white font-semibold">
+                    Save Product
+                </button>
+            </form>
+        </div>
+
+        <div class="lg:col-span-3 min-w-0 bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] flex flex-wrap gap-3 justify-between items-center">
+                <div class="flex items-center gap-2.5">
+                    <i class="fas fa-list-ul text-[#4f46e5] shrink-0"></i>
+                    <h3 class="text-base font-semibold text-[#1e293b]">Product List</h3>
+                    <span class="px-3 py-0.5 rounded-full text-xs font-medium text-white shrink-0" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                        {{ number_format($products->total()) }}
+                    </span>
+                </div>
+                <form method="GET" action="{{ route('products.index') }}" class="flex flex-wrap gap-2 w-full sm:w-auto">
+                    <input type="text" name="q" value="{{ request('q') }}" placeholder="Search Name, SKU, Category, Brand..." class="flex-1 min-w-0 sm:w-56 px-3 py-1.5 text-xs border-2 border-[#e2e8f0] rounded-lg">
+                    <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" class="px-3.5 py-1.5 text-xs font-semibold text-white rounded-lg shrink-0">Filter</button>
+                </form>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-[13px] border-collapse">
+                    <thead class="bg-[#f8fafc]">
+                        <tr>
+                            <th class="py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">#</th>
+                            <th class="py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Product</th>
+                            <th class="py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Category</th>
+                            <th class="py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Brand</th>
+                            <th class="py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Warranty</th>
+                            <th class="py-3 px-4 text-right text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Price</th>
+                            <th class="py-3 px-4 text-right text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Cost</th>
+                            <th class="py-3 px-4 text-center text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Stock</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($products as $idx => $product)
+                            @php
+                                $qty = (int) ($product->stock_quantity ?? $product->quantity ?? 0);
+                                $alert = (int) ($product->alert_quantity ?? 5);
+                                $stockClass = $qty <= 0 ? 'bg-[#fee2e2] text-[#dc2626]' : ($qty <= $alert ? 'bg-[#fef3c7] text-[#d97706]' : 'bg-[#d1fae5] text-[#059669]');
+                                $dotClass = $qty <= 0 ? 'bg-[#dc2626]' : ($qty <= $alert ? 'bg-[#d97706]' : 'bg-[#059669]');
+                                $stockLabel = $qty <= 0 ? 'Out of Stock' : ($qty <= $alert ? 'Low Stock' : 'In Stock');
+                            @endphp
+                            <tr class="border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
+                                <td class="py-3 px-4 text-[#64748b] tabular-nums">{{ $products->firstItem() + $idx }}</td>
+                                <td class="py-3 px-4">
+                                    <div class="font-semibold text-[#1e293b]">{{ $product->name }}</div>
+                                    <div class="text-[11px] text-[#94a3b8]">SKU: {{ $product->sku ?: 'N/A' }}</div>
+                                </td>
+                                <td class="py-3 px-4"><span class="px-3 py-0.5 rounded-full text-[11px] font-medium bg-[#eef2ff] text-[#4f46e5]">{{ $product->category?->name ?: 'Uncategorized' }}</span></td>
+                                <td class="py-3 px-4"><span class="px-3 py-0.5 rounded-full text-[11px] font-medium bg-[#f1f5f9] text-[#475569]">{{ $product->brand?->name ?: 'No Brand' }}</span></td>
+                                <td class="py-3 px-4"><span class="px-3 py-0.5 rounded-full text-[11px] font-medium bg-[#eef2ff] text-[#4f46e5]">{{ $product->warranty ?: 'No Warranty' }}</span></td>
+                                <td class="py-3 px-4 text-right font-semibold tabular-nums">{{ $cur }}{{ number_format($product->selling_price, 2) }}</td>
+                                <td class="py-3 px-4 text-right text-[#64748b] tabular-nums">{{ $cur }}{{ number_format($product->purchase_price, 2) }}</td>
+                                <td class="py-3 px-4 text-center">
+                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold {{ $stockClass }}">
+                                        <span class="w-1.5 h-1.5 rounded-full {{ $dotClass }}"></span>
+                                        {{ $stockLabel }} ({{ number_format($qty) }})
+                                    </span>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+            <div class="p-4 border-t border-[#f1f5f9] bg-[#f8fafc]">{{ $products->links() }}</div>
+        </div>
+    </div>
+</div>
+@endsection

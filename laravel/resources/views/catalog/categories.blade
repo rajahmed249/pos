@@ -1,0 +1,45 @@
+@extends('layouts.app')
+
+@section('title', 'Categories — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Inventory / Categories')
+
+@section('content')
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-5 h-fit">
+        <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">Add Category</h2>
+        <form method="POST" action="{{ route('categories.store') }}" class="space-y-3 text-sm">
+            @csrf
+            <input type="text" name="name" required placeholder="Category name" class="w-full px-3 py-2 border border-slate-300 rounded-md">
+            <textarea name="description" rows="2" placeholder="Description" class="w-full px-3 py-2 border border-slate-300 rounded-md"></textarea>
+            <button type="submit" class="w-full py-2 bg-slate-900 text-white rounded-md font-medium">Create Category</button>
+        </form>
+    </div>
+    <div class="lg:col-span-2 min-w-0 bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-slate-50 text-xs text-slate-500 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-2.5 text-left">Name</th>
+                        <th class="px-4 py-2.5 text-right">Products</th>
+                        <th class="px-4 py-2.5 text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    @foreach($categories as $category)
+                        <tr>
+                            <td class="px-4 py-2.5 font-medium text-slate-900">{{ $category->name }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums text-slate-600">{{ $category->products_count }}</td>
+                            <td class="px-4 py-2.5 text-right whitespace-nowrap">
+                                <form method="POST" action="{{ route('categories.destroy', $category) }}">
+                                    @csrf @method('DELETE')
+                                    <button type="submit" class="text-xs text-red-600 hover:underline">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+@endsection

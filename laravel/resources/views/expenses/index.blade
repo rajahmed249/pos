@@ -1,0 +1,51 @@
+@extends('layouts.app')
+
+@section('title', 'Expenses — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Finance / Expenses')
+
+@section('content')
+@php $cur = $appSettings['currency'] ?? '৳'; @endphp
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-4 h-fit">
+        <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">Record Expense</h2>
+        <form method="POST" action="{{ route('expenses.store') }}" class="space-y-3 text-sm">
+            @csrf
+            <select name="category" required class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
+                @foreach($categories as $cat)
+                    <option value="{{ $cat->name }}">{{ $cat->name }}</option>
+                @endforeach
+            </select>
+            <input type="number" step="0.01" min="0.01" name="amount" required placeholder="Amount" class="w-full px-3 py-1.5 border border-slate-300 rounded-md tabular-nums">
+            <input type="date" name="expense_date" value="{{ date('Y-m-d') }}" required class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
+            <textarea name="description" rows="2" placeholder="Note" class="w-full px-3 py-1.5 border border-slate-300 rounded-md"></textarea>
+            <button type="submit" class="w-full py-2 bg-slate-900 text-white rounded-md font-medium">Save Expense</button>
+        </form>
+    </div>
+    <div class="lg:col-span-2 min-w-0 bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-slate-50 text-xs text-slate-500 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-2.5 text-left">Date</th>
+                        <th class="px-4 py-2.5 text-left">Category</th>
+                        <th class="px-4 py-2.5 text-left">Note</th>
+                        <th class="px-4 py-2.5 text-right">Amount</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    @forelse($expenses as $expense)
+                        <tr>
+                            <td class="px-4 py-2.5 text-xs tabular-nums whitespace-nowrap">{{ $expense->expense_date?->format('Y-m-d') }}</td>
+                            <td class="px-4 py-2.5 font-medium">{{ $expense->category }}</td>
+                            <td class="px-4 py-2.5 text-xs text-slate-500">{{ $expense->description ?: '-' }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums text-red-600 font-medium whitespace-nowrap">{{ $cur }}{{ number_format($expense->amount, 2) }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="4" class="px-4 py-6 text-center text-xs text-slate-500">No expenses recorded yet.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+@endsection

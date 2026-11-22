@@ -1,0 +1,122 @@
+@extends('layouts.app')
+
+@section('title', 'Sales Management — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Sales Management')
+
+@section('content')
+@php $cur = $appSettings['currency'] ?? '৳'; @endphp
+
+<div class="space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div class="w-11 h-11 sm:w-[52px] sm:h-[52px] shrink-0 rounded-xl flex items-center justify-center text-white text-xl sm:text-2xl shadow-[0_8px_24px_rgba(79,70,229,0.3)]"
+                 style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                <i class="fas fa-file-invoice shrink-0"></i>
+            </div>
+            <div class="min-w-0">
+                <h1 class="text-xl sm:text-2xl font-bold text-[#0f172a] truncate">Sales Management</h1>
+                <p class="text-[12px] sm:text-[13px] text-[#64748b] mt-0.5"><i class="far fa-calendar-alt mr-1"></i>{{ date('d F, Y') }} &bull; <i class="far fa-clock mr-1"></i>{{ date('h:i A') }}</p>
+            </div>
+        </div>
+        <a href="{{ route('pos.index') }}"
+           style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
+           class="inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-[10px] text-[13px] font-semibold text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)] shrink-0 whitespace-nowrap">
+            <i class="fas fa-plus-circle shrink-0"></i> New Sale
+        </a>
+    </div>
+
+    <div class="bg-white rounded-[20px] p-4 sm:px-5 shadow-xs border border-[#f1f5f9]">
+        <form method="GET" action="{{ route('sales.index') }}" class="flex flex-wrap gap-3">
+            <input type="text" name="q" value="{{ request('q') }}" placeholder="Search by Invoice No, Customer Name, Phone or Product..."
+                   class="w-full sm:flex-1 sm:min-w-[240px] px-4 py-2.5 border-2 border-[#e2e8f0] rounded-[10px] text-sm focus:outline-none focus:border-[#4f46e5]">
+            <select name="payment_status" class="w-full sm:w-auto px-3.5 py-2.5 border-2 border-[#e2e8f0] rounded-[10px] text-sm">
+                <option value="">All Status</option>
+                <option value="paid" @selected(request('payment_status') === 'paid')>Completed</option>
+                <option value="partial" @selected(request('payment_status') === 'partial')>Partial</option>
+                <option value="due" @selected(request('payment_status') === 'due')>Pending</option>
+            </select>
+            <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" class="w-full sm:w-auto px-5 py-2.5 text-sm font-semibold text-white rounded-[10px] shrink-0">
+                Search
+            </button>
+        </form>
+    </div>
+
+    <div class="bg-white rounded-[20px] shadow-xs border border-[#f1f5f9] overflow-hidden">
+        <div class="px-5 py-4 border-b border-[#f1f5f9] bg-[#f8fafc] flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5">
+                <i class="fas fa-list-ul text-[#4f46e5]"></i>
+                <h3 class="text-base font-semibold text-[#1e293b]">Sales List</h3>
+                <span class="px-3 py-0.5 rounded-full text-xs font-medium text-white" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                    {{ number_format($sales->total()) }}
+                </span>
+            </div>
+            <div class="text-xs text-[#64748b]">Showing {{ $sales->count() }} of {{ number_format($sales->total()) }}</div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-[13px] border-collapse">
+                <thead class="bg-[#f8fafc]">
+                    <tr>
+                        <th class="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">#</th>
+                        <th class="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Invoice</th>
+                        <th class="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Customer</th>
+                        <th class="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Products</th>
+                        <th class="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Date</th>
+                        <th class="py-3 px-4 text-right text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Amount</th>
+                        <th class="py-3 px-4 text-right text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Paid</th>
+                        <th class="py-3 px-4 text-right text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Due</th>
+                        <th class="py-3 px-4 text-center text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Status</th>
+                        <th class="py-3 px-4 text-center text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($sales as $idx => $sale)
+                        @php $completed = $sale->due <= 0; @endphp
+                        <tr class="border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
+                            <td class="py-3 px-4 text-[#64748b] tabular-nums">{{ $sales->firstItem() + $idx }}</td>
+                            <td class="py-3 px-4">
+                                <a href="{{ route('sales.invoice', $sale) }}" class="text-[#4f46e5] font-semibold hover:underline">{{ $sale->invoice_no }}</a>
+                            </td>
+                            <td class="py-3 px-4">
+                                <div class="font-semibold text-[#1e293b]">{{ $sale->customer_name ?: 'Walk-in Customer' }}</div>
+                                @if($sale->customer?->phone)
+                                    <div class="text-[11px] text-[#94a3b8]"><i class="fas fa-phone mr-1"></i>{{ $sale->customer->phone }}</div>
+                                @endif
+                            </td>
+                            <td class="py-3 px-4">
+                                <ul class="list-disc pl-4 space-y-0.5 text-xs text-[#475569]">
+                                    @foreach($sale->items->take(4) as $item)
+                                        <li>{{ $item->product_name }} <span class="text-[#94a3b8]">×{{ $item->quantity }}</span></li>
+                                    @endforeach
+                                </ul>
+                            </td>
+                            <td class="py-3 px-4 text-xs text-slate-600 tabular-nums">{{ $sale->date?->format('d M Y') }}</td>
+                            <td class="py-3 px-4 text-right font-semibold tabular-nums">{{ $cur }}{{ number_format($sale->receivable, 2) }}</td>
+                            <td class="py-3 px-4 text-right font-semibold text-[#10b981] tabular-nums">{{ $cur }}{{ number_format($sale->paid, 2) }}</td>
+                            <td class="py-3 px-4 text-right font-semibold tabular-nums {{ $sale->due > 0 ? 'text-[#ef4444]' : 'text-[#10b981]' }}">
+                                {{ $cur }}{{ number_format($sale->due, 2) }}
+                            </td>
+                            <td class="py-3 px-4 text-center">
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold {{ $completed ? 'bg-[#d1fae5] text-[#065f46]' : 'bg-[#fee2e2] text-[#991b1b]' }}">
+                                    <span class="w-1.5 h-1.5 rounded-full {{ $completed ? 'bg-[#10b981]' : 'bg-[#ef4444]' }}"></span>
+                                    {{ $completed ? 'Completed' : 'Pending' }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4 text-center whitespace-nowrap space-x-2 text-xs">
+                                <a href="{{ route('sales.invoice', $sale) }}" class="text-[#4f46e5] font-semibold hover:underline">Invoice</a>
+                                <a href="{{ route('sales.print', $sale) }}" class="text-[#059669] font-semibold hover:underline">Print</a>
+                                <form method="POST" action="{{ route('sales.destroy', $sale) }}" class="inline">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="text-[#ef4444] font-semibold hover:underline">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+        <div class="p-4 border-t border-[#f1f5f9] bg-[#f8fafc]">{{ $sales->links() }}</div>
+    </div>
+</div>
+@endsection

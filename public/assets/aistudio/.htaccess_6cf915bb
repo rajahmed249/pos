@@ -1,0 +1,8 @@
+# If the whole project is uploaded into public_html (document root cannot be changed),
+# this sends every request into /public and hides everything else.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(\.env|composer\.(json|lock)|artisan|legacy|app|bootstrap|config|database|routes|storage|tests|vendor)(/|$) - [F,L,NC]
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>

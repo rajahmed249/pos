@@ -1,0 +1,66 @@
+@extends('layouts.app')
+
+@section('title', 'Returns & Damages — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Finance / Returns & Damages')
+
+@section('content')
+@php $cur = $appSettings['currency'] ?? '৳'; @endphp
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-5">
+        <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">Sales Return</h2>
+        <form method="POST" action="{{ route('returns.store') }}" class="space-y-3 text-sm mb-4">
+            @csrf
+            <select name="sale_id" required class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
+                @foreach($sales as $s)
+                    <option value="{{ $s->id }}">{{ $s->invoice_no }} — {{ $s->customer_name }}</option>
+                @endforeach
+            </select>
+            <select name="product_id" required class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
+                @foreach($products as $p)
+                    <option value="{{ $p->id }}">{{ $p->name }}</option>
+                @endforeach
+            </select>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input type="number" min="1" name="quantity" value="1" required class="w-full min-w-0 px-3 py-1.5 border border-slate-300 rounded-md tabular-nums">
+                <input type="number" step="0.01" min="0" name="price" placeholder="Unit Price" required class="w-full min-w-0 px-3 py-1.5 border border-slate-300 rounded-md tabular-nums">
+            </div>
+            <button type="submit" class="w-full py-2 bg-slate-900 text-white rounded-md font-medium">Process Return</button>
+        </form>
+        <div class="divide-y divide-slate-100 text-xs">
+            @forelse($returns as $ret)
+                <div class="py-2 flex justify-between">
+                    <span>{{ $ret->invoice_no }} · {{ $ret->product?->name }} (x{{ $ret->quantity }})</span>
+                    <span class="tabular-nums font-medium">{{ $cur }}{{ number_format($ret->total_amount, 2) }}</span>
+                </div>
+            @empty
+                <div class="py-3 text-slate-500">No returns recorded.</div>
+            @endforelse
+        </div>
+    </div>
+
+    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-5">
+        <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">Damaged Stock</h2>
+        <form method="POST" action="{{ route('damages.store') }}" class="space-y-3 text-sm mb-4">
+            @csrf
+            <select name="product_id" required class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
+                @foreach($products as $p)
+                    <option value="{{ $p->id }}">{{ $p->name }} (Stock: {{ $p->quantity }})</option>
+                @endforeach
+            </select>
+            <input type="number" min="1" name="quantity" value="1" required class="w-full px-3 py-1.5 border border-slate-300 rounded-md tabular-nums">
+            <input type="text" name="reason" placeholder="Damage reason" class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
+            <button type="submit" class="w-full py-2 bg-red-600 text-white rounded-md font-medium">Record Damage</button>
+        </form>
+        <div class="divide-y divide-slate-100 text-xs">
+            @forelse($damages as $dmg)
+                <div class="py-2 flex justify-between">
+                    <span>{{ $dmg->product?->name }} (x{{ $dmg->quantity }})</span>
+                    <span class="tabular-nums text-red-600 font-medium">{{ $cur }}{{ number_format($dmg->loss_amount, 2) }}</span>
+                </div>
+            @empty
+                <div class="py-3 text-slate-500">No damages recorded.</div>
+            @endforelse
+        </div>
+    </div>
+</div>
+@endsection

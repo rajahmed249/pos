@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>@yield('title', $appSettings['shop_name'] ?? 'Youth IT POS')</title>
+    <link rel="icon" type="image/png" href="{{ asset($appSettings['shop_favicon'] ?? 'assets/images/favicon.png') }}">
+    <link rel="shortcut icon" type="image/png" href="{{ asset($appSettings['shop_favicon'] ?? 'assets/images/favicon.png') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <style>
+        :root {
+            --sidebar-width: 260px;
+        }
+        .tech-sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            z-index: 50;
+            overflow-y: auto;
+            overflow-x: hidden;
+            box-shadow: 4px 0 30px rgba(0, 0, 0, 0.3);
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
+            transform: translateX(0);
+        }
+        .tech-sidebar::-webkit-scrollbar { width: 4px; }
+        .tech-sidebar::-webkit-scrollbar-thumb { background: #ffd166; border-radius: 10px; }
+        .tech-sidebar-header {
+            position: sticky;
+            top: 0;
+            background: #14172b;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            z-index: 20;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .main-workspace {
+            margin-left: var(--sidebar-width);
+            min-width: 0;
+            transition: margin-left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        body.desktop-sidebar-closed .tech-sidebar {
+            transform: translateX(-100%);
+        }
+        body.desktop-sidebar-closed .main-workspace {
+            margin-left: 0;
+        }
+        html, body { overflow-x: clip; }
+        .fas, .far, .fab, i[class^="fa-"], i[class*=" fa-"] { flex-shrink: 0; }
+        @media (max-width: 1023px) {
+            .tech-sidebar { transform: translateX(-100%); width: 260px; }
+            .tech-sidebar.show { transform: translateX(0); }
+            .main-workspace, body.desktop-sidebar-closed .main-workspace { margin-left: 0 !important; }
+        }
+    </style>
+</head>
+@php
+    $compact = ($appSettings['layout_mode'] ?? 'comfortable') === 'compact';
+    $shopName = trim((string) ($appSettings['shop_name'] ?? 'YOUTH IT POS'));
+    $isYouthIt = str_contains(strtoupper($shopName), 'YOUTH IT');
+@endphp
+<body class="bg-[#f8fafc] text-slate-900 antialiased overflow-x-clip">
+
+{{-- Mobile-only clean backdrop (no blur) --}}
+<div id="sidebarOverlay" onclick="closeSidebar()" class="fixed inset-0 z-40 bg-slate-950/35 hidden lg:hidden"></div>
+
+{{-- Deep Navy & Gold Sticky-Header Sidebar (Always active on desktop by default, push-toggles without blur) --}}
+<aside id="techSidebar" class="no-print tech-sidebar flex flex-col">
+    <div class="tech-sidebar-header">
+        <a href="{{ route('dashboard') }}" class="flex items-center gap-3 min-w-0 group" title="Go to Dashboard Home">
+            <div class="w-10 h-10 rounded-[10px] bg-white border-2 border-[#ffd166] p-0.5 flex items-center justify-center shrink-0 overflow-hidden group-hover:scale-105 transition-transform">
+                <img src="{{ asset($appSettings['shop_logo'] ?? 'assets/images/logo.jpg') }}" alt="{{ $shopName }}" class="w-full h-full object-contain">
+            </div>
+            <div class="min-w-0">
+                <h3 class="font-brand text-[18px] font-black tracking-tight leading-tight truncate">
+                    @if($isYouthIt)
+                        <span class="text-[#60a5fa]">YOUTH</span>
+                        <span class="text-[#fbbf24]">IT</span>
+                        <span class="text-[#34d399]">POS</span>
+                    @else
+                        <span class="text-white">{{ $shopName }}</span>
+                    @endif
+                </h3>
+                <p class="text-[10px] text-white/60 truncate">
+                    <i class="fas fa-phone text-[#ffd166] mr-1"></i>{{ $appSettings['shop_phone'] ?? '01674297522' }}
+                </p>
+            </div>
+        </a>
+        <button type="button" onclick="closeSidebar()" class="lg:hidden text-white/70 hover:text-white p-1">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <nav class="flex-1 px-3 pt-3 pb-5 space-y-1">
+        @php
+            $grouped = $sidebarMenus->groupBy(fn ($m) => $m->group_label ?: 'Main');
+            $mainItems = $grouped->get('Main', collect());
+            $dropdownGroups = $grouped->except(['Main']);
+        @endphp
+
+        {{-- Standalone Main Items (Dashboard, Owners, Bank Accounts, Cash Book, POS, Sales) --}}
+        @if($mainItems->isNotEmpty())
+            <ul class="space-y-0.5 mb-2">
+                @foreach($mainItems as $menu)
+                    @php
+                        $targetUrl = $menu->resolvedUrl();
+                        $isActive = request()->url() === $targetUrl || ($menu->route_name && request()->routeIs($menu->route_name));
+                    @endphp
+                    @if($menu->route_key === 'pos')
+                        <li class="my-2 px-2" aria-hidden="true">
+                            <div class="border-t border-dashed border-white/25"></div>
+                        </li>
+                    @endif
+                    <li>
+                        <a href="{{ $targetUrl }}"
+                           class="flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] text-[13px] transition-all {{ $isActive ? 'bg-[#ffd166] text-[#1a1a2e] font-semibold shadow-[0_4px_15px_rgba(255,215,0,0.3)]' : 'text-white/80 font-medium hover:bg-[#ffd166]/10 hover:text-white' }}">
+                            <i class="fas fa-circle-dot w-4 text-center {{ $isActive ? 'text-[#1a1a2e]' : 'text-[#ffd166]' }}"></i>
+                            <span class="truncate">{{ $menu->title }}</span>
+                        </a>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+
+        {{-- Collapsible Dropdown Sections (Closed by default, toggle ONLY on click) --}}
+        @foreach($dropdownGroups as $group => $items)
+            @php
+                $groupId = 'grp-' . \Illuminate\Support\Str::slug($group);
+                $hasActiveChild = $items->contains(fn ($m) => request()->url() === $m->resolvedUrl() || ($m->route_name && request()->routeIs($m->route_name)));
+            @endphp
+            <div class="pt-1 border-t border-white/10">
+                <button type="button"
+                        onclick="toggleMenuGroup('{{ $groupId }}')"
+                        class="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-[10px] text-[13px] font-semibold transition-all cursor-pointer {{ $hasActiveChild ? 'bg-white/10 text-[#ffd166]' : 'text-white/85 hover:bg-white/10 hover:text-white' }}">
+                    <span class="flex items-center gap-3 min-w-0">
+                        <i class="fas fa-folder w-4 text-center text-[#ffd166]"></i>
+                        <span class="truncate">{{ $group }}</span>
+                    </span>
+                    <i id="{{ $groupId }}-arrow" class="fas fa-chevron-right text-[11px] text-white/60 transition-transform duration-200"></i>
+                </button>
+                <ul id="{{ $groupId }}-list" class="hidden mt-1 pl-3 ml-3 border-l border-white/15 space-y-0.5">
+                    @foreach($items as $menu)
+                        @php
+                            $targetUrl = $menu->resolvedUrl();
+                            $isActive = request()->url() === $targetUrl || ($menu->route_name && request()->routeIs($menu->route_name));
+                        @endphp
+                        <li>
+                            <a href="{{ $targetUrl }}"
+                               class="flex items-center gap-2.5 px-3 py-2 rounded-[8px] text-[12.5px] transition-all {{ $isActive ? 'bg-[#ffd166] text-[#1a1a2e] font-semibold shadow-[0_3px_12px_rgba(255,215,0,0.28)]' : 'text-white/75 font-medium hover:bg-[#ffd166]/10 hover:text-white' }}">
+                                <span class="w-1.5 h-1.5 rounded-full shrink-0 {{ $isActive ? 'bg-[#1a1a2e]' : 'bg-[#ffd166]/70' }}"></span>
+                                <span class="truncate">{{ $menu->title }}</span>
+                            </a>
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        @endforeach
+    </nav>
+
+    <div class="px-3 pb-5 pt-3 border-t border-white/10 space-y-2 text-xs">
+        <a href="{{ route('users.index') }}" class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors">
+            @if(auth()->user()?->profile_image)
+                <img src="{{ asset(auth()->user()->profile_image) }}" alt="{{ auth()->user()?->name }}" class="w-9 h-9 rounded-full object-cover border border-[#ffd166]/60 shrink-0">
+            @else
+                <div class="w-9 h-9 rounded-full bg-white/15 border border-white/20 text-[#ffd166] flex items-center justify-center shrink-0">
+                    <i class="fas fa-user text-xs"></i>
+                </div>
+            @endif
+            <div class="min-w-0">
+                <div class="font-semibold text-white truncate">{{ auth()->user()?->name }}</div>
+                <div class="text-white/50 mt-0.5 truncate">{{ ucfirst(auth()->user()?->role ?? 'staff') }} &middot; {{ $appSettings['shop_phone'] ?? '01674297522' }}</div>
+            </div>
+        </a>
+
+        <form method="POST" action="{{ route('logout') }}">
+            @csrf
+            <button type="submit"
+                    class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] border border-red-400/20 bg-red-500/10 text-[13px] font-medium text-red-200 hover:bg-red-500/20 hover:text-white transition-all cursor-pointer">
+                <i class="fas fa-sign-out-alt text-red-300 w-4 text-center"></i>
+                <span>Logout</span>
+            </button>
+        </form>
+
+        <a href="https://youthit.com.bd/" target="_blank" rel="noreferrer"
+           class="flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] border border-white/10 text-[13px] font-medium text-white/75 hover:bg-white/5 hover:text-white hover:border-[#34d399] transition-all">
+            <i class="fas fa-globe text-[#34d399] w-4 text-center"></i>
+            <span>View Website</span>
+        </a>
+    </div>
+</aside>
+
+{{-- Main Workspace --}}
+<div class="main-workspace min-h-screen flex flex-col min-w-0 overflow-x-clip">
+    <header class="no-print sticky top-0 z-30 h-16 bg-white border-b border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-3 sm:px-6 lg:px-7 flex items-center justify-between gap-2 sm:gap-4">
+        <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <button type="button" onclick="toggleSidebar()"
+                    class="p-2 shrink-0 rounded-xl border border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors cursor-pointer">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div class="flex items-center gap-2 text-xs sm:text-sm text-slate-500 min-w-0">
+                <a href="{{ route('dashboard') }}" class="font-brand font-black tracking-tight text-base sm:text-lg whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity" title="Go to Home Dashboard">
+                    @if($isYouthIt)
+                        <span class="text-[#065AA4]">YOUTH</span>
+                        <span class="text-[#f97316]">IT</span>
+                        <span class="text-[#4f46e5]">POS</span>
+                    @else
+                        <span class="text-slate-900">{{ $shopName }}</span>
+                    @endif
+                </a>
+                <span class="hidden sm:inline text-slate-300 shrink-0">/</span>
+                <span class="hidden sm:inline font-semibold text-slate-700 truncate">@yield('breadcrumb', 'Dashboard')</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            @yield('header_actions')
+            <a href="{{ route('pos.index') }}"
+               style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
+               class="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-[10px] text-xs font-semibold text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)] whitespace-nowrap shrink-0">
+                <i class="fas fa-cash-register"></i>
+                <span class="hidden sm:inline">Open POS</span>
+                <span class="sm:hidden">POS</span>
+            </a>
+
+            {{-- Far-Right User Avatar & Name Dropdown (Hover + Click) --}}
+            <div id="userDropdownWrapper" class="relative group pl-1 sm:pl-2 border-l border-slate-200">
+                <button type="button" onclick="toggleUserDropdown(event)"
+                        class="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-full border border-slate-200 bg-slate-50/70 hover:bg-indigo-50/70 hover:border-indigo-200 transition-all cursor-pointer shrink-0">
+                    @if(auth()->user()?->profile_image)
+                        <img src="{{ asset(auth()->user()->profile_image) }}" alt="{{ auth()->user()?->name ?? 'User' }}" class="w-8 h-8 rounded-full object-cover shrink-0 ring-2 ring-white shadow-xs">
+                    @else
+                        <span class="w-8 h-8 rounded-full flex items-center justify-center text-white shadow-xs shrink-0 ring-2 ring-white"
+                              style="background: linear-gradient(135deg, #065AA4, #4f46e5);">
+                            <i class="fas fa-user text-xs"></i>
+                        </span>
+                    @endif
+                    <span class="text-xs font-bold uppercase tracking-wide text-slate-800 max-w-[92px] sm:max-w-[160px] truncate">
+                        {{ auth()->user()?->name ?? 'RAJ AHMED' }}
+                    </span>
+                    <i class="fas fa-chevron-down text-[10px] text-slate-400 shrink-0"></i>
+                </button>
+
+                <div id="userDropdownMenu"
+                     class="hidden group-hover:block absolute right-0 top-full pt-2 w-60 z-50">
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-[0_18px_45px_rgba(15,23,42,0.14)] overflow-hidden">
+                        <div class="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
+                            @if(auth()->user()?->profile_image)
+                                <img src="{{ asset(auth()->user()->profile_image) }}" alt="{{ auth()->user()?->name ?? 'User' }}" class="w-10 h-10 rounded-full object-cover shrink-0 border-2 border-indigo-200">
+                            @else
+                                <div class="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0"
+                                     style="background: linear-gradient(135deg, #065AA4, #4f46e5);">
+                                    <i class="fas fa-user text-sm"></i>
+                                </div>
+                            @endif
+                            <div class="min-w-0">
+                                <div class="text-xs font-bold uppercase tracking-wide text-slate-900 truncate">{{ auth()->user()?->name ?? 'RAJ AHMED' }}</div>
+                                <div class="text-[11px] font-semibold text-indigo-600 capitalize">Role: {{ auth()->user()?->role ?? 'Admin' }}</div>
+                                <div class="text-[11px] text-slate-500 truncate">{{ auth()->user()?->email ?? 'rajahmed249@gmail.com' }}</div>
+                            </div>
+                        </div>
+
+                        <div class="p-1.5 text-xs font-medium text-slate-700 space-y-0.5">
+                            <a href="{{ route('users.index') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-indigo-50 hover:text-indigo-700 transition-colors">
+                                <i class="fas fa-id-badge w-4 text-center text-indigo-500"></i>
+                                <span>Profile &amp; Account</span>
+                            </a>
+                            <a href="{{ route('users.index') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-indigo-50 hover:text-indigo-700 transition-colors">
+                                <i class="fas fa-user-shield w-4 text-center text-emerald-600"></i>
+                                <span>User &amp; Role Management</span>
+                            </a>
+                            <a href="{{ route('settings.index') }}" class="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-indigo-50 hover:text-indigo-700 transition-colors">
+                                <i class="fas fa-sliders w-4 text-center text-slate-500"></i>
+                                <span>Shop Settings</span>
+                            </a>
+                        </div>
+
+                        <div class="p-1.5 border-t border-slate-100">
+                            <form method="POST" action="{{ route('logout') }}">
+                                @csrf
+                                <button type="submit" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer">
+                                    <i class="fas fa-sign-out-alt w-4 text-center"></i>
+                                    <span>Logout</span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 min-w-0 {{ $compact ? 'p-4' : 'p-4 sm:p-6 lg:p-7' }} max-w-[1440px] w-full mx-auto">
+        @if(session('success'))
+            <div class="no-print mb-5 px-4 py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 text-sm font-medium">
+                <i class="fas fa-check-circle mr-2"></i>{{ session('success') }}
+            </div>
+        @endif
+        @if($errors->any())
+            <div class="no-print mb-5 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-red-800 text-sm">
+                <ul class="list-disc pl-4 space-y-0.5">
+                    @foreach($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        @yield('content')
+    </main>
+</div>
+
+{{-- Global High-Priority Centered Notification Pop-up (Stacks cleanly above any modal) --}}
+<div id="centerPopupModal" onclick="closeCenterPopup()" class="no-print fixed inset-0 z-[120] bg-slate-950/60 hidden items-center justify-center p-4">
+    <div onclick="event.stopPropagation()" class="relative w-full max-w-md bg-white rounded-[22px] border border-slate-200 shadow-[0_30px_80px_rgba(15,23,42,0.35)] overflow-hidden">
+        <div id="centerPopupAccent" class="h-1.5 bg-red-600"></div>
+        <button type="button" onclick="closeCenterPopup()" aria-label="Close notification" class="absolute top-3.5 right-3.5 w-8 h-8 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center cursor-pointer">
+            <i class="fas fa-times text-xs"></i>
+        </button>
+        <div class="p-6 pt-7 text-center">
+            <div id="centerPopupIconBox" class="w-14 h-14 mx-auto rounded-2xl bg-red-50 text-red-600 ring-8 ring-red-50/70 flex items-center justify-center mb-4">
+                <i id="centerPopupIcon" class="fas fa-exclamation-triangle text-2xl"></i>
+            </div>
+            <h3 id="centerPopupTitle" class="font-display text-lg font-bold text-slate-900">Notice</h3>
+            <p id="centerPopupMessage" class="mt-2 text-sm text-slate-600 leading-relaxed"></p>
+            <div class="mt-6">
+                <button type="button" id="centerPopupBtn" onclick="closeCenterPopup()" class="w-full py-2.5 px-5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold shadow-sm cursor-pointer">
+                    OK, Got It
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var sidebar = document.getElementById('techSidebar');
+    var overlay = document.getElementById('sidebarOverlay');
+    window.toggleSidebar = function() {
+        if (window.innerWidth < 1024) {
+            sidebar.classList.toggle('show');
+            overlay.classList.toggle('hidden');
+        } else {
+            document.body.classList.toggle('desktop-sidebar-closed');
+        }
+    };
+    window.closeSidebar = function() {
+        sidebar.classList.remove('show');
+        overlay.classList.add('hidden');
+    };
+    window.toggleMenuGroup = function(groupId) {
+        var list = document.getElementById(groupId + '-list');
+        var arrow = document.getElementById(groupId + '-arrow');
+        if (!list) return;
+        list.classList.toggle('hidden');
+        if (arrow) {
+            arrow.classList.toggle('rotate-90', !list.classList.contains('hidden'));
+        }
+    };
+    window.toggleUserDropdown = function(e) {
+        if (e) e.stopPropagation();
+        var menu = document.getElementById('userDropdownMenu');
+        if (menu) menu.classList.toggle('hidden');
+    };
+    document.addEventListener('click', function(e) {
+        var wrapper = document.getElementById('userDropdownWrapper');
+        var menu = document.getElementById('userDropdownMenu');
+        if (wrapper && menu && !wrapper.contains(e.target)) {
+            menu.classList.add('hidden');
+        }
+    });
+
+    window.closeCenterPopup = function() {
+        var m = document.getElementById('centerPopupModal');
+        if (m) {
+            m.classList.add('hidden');
+            m.classList.remove('flex');
+        }
+    };
+    window.showCenterPopup = function(type, title, message, confirmLabel) {
+        var m = document.getElementById('centerPopupModal');
+        if (!m) return;
+        var accent = document.getElementById('centerPopupAccent');
+        var iconBox = document.getElementById('centerPopupIconBox');
+        var icon = document.getElementById('centerPopupIcon');
+        var btn = document.getElementById('centerPopupBtn');
+        var themes = {
+            error: { accent: 'h-1.5 bg-red-600', box: 'w-14 h-14 mx-auto rounded-2xl bg-red-50 text-red-600 ring-8 ring-red-50/70 flex items-center justify-center mb-4', icon: 'fas fa-times-circle text-2xl', btn: 'w-full py-2.5 px-5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold shadow-sm cursor-pointer' },
+            warning: { accent: 'h-1.5 bg-amber-500', box: 'w-14 h-14 mx-auto rounded-2xl bg-amber-50 text-amber-600 ring-8 ring-amber-50/70 flex items-center justify-center mb-4', icon: 'fas fa-exclamation-triangle text-2xl', btn: 'w-full py-2.5 px-5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold shadow-sm cursor-pointer' },
+            success: { accent: 'h-1.5 bg-emerald-600', box: 'w-14 h-14 mx-auto rounded-2xl bg-emerald-50 text-emerald-600 ring-8 ring-emerald-50/70 flex items-center justify-center mb-4', icon: 'fas fa-check-circle text-2xl', btn: 'w-full py-2.5 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm cursor-pointer' },
+            info: { accent: 'h-1.5 bg-indigo-600', box: 'w-14 h-14 mx-auto rounded-2xl bg-indigo-50 text-indigo-600 ring-8 ring-indigo-50/70 flex items-center justify-center mb-4', icon: 'fas fa-info-circle text-2xl', btn: 'w-full py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm cursor-pointer' }
+        };
+        var t = themes[type] || themes.info;
+        accent.className = t.accent;
+        iconBox.className = t.box;
+        icon.className = t.icon;
+        btn.className = t.btn;
+        btn.textContent = confirmLabel || 'OK, Got It';
+        document.getElementById('centerPopupTitle').textContent = title || 'Notification';
+        document.getElementById('centerPopupMessage').textContent = message || '';
+        m.classList.remove('hidden');
+        m.classList.add('flex');
+    };
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') window.closeCenterPopup();
+    });
+    @if(session('success'))
+        document.addEventListener('DOMContentLoaded', function() {
+            window.showCenterPopup('success', 'Success', @js(session('success')));
+        });
+    @elseif($errors->any())
+        document.addEventListener('DOMContentLoaded', function() {
+            window.showCenterPopup('error', 'Action Required', @js($errors->first()));
+        });
+    @endif
+})();
+</script>
+</body>
+</html>

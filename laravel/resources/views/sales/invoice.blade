@@ -1,0 +1,300 @@
+@php
+    $companyName = trim((string) ($appSettings['shop_name'] ?? 'YOUTH IT POS'));
+    $companyUpper = strtoupper($companyName);
+    $youthItPart = str_contains($companyUpper, 'YOUTH IT') ? 'YOUTH IT' : $companyUpper;
+    $posPart = str_contains($companyUpper, 'YOUTH IT') ? trim(str_replace('YOUTH IT', '', $companyUpper)) : '';
+    $companyAddress = $appSettings['shop_address'] ?? 'Shop No.04, (Ground Floor), 820, Makkha Tower, West Shewrapara, Mirpur, Dhaka-1216';
+    $companyPhone = $appSettings['shop_phone'] ?? '01674297522';
+    $companyEmail = $appSettings['shop_email'] ?? 'info@youthit.com.bd';
+    $companyWebsite = preg_replace('#^https?://#i', '', (string) ($appSettings['shop_website'] ?? 'www.youthit.com.bd'));
+    $logoPath = $appSettings['shop_logo'] ?? 'assets/images/logo.jpg';
+    $faviconPath = $appSettings['shop_favicon'] ?? 'assets/images/favicon.png';
+    $rawQr = (string) ($appSettings['shop_qr'] ?? '');
+    $qrPath = ($rawQr && !str_starts_with($rawQr, 'uploads/')) ? $rawQr : 'assets/images/shop_qr.png';
+
+    $calculatedSubtotal = $sale->items->sum('total');
+    $totalAmount = (float) ($sale->subtotal > 0 ? $sale->subtotal : $calculatedSubtotal);
+    $discount = (float) ($sale->discount ?? 0);
+    $vatAmount = (float) ($sale->vat ?? ($sale->tax ?? 0));
+    $netPayable = max(0, $sale->receivable > 0 && $vatAmount == 0 ? (float) $sale->receivable : ($totalAmount - $discount + $vatAmount));
+    $paid = (float) ($sale->paid ?? 0);
+    if ($paid == 0 && $sale->payments->sum('amount') > 0) {
+        $paid = (float) $sale->payments->sum('amount');
+    }
+    $due = max(0, $netPayable - $paid);
+    $customerOpening = (float) ($sale->customer?->opening_balance ?? 0);
+    $previousDue = max(0, $customerOpening - $due);
+    $paymentMethod = ucfirst(strtolower((string) ($sale->account_name ?: 'Cash')));
+    $soldBy = auth()->user()?->name ?? 'Youth IT';
+
+    $invoiceDate = ($sale->sale_date && $sale->sale_date->year > 1990)
+        ? $sale->sale_date->format('d-m-Y')
+        : (($sale->date && $sale->date->year > 1990)
+            ? $sale->date->format('d-m-Y')
+            : ($sale->created_at?->format('d-m-Y') ?? now()->format('d-m-Y')));
+
+    $numberToWordsBd = function (float $number) use (&$numberToWordsBd): string {
+        $dict = [
+            0 => 'Zero', 1 => 'One', 2 => 'Two', 3 => 'Three', 4 => 'Four',
+            5 => 'Five', 6 => 'Six', 7 => 'Seven', 8 => 'Eight', 9 => 'Nine',
+            10 => 'Ten', 11 => 'Eleven', 12 => 'Twelve', 13 => 'Thirteen',
+            14 => 'Fourteen', 15 => 'Fifteen', 16 => 'Sixteen', 17 => 'Seventeen',
+            18 => 'Eighteen', 19 => 'Nineteen', 20 => 'Twenty', 30 => 'Thirty',
+            40 => 'Forty', 50 => 'Fifty', 60 => 'Sixty', 70 => 'Seventy',
+            80 => 'Eighty', 90 => 'Ninety', 100 => 'Hundred',
+        ];
+        if ($number < 0) {
+            return 'Negative ' . $numberToWordsBd(abs($number));
+        }
+        $twoDigits = function (int $n) use ($dict): string {
+            if ($n < 21) return $dict[$n] ?? '';
+            $tens = (int) (floor($n / 10) * 10);
+            $units = $n % 10;
+            return $units ? ($dict[$tens] . '-' . $dict[$units]) : $dict[$tens];
+        };
+        $integerPart = (int) floor($number);
+        $fraction = (int) round(($number - $integerPart) * 100);
+        if ($integerPart === 0) {
+            $string = 'Zero';
+        } else {
+            $crore = (int) floor($integerPart / 10000000);
+            $lac = (int) floor(($integerPart % 10000000) / 100000);
+            $thousand = (int) floor(($integerPart % 100000) / 1000);
+            $hundred = (int) floor(($integerPart % 1000) / 100);
+            $rest = $integerPart % 100;
+            $parts = [];
+            if ($crore > 0) $parts[] = $numberToWordsBd($crore) . ' Crore';
+            if ($lac > 0) $parts[] = $twoDigits($lac) . ' Lac';
+            if ($thousand > 0) $parts[] = $twoDigits($thousand) . ' Thousand';
+            if ($hundred > 0) $parts[] = $dict[$hundred] . ' Hundred';
+            if ($rest > 0) $parts[] = count($parts) > 0 ? 'and ' . $twoDigits($rest) : $twoDigits($rest);
+            $string = implode(' ', $parts);
+        }
+        if ($fraction > 0) {
+            $string .= ' point ' . $twoDigits($fraction);
+        }
+        return $string;
+    };
+    $totalInWords = $numberToWordsBd($netPayable) . ' Taka Only';
+@endphp
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice {{ $sale->invoice_no }} - {{ $companyName }}</title>
+    <link rel="icon" type="image/png" href="{{ asset($faviconPath) }}">
+    <link rel="shortcut icon" type="image/png" href="{{ asset($faviconPath) }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, Helvetica, sans-serif; background: #eef2f6; min-height: 100vh; padding: 30px 15px; color: #1e293b; }
+        .invoice-wrapper { max-width: 1000px; margin: 0 auto; }
+        .invoice-card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden; }
+        .header-section { padding: 18px 25px; border-bottom: 2px solid #eef2f6; position: relative; }
+        .header-flex { display: flex; justify-content: space-between; align-items: center; }
+        .logo-area { flex-shrink: 0; width: 100px; }
+        .logo-img { max-height: 70px; max-width: 90px; width: auto; height: auto; object-fit: contain; }
+        .qr-area { position: absolute; left: 50%; transform: translateX(-50%); }
+        .qr-box { width: 74px; height: 74px; background: #ffffff; display: flex; align-items: center; justify-content: center; border: 1px solid #cbd5e1; border-radius: 8px; padding: 3px; overflow: hidden; }
+        .qr-box img { width: 100%; height: 100%; object-fit: contain; display: block; }
+        .company-info { text-align: right; flex: 1; }
+        .company-name { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 1px; }
+        .company-name .blue { color: #065AA4; }
+        .company-name .dark { color: #1e293b; }
+        .company-address { margin: 6px 0 0; font-size: 11px; color: #64748b; line-height: 1.3; }
+        .company-contact { margin: 4px 0 0; font-size: 11px; color: #64748b; }
+        .invoice-title { padding: 5px 25px; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-bottom: 1px solid #eef2f6; text-align: center; }
+        .invoice-title h2 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 2px; color: #1e293b; }
+        .to-section { padding: 12px 25px; border-bottom: 1px solid #eef2f6; }
+        .to-flex { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 15px; }
+        .to-customer { flex: 1; }
+        .to-customer p { margin: 0; font-size: 13px; font-weight: 600; color: #1e293b; }
+        .to-customer .details { margin: 5px 0 0; font-size: 12px; color: #475569; line-height: 1.4; }
+        .to-right { text-align: left; }
+        .to-right .info-row { display: flex; align-items: center; margin-bottom: 4px; }
+        .to-right .info-row .label { font-size: 12px; font-weight: 600; color: #1e293b; min-width: 95px; }
+        .to-right .info-row .colon { font-size: 12px; font-weight: 600; color: #1e293b; margin: 0 8px; text-align: center; min-width: 8px; }
+        .to-right .info-row .value { font-size: 12px; color: #475569; }
+        .items-section { padding: 12px 25px; overflow-x: auto; }
+        .invoice-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .invoice-table thead tr { background: #f1f5f9; border-bottom: 2px solid #e2e8f0; }
+        .invoice-table th { padding: 8px 6px; text-align: center; font-weight: 600; color: #1e293b; }
+        .invoice-table td { padding: 6px; border-bottom: 1px solid #f1f5f9; }
+        .invoice-table td.center { text-align: center; }
+        .invoice-table td.left { text-align: left; }
+        .invoice-table td.right { text-align: right; }
+        .serial-text { font-size: 10px; color: #2563eb; margin-top: 3px; }
+        .warranty-badge { background: #eef2ff; color: #667eea; padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: 500; }
+        .no-warranty { color: #94a3b8; font-size: 10px; }
+        .totals-section { padding: 10px 25px; background: white; border-top: 1px solid #eef2f6; }
+        .totals-flex { display: flex; justify-content: flex-end; }
+        .totals-box { width: 320px; }
+        .totals-row { display: flex; justify-content: space-between; padding: 4px 0; }
+        .totals-row .label { font-size: 12px; font-weight: 500; color: #475569; }
+        .totals-row .value { font-size: 12px; font-weight: 600; color: #1e293b; }
+        .totals-row.total .value { color: #667eea; }
+        .totals-row.discount .value { color: #ef4444; }
+        .totals-row.paid .value { color: #10b981; }
+        .totals-row.due .value, .totals-row.total-due .value { color: #ef4444; font-weight: 600; }
+        .totals-border { padding: 8px 0; margin-top: 4px; border-top: 2px solid #e2e8f0; }
+        .totals-border-bottom { padding: 8px 0; margin-top: 4px; border-top: 1px solid #eef2f6; }
+        .words-section { padding: 10px 25px; background: #fff; border-bottom: 1px solid #eef2f6; font-size: 12px; }
+        .signature-section { padding: 15px 25px 12px; background: white; }
+        .signature-flex { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 25px; }
+        .signature-box { text-align: left; flex: 1; }
+        .signature-box p { margin: 0; font-size: 11px; color: #64748b; }
+        .signature-line { margin-top: 35px; border-top: 1px dashed #cbd5e1; width: 180px; }
+        .signature-box.right { text-align: right; }
+        .signature-box.right .signature-line { margin-left: auto; }
+        .warranty-note { padding: 8px 25px 12px; background: #fff; text-align: center; border-top: 1px solid #eef2f6; }
+        .warranty-note p { margin: 0; font-size: 11px; color: #94a3b8; font-style: italic; }
+        .no-print { display: flex; gap: 15px; justify-content: center; margin-top: 20px; }
+        .btn-print-gradient { background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; padding: 10px 30px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        .btn-back { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; padding: 10px 30px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; padding: 0; margin: 0; }
+            .invoice-wrapper { margin: 0; padding: 0; max-width: 100% !important; }
+            .invoice-card { margin: 0; padding: 0; box-shadow: none !important; border-radius: 0 !important; }
+            @page { size: A4; margin: 0.5cm; }
+            .invoice-table th, .invoice-table td { border: 1px solid #ddd; padding: 4px; }
+            .invoice-table thead tr { background: #f2f2f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+<div class="invoice-wrapper">
+    <div class="invoice-card">
+        <div class="header-section">
+            <div class="header-flex">
+                <div class="logo-area">
+                    <img src="{{ asset($logoPath) }}" alt="Youth IT Logo" class="logo-img">
+                </div>
+                <div class="qr-area">
+                    <div class="qr-box">
+                        <img src="{{ asset($qrPath) }}" alt="Shop QR Code">
+                    </div>
+                </div>
+                <div class="company-info">
+                    <h1 class="company-name">
+                        <span class="blue">{{ $youthItPart }}</span>
+                        @if($posPart)
+                            <span class="dark">{{ $posPart }}</span>
+                        @endif
+                    </h1>
+                    <p class="company-address">{!! nl2br(e($companyAddress)) !!}</p>
+                    <p class="company-contact">📞 Cell: {{ $companyPhone }}</p>
+                    <p class="company-contact">✉️ {{ $companyEmail }} | 🌐 {{ $companyWebsite }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="invoice-title"><h2>INVOICE</h2></div>
+
+        <div class="to-section">
+            <div class="to-flex">
+                <div class="to-customer">
+                    <p>To,</p>
+                    <div class="details">
+                        {{ $sale->customer_name ?: 'Walk-in Customer' }}<br>
+                        {{ $sale->customer?->address ?: '—' }}<br>
+                        {{ $sale->customer?->phone ?: '—' }}
+                    </div>
+                </div>
+                <div class="to-right">
+                    <div class="info-row"><span class="label">Invoice No</span><span class="colon">:</span><span class="value">{{ $sale->invoice_no }}</span></div>
+                    <div class="info-row"><span class="label">Date</span><span class="colon">:</span><span class="value">{{ $invoiceDate }}</span></div>
+                    <div class="info-row"><span class="label">Sold By</span><span class="colon">:</span><span class="value">{{ $soldBy }}</span></div>
+                    <div class="info-row"><span class="label">Payment Method</span><span class="colon">:</span><span class="value">{{ $paymentMethod }}</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="items-section">
+            <table class="invoice-table">
+                <thead>
+                    <tr>
+                        <th style="width: 40px;">S.N</th>
+                        <th style="text-align: left; width: 95px;">Component</th>
+                        <th style="text-align: left;">Product Name &amp; Specification</th>
+                        <th style="width: 90px;">Warranty</th>
+                        <th style="width: 55px;">Qty</th>
+                        <th style="text-align: right; width: 95px;">Unit Price</th>
+                        <th style="text-align: right; width: 100px;">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($sale->items as $idx => $item)
+                        @php
+                            $categoryName = $item->category_name ?: ($item->product?->category?->name ?? 'Electronics');
+                            $warrantyText = trim((string) ($item->warranty ?: ($item->warranty_name ?: '')));
+                        @endphp
+                        <tr>
+                            <td class="center">{{ $idx + 1 }}</td>
+                            <td class="left">{{ $categoryName }}</td>
+                            <td class="left">
+                                {{ $item->product_name ?: ($item->product?->name ?? 'Product') }}
+                                @if(!empty($item->serial_no))
+                                    <div class="serial-text">S.N: {{ $item->serial_no }}</div>
+                                @endif
+                            </td>
+                            <td class="center">
+                                @if($warrantyText && $warrantyText !== '—' && $warrantyText !== 'No Warranty')
+                                    <span class="warranty-badge">{{ $warrantyText }}</span>
+                                @else
+                                    <span class="no-warranty">No Warranty</span>
+                                @endif
+                            </td>
+                            <td class="center">{{ $item->quantity }} pc</td>
+                            <td class="right">{{ number_format((float) $item->price, 2) }} Tk</td>
+                            <td class="right" style="font-weight: 500;">{{ number_format((float) $item->total, 2) }} Tk</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+
+        <div class="totals-section">
+            <div class="totals-flex">
+                <div class="totals-box">
+                    <div class="totals-row"><span class="label">Total Amount</span><span class="value">{{ number_format($totalAmount, 2) }} Tk</span></div>
+                    <div class="totals-row"><span class="label">Vat, Tax &amp; AIT</span><span class="value">{{ number_format($vatAmount, 2) }} Tk</span></div>
+                    <div class="totals-row discount"><span class="label">Discount</span><span class="value">- {{ number_format($discount, 2) }} Tk</span></div>
+                    <div class="totals-row total totals-border"><span class="label">Net Payable Amount</span><span class="value">{{ number_format($netPayable, 2) }} Tk</span></div>
+                    @if($previousDue > 0)
+                        <div class="totals-row due"><span class="label">Previous Due Amount</span><span class="value">{{ number_format($previousDue, 2) }} Tk</span></div>
+                    @endif
+                    <div class="totals-row paid"><span class="label">Received Amount</span><span class="value">{{ number_format($paid, 2) }} Tk</span></div>
+                    <div class="totals-row total-due totals-border-bottom">
+                        <span class="label" style="font-weight:600;">Current Due Amount</span>
+                        <span class="value">{{ number_format($due, 2) }} Tk</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="words-section">
+            <p><strong>In words:</strong> {{ $totalInWords }}</p>
+        </div>
+
+        <div class="signature-section">
+            <div class="signature-flex">
+                <div class="signature-box"><p>Customer's Signature</p><div class="signature-line"></div></div>
+                <div class="signature-box right"><p>Authority Signature</p><div class="signature-line"></div></div>
+            </div>
+        </div>
+
+        <div class="warranty-note">
+            <p>{{ $appSettings['invoice_footer'] ?? 'No warranty will valid upon burn or physical damage cases.' }}</p>
+        </div>
+    </div>
+
+    <div class="no-print">
+        <button type="button" onclick="window.print()" class="btn-print-gradient"><i class="fas fa-print"></i> Print Invoice</button>
+        <a href="{{ route('sales.index') }}" class="btn-back"><i class="fas fa-arrow-left"></i> Back to Sales</a>
+    </div>
+</div>
+</body>
+</html>

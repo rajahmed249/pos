@@ -1,0 +1,6 @@
+{
+  "name": "Youth IT POS",
+  "description": "Youth IT Point of Sale, Inventory, Accounting & Dynamic Laravel 13 Rebuild",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

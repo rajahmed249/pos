@@ -1,0 +1,53 @@
+@extends('layouts.app')
+
+@section('title', 'Estimates — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Operations / Estimates')
+
+@section('content')
+@php $cur = $appSettings['currency'] ?? '৳'; @endphp
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-4 h-fit">
+        <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">Create Estimate</h2>
+        <form method="POST" action="{{ route('estimates.store') }}" class="space-y-3 text-sm">
+            @csrf
+            <input type="text" name="customer_name" required placeholder="Customer / Company name" class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
+            <select name="product_id" required class="w-full px-2.5 py-1.5 border border-slate-300 rounded-md">
+                @foreach($products as $p)
+                    <option value="{{ $p->id }}">{{ $p->name }} ({{ $cur }}{{ number_format($p->selling_price, 2) }})</option>
+                @endforeach
+            </select>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input type="number" min="1" name="quantity" value="1" required class="w-full min-w-0 px-2.5 py-1.5 border border-slate-300 rounded-md tabular-nums">
+                <input type="number" step="0.01" min="0" name="price" placeholder="Rate" required class="w-full min-w-0 px-2.5 py-1.5 border border-slate-300 rounded-md tabular-nums">
+            </div>
+            <button type="submit" class="w-full py-2 bg-slate-900 text-white rounded-md font-medium">Save Estimate</button>
+        </form>
+    </div>
+    <div class="lg:col-span-2 min-w-0 bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-slate-50 text-xs text-slate-500 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-2.5 text-left whitespace-nowrap">Estimate #</th>
+                        <th class="px-4 py-2.5 text-left">Customer</th>
+                        <th class="px-4 py-2.5 text-right whitespace-nowrap">Total</th>
+                        <th class="px-4 py-2.5 text-left whitespace-nowrap">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    @forelse($estimates as $est)
+                        <tr>
+                            <td class="px-4 py-2.5 font-mono text-xs whitespace-nowrap">{{ $est->estimate_no }}</td>
+                            <td class="px-4 py-2.5">{{ $est->customer_name }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums font-medium whitespace-nowrap">{{ $cur }}{{ number_format($est->total, 2) }}</td>
+                            <td class="px-4 py-2.5 text-xs uppercase whitespace-nowrap">{{ $est->status }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="4" class="px-4 py-6 text-center text-xs text-slate-500">No estimates yet.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+@endsection

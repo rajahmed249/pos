@@ -1,0 +1,37 @@
+@extends('layouts.app')
+
+@section('title', 'Units & Warranties — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Inventory / Units & Warranties')
+
+@section('content')
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-5">
+        <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">Units</h2>
+        <form method="POST" action="{{ route('units.store') }}" class="flex flex-wrap gap-2 mb-4 text-sm">
+            @csrf
+            <input type="text" name="name" required placeholder="e.g. pcs, box, mtr" class="flex-1 min-w-0 px-3 py-1.5 border border-slate-300 rounded-md">
+            <button type="submit" class="px-4 py-1.5 bg-slate-900 text-white rounded-md font-medium shrink-0">Add</button>
+        </form>
+        <div class="divide-y divide-slate-100 text-sm">
+            @foreach($units as $unit)
+                <div class="py-2 flex justify-between gap-2"><span class="truncate">{{ $unit->name }}</span><span class="text-xs text-emerald-700 shrink-0">Active</span></div>
+            @endforeach
+        </div>
+    </div>
+
+    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-5">
+        <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">Warranties</h2>
+        <form method="POST" action="{{ route('warranties.store') }}" class="flex flex-wrap gap-2 mb-4 text-sm">
+            @csrf
+            <input type="text" name="name" required placeholder="e.g. 2 Years" class="flex-1 min-w-[140px] px-3 py-1.5 border border-slate-300 rounded-md">
+            <input type="text" name="duration" placeholder="Duration" class="w-full sm:w-32 px-3 py-1.5 border border-slate-300 rounded-md">
+            <button type="submit" class="px-4 py-1.5 bg-slate-900 text-white rounded-md font-medium shrink-0">Add</button>
+        </form>
+        <div class="divide-y divide-slate-100 text-sm">
+            @foreach($warranties as $w)
+                <div class="py-2 flex justify-between gap-2"><span class="truncate">{{ $w->name }}</span><span class="text-xs text-slate-500 shrink-0">{{ $w->duration }}</span></div>
+            @endforeach
+        </div>
+    </div>
+</div>
+@endsection

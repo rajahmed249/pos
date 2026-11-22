@@ -1,0 +1,207 @@
+@extends('layouts.app')
+
+@section('title', 'Print Invoice ' . $sale->invoice_no . ' - ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Sales / Print Invoice / ' . $sale->invoice_no)
+
+@section('content')
+@php
+    $companyName = trim((string) ($appSettings['shop_name'] ?? 'YOUTH IT POS'));
+    $companyUpper = strtoupper($companyName);
+    $youthItPart = str_contains($companyUpper, 'YOUTH IT') ? 'YOUTH IT' : $companyUpper;
+    $posPart = str_contains($companyUpper, 'YOUTH IT') ? trim(str_replace('YOUTH IT', '', $companyUpper)) : '';
+    $companyAddress = $appSettings['shop_address'] ?? 'Shop No.04, (Ground Floor), 820, Makkha Tower, West Shewrapara, Mirpur, Dhaka-1216';
+    $companyPhone = $appSettings['shop_phone'] ?? '01674297522';
+    $companyEmail = $appSettings['shop_email'] ?? 'info@youthit.com.bd';
+    $companyWebsite = preg_replace('#^https?://#i', '', (string) ($appSettings['shop_website'] ?? 'www.youthit.com.bd'));
+    $logoPath = $appSettings['shop_logo'] ?? 'assets/images/logo.jpg';
+    $rawQr = (string) ($appSettings['shop_qr'] ?? '');
+    $qrPath = ($rawQr && !str_starts_with($rawQr, 'uploads/')) ? $rawQr : 'assets/images/shop_qr.png';
+
+    $calculatedSubtotal = $sale->items->sum('total');
+    $totalAmount = (float) ($sale->subtotal > 0 ? $sale->subtotal : $calculatedSubtotal);
+    $discount = (float) ($sale->discount ?? 0);
+    $vatAmount = (float) ($sale->vat ?? ($sale->tax ?? 0));
+    $netPayable = max(0, $sale->receivable > 0 && $vatAmount == 0 ? (float) $sale->receivable : ($totalAmount - $discount + $vatAmount));
+    $paid = (float) ($sale->paid ?? 0);
+    $due = max(0, $netPayable - $paid);
+    $customerOpening = (float) ($sale->customer?->opening_balance ?? 0);
+    $previousDue = max(0, $customerOpening - $due);
+    $totalDue = $previousDue + $due;
+    $paymentTerm = ucfirst(strtolower((string) ($sale->account_name ?: 'Cash')));
+    $invoiceDate = ($sale->sale_date && $sale->sale_date->year > 1990)
+        ? $sale->sale_date->format('d-m-Y')
+        : (($sale->date && $sale->date->year > 1990)
+            ? $sale->date->format('d-m-Y')
+            : ($sale->created_at?->format('d-m-Y') ?? now()->format('d-m-Y')));
+
+    $numberToWordsBd = function (float $number) use (&$numberToWordsBd): string {
+        $dict = [
+            0 => 'Zero', 1 => 'One', 2 => 'Two', 3 => 'Three', 4 => 'Four',
+            5 => 'Five', 6 => 'Six', 7 => 'Seven', 8 => 'Eight', 9 => 'Nine',
+            10 => 'Ten', 11 => 'Eleven', 12 => 'Twelve', 13 => 'Thirteen',
+            14 => 'Fourteen', 15 => 'Fifteen', 16 => 'Sixteen', 17 => 'Seventeen',
+            18 => 'Eighteen', 19 => 'Nineteen', 20 => 'Twenty', 30 => 'Thirty',
+            40 => 'Forty', 50 => 'Fifty', 60 => 'Sixty', 70 => 'Seventy',
+            80 => 'Eighty', 90 => 'Ninety', 100 => 'Hundred',
+        ];
+        $twoDigits = function (int $n) use ($dict): string {
+            if ($n < 21) return $dict[$n] ?? '';
+            $tens = (int) (floor($n / 10) * 10);
+            $units = $n % 10;
+            return $units ? ($dict[$tens] . '-' . $dict[$units]) : $dict[$tens];
+        };
+        $integerPart = (int) floor(max(0, $number));
+        if ($integerPart === 0) return 'Zero';
+        $crore = (int) floor($integerPart / 10000000);
+        $lac = (int) floor(($integerPart % 10000000) / 100000);
+        $thousand = (int) floor(($integerPart % 100000) / 1000);
+        $hundred = (int) floor(($integerPart % 1000) / 100);
+        $rest = $integerPart % 100;
+        $parts = [];
+        if ($crore > 0) $parts[] = $numberToWordsBd($crore) . ' Crore';
+        if ($lac > 0) $parts[] = $twoDigits($lac) . ' Lac';
+        if ($thousand > 0) $parts[] = $twoDigits($thousand) . ' Thousand';
+        if ($hundred > 0) $parts[] = $dict[$hundred] . ' Hundred';
+        if ($rest > 0) $parts[] = count($parts) > 0 ? 'and ' . $twoDigits($rest) : $twoDigits($rest);
+        return implode(' ', $parts);
+    };
+    $totalInWords = $numberToWordsBd($netPayable) . ' Taka Only';
+@endphp
+
+<style>
+@media print {
+    .no-print, #techSidebar, header, button, a[href="{{ route('sales.index') }}"] { display: none !important; }
+    .main-workspace { margin-left: 0 !important; padding: 0 !important; }
+    body { background: white !important; margin: 0 !important; padding: 0 !important; }
+    .print-wrapper { margin: 0 !important; padding: 0 !important; max-width: 100% !important; }
+    .print-card { box-shadow: none !important; border-radius: 0 !important; }
+    @page { size: A4; margin: 0.5cm; }
+    .invoice-table th, .invoice-table td { border: 1px solid #ddd !important; padding: 4px !important; }
+    .invoice-table thead tr { background: #f2f2f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+
+<div class="print-wrapper max-w-[1000px] mx-auto">
+    <div class="print-card bg-white rounded-[8px] shadow-[0_2px_8px_rgba(0,0,0,0.08)] overflow-hidden" style="font-family: Arial, Helvetica, sans-serif;">
+        <div class="px-6 py-4 border-b-2 border-[#eef2f6] relative flex justify-between items-center gap-4">
+            <div class="w-[100px] shrink-0">
+                <img src="{{ asset($logoPath) }}" alt="Logo" class="max-h-[70px] max-w-[90px] w-auto h-auto object-contain">
+            </div>
+            <div class="hidden sm:flex print:flex absolute left-1/2 -translate-x-1/2 w-[74px] h-[74px] bg-white items-center justify-center border border-[#cbd5e1] rounded-lg p-1 overflow-hidden">
+                <img src="{{ asset($qrPath) }}" alt="Shop QR Code" class="w-full h-full object-contain">
+            </div>
+            <div class="text-right flex-1">
+                <h1 class="text-[24px] font-extrabold tracking-wide leading-tight">
+                    <span style="color:#065AA4">{{ $youthItPart }}</span>
+                    @if($posPart)<span class="text-[#1e293b]"> {{ $posPart }}</span>@endif
+                </h1>
+                <p class="mt-1.5 text-[11px] text-[#64748b] leading-snug">{!! nl2br(e($companyAddress)) !!}</p>
+                <p class="mt-1 text-[11px] text-[#64748b]">📞 Cell: {{ $companyPhone }}</p>
+                <p class="mt-0.5 text-[11px] text-[#64748b]">✉️ {{ $companyEmail }} | 🌐 {{ $companyWebsite }}</p>
+            </div>
+        </div>
+
+        <div class="px-6 py-1.5 border-b border-[#eef2f6] text-center" style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);">
+            <h2 class="text-[22px] font-extrabold tracking-[2px] text-[#1e293b]">INVOICE</h2>
+        </div>
+
+        <div class="px-6 py-3 border-b border-[#eef2f6] flex justify-between flex-wrap gap-4">
+            <div class="flex-1 text-xs text-[#475569] leading-relaxed">
+                <p class="text-[13px] font-semibold text-[#1e293b]">To,</p>
+                <div class="font-semibold text-[#1e293b] mt-1">{{ $sale->customer_name ?: 'Walk-in Customer' }}</div>
+                <div>{{ $sale->customer?->address ?: '—' }}</div>
+                <div>{{ $sale->customer?->phone ?: '—' }}</div>
+            </div>
+            <div class="text-right text-xs text-[#475569] space-y-1">
+                <p><strong class="text-[#1e293b]">Invoice No:</strong> {{ $sale->invoice_no }}</p>
+                <p><strong class="text-[#1e293b]">Date:</strong> {{ $invoiceDate }}</p>
+                <p><strong class="text-[#1e293b]">Sold By:</strong> {{ auth()->user()?->name ?? 'Youth IT' }}</p>
+                <p><strong class="text-[#1e293b]">Payment Term:</strong> {{ $paymentTerm }}</p>
+            </div>
+        </div>
+
+        <div class="px-6 py-3 overflow-x-auto">
+            <table class="invoice-table w-full border-collapse text-xs">
+                <thead>
+                    <tr class="bg-[#f1f5f9] border-b-2 border-[#e2e8f0]">
+                        <th class="py-2 px-1.5 text-center w-10">S.N</th>
+                        <th class="py-2 px-1.5 text-left w-24">Component</th>
+                        <th class="py-2 px-1.5 text-left">Product Name &amp; Specification</th>
+                        <th class="py-2 px-1.5 text-center w-24">Warranty</th>
+                        <th class="py-2 px-1.5 text-center w-14">Qty</th>
+                        <th class="py-2 px-1.5 text-right w-24">Unit Price</th>
+                        <th class="py-2 px-1.5 text-right w-24">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($sale->items as $idx => $item)
+                        @php $w = trim((string) ($item->warranty ?: ($item->warranty_name ?: ''))); @endphp
+                        <tr class="border-b border-[#f1f5f9]">
+                            <td class="py-1.5 px-1.5 text-center">{{ $idx + 1 }}</td>
+                            <td class="py-1.5 px-1.5 text-left">{{ $item->category_name ?: ($item->product?->category?->name ?? 'Electronics') }}</td>
+                            <td class="py-1.5 px-1.5 text-left">
+                                {{ $item->product_name ?: ($item->product?->name ?? 'Product') }}
+                                @if(!empty($item->serial_no))
+                                    <div class="text-[10px] text-[#2563eb] mt-0.5">S.N: {{ $item->serial_no }}</div>
+                                @endif
+                            </td>
+                            <td class="py-1.5 px-1.5 text-center">
+                                @if($w && $w !== '—' && $w !== 'No Warranty')
+                                    <span class="bg-[#eef2ff] text-[#667eea] px-2 py-0.5 rounded-full text-[10px] font-medium">{{ $w }}</span>
+                                @else
+                                    <span class="text-[#94a3b8] text-[10px]">No Warranty</span>
+                                @endif
+                            </td>
+                            <td class="py-1.5 px-1.5 text-center">{{ $item->quantity }} pc</td>
+                            <td class="py-1.5 px-1.5 text-right">{{ number_format((float) $item->price, 2) }} Tk</td>
+                            <td class="py-1.5 px-1.5 text-right font-medium">{{ number_format((float) $item->total, 2) }} Tk</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+
+        <div class="px-6 py-2.5 bg-[#fafcff] border-t border-[#eef2f6] flex justify-end">
+            <div class="w-[300px] text-xs space-y-1">
+                <div class="flex justify-between"><span>Subtotal:</span><span>{{ number_format($totalAmount, 2) }} Tk</span></div>
+                <div class="flex justify-between"><span>Vat, Tax &amp; AIT:</span><span>{{ number_format($vatAmount, 2) }} Tk</span></div>
+                <div class="flex justify-between"><span>Discount:</span><span class="text-[#ef4444]">- {{ number_format($discount, 2) }} Tk</span></div>
+                <div class="flex justify-between pt-2 mt-1 border-t-2 border-[#e2e8f0] text-sm font-bold">
+                    <span>Net Payable:</span><span class="text-[#667eea]">{{ number_format($netPayable, 2) }} Tk</span>
+                </div>
+                @if($previousDue > 0)
+                    <div class="flex justify-between"><span>Previous Due:</span><span class="text-[#ef4444]">{{ number_format($previousDue, 2) }} Tk</span></div>
+                @endif
+                <div class="flex justify-between"><span>Received Amount:</span><span class="text-[#10b981]">{{ number_format($paid, 2) }} Tk</span></div>
+                <div class="flex justify-between pt-2 mt-1 border-t border-[#eef2f6] font-bold">
+                    <span>Total Due:</span><span class="text-[#ef4444]">{{ number_format($totalDue, 2) }} Tk</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-2.5 bg-white border-b border-[#eef2f6] text-xs">
+            <strong>In words:</strong> {{ $totalInWords }}
+        </div>
+
+        <div class="px-6 pt-4 pb-3 bg-[#f8fafc] flex justify-between flex-wrap gap-6 text-[11px] text-[#64748b]">
+            <div class="flex-1"><p>Customer's Signature</p><div class="mt-9 border-t border-dashed border-[#cbd5e1] w-[180px]"></div></div>
+            <div class="flex-1 text-right"><p>Authority Signature</p><div class="mt-9 border-t border-dashed border-[#cbd5e1] w-[180px] ml-auto"></div></div>
+        </div>
+
+        <div class="px-6 py-2 bg-[#f8fafc] text-center border-t border-[#eef2f6] text-[10px] text-[#94a3b8]">
+            <p>{{ $appSettings['invoice_footer'] ?? 'No warranty will valid upon burn or physical damage cases.' }}</p>
+            <p class="mt-0.5">This is a computer generated invoice</p>
+        </div>
+    </div>
+
+    <div class="no-print flex gap-4 justify-center mt-5">
+        <button type="button" onclick="window.print()" style="background: linear-gradient(135deg, #667eea, #764ba2);" class="text-white px-7 py-2.5 rounded-lg font-semibold cursor-pointer">
+            <i class="fas fa-print mr-1.5"></i> Print Invoice
+        </button>
+        <a href="{{ route('sales.index') }}" class="bg-[#f1f5f9] text-[#475569] border border-[#e2e8f0] px-7 py-2.5 rounded-lg font-semibold">
+            <i class="fas fa-arrow-left mr-1.5"></i> Back to Sales
+        </a>
+    </div>
+</div>
+@endsection

@@ -1,0 +1,437 @@
+@extends('layouts.app')
+
+@section('title', 'POS Management — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'POS Management')
+
+@section('content')
+@php $cur = $appSettings['currency'] ?? '৳'; @endphp
+
+<div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start" id="pos-app">
+    {{-- Left Card: New Sale --}}
+    <div class="min-w-0 bg-white rounded-[20px] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-5">
+            <h3 class="inline-flex items-center gap-2 text-[18px] font-semibold text-[#667eea] pb-2.5 border-b-2 border-[#eef2f6]">
+                <i class="fas fa-cash-register shrink-0"></i> New Sale
+            </h3>
+            <button type="button" onclick="clearPosCart()" class="text-xs font-semibold text-red-500 hover:underline shrink-0">Clear Cart</button>
+        </div>
+
+        <div class="relative mb-4">
+            <input type="text" id="posTopSearch" placeholder="Search product by name or barcode..."
+                   class="w-full px-4 py-3 border border-[#e2e8f0] rounded-[10px] text-sm focus:outline-none focus:border-[#667eea]">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4">
+            <div class="flex items-center gap-2.5 bg-[#f8fafc] px-3 py-2 rounded-[10px] border border-[#e2e8f0] min-w-0">
+                <i class="fas fa-calendar-alt text-[#667eea] shrink-0"></i>
+                <input type="date" id="posDatePicker" value="{{ date('Y-m-d') }}" class="flex-1 min-w-0 bg-transparent border-none text-sm outline-none">
+            </div>
+            <div class="flex items-center gap-2.5 bg-[#f8fafc] px-3 py-2 rounded-[10px] border border-[#e2e8f0] min-w-0">
+                <i class="fas fa-user text-[#667eea] shrink-0"></i>
+                <select id="posCustomerSelect" class="flex-1 min-w-0 bg-transparent border-none text-sm outline-none">
+                    <option value="" data-due="0">Walk-in Customer</option>
+                    @foreach($customers as $c)
+                        <option value="{{ $c->id }}" data-due="{{ (float) ($c->opening_balance ?? 0) }}">{{ $c->name }} ({{ $c->phone }})</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+
+        <div id="posCartWarning" class="hidden mb-3 px-3.5 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium"></div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[580px] text-xs border-collapse" id="posCartTable">
+                <thead>
+                    <tr class="bg-[#f8fafc] text-[#475569] font-semibold">
+                        <th class="py-3 px-2.5 text-left">Product</th>
+                        <th class="py-3 px-2 text-left">Serial</th>
+                        <th class="py-3 px-2 text-left">Warranty</th>
+                        <th class="py-3 px-2 text-center">Qty</th>
+                        <th class="py-3 px-2 text-right">Price</th>
+                        <th class="py-3 px-2 text-right">Sub Total</th>
+                        <th class="py-3 px-2 text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="posCartBody">
+                    <tr>
+                        <td colspan="7" class="py-12 text-center text-slate-400">
+                            <i class="fas fa-cart-plus text-4xl text-slate-300 block mb-2"></i>
+                            <div class="font-semibold text-slate-600">Cart is empty</div>
+                            <small>Search and add products to continue</small>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-5 pt-4 border-t-2 border-[#eef2f6] space-y-2">
+            <div class="flex justify-between text-sm text-[#64748b]">
+                <span>Subtotal:</span>
+                <span class="font-semibold tabular-nums" id="posSubtotalText">{{ $cur }}0.00</span>
+            </div>
+            <div class="flex justify-between text-[18px] font-bold text-[#667eea]">
+                <span>Total:</span>
+                <span class="tabular-nums" id="posTotalText">{{ $cur }}0.00</span>
+            </div>
+        </div>
+
+        <button type="button" onclick="openPosPaymentModal()"
+                style="background: linear-gradient(135deg, #10b981, #059669);"
+                class="mt-4 w-full py-3.5 px-4 rounded-xl text-white text-base font-semibold flex items-center justify-center gap-2 cursor-pointer">
+            <i class="fas fa-credit-card shrink-0"></i> Proceed to Payment
+        </button>
+    </div>
+
+    {{-- Right Card: Product List --}}
+    <div class="min-w-0 bg-white rounded-[20px] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100">
+        <h3 class="inline-flex items-center gap-2 text-[18px] font-semibold text-[#667eea] mb-4 pb-2.5 border-b-2 border-[#eef2f6]">
+            <i class="fas fa-box shrink-0"></i> Product List
+        </h3>
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h4 class="text-sm font-semibold text-slate-700 shrink-0">All Products</h4>
+            <input type="text" id="posSideSearch" placeholder="Search..."
+                   class="w-full sm:w-44 px-3 py-1.5 border border-[#e2e8f0] rounded-lg text-[13px] outline-none focus:border-[#667eea]">
+        </div>
+
+        <div class="max-h-[520px] overflow-y-auto divide-y divide-[#eef2f6]" id="posProductList">
+            @foreach($products as $product)
+                @php
+                    $stockQty = (int) ($product->stock_quantity ?? $product->quantity ?? 0);
+                    $isOut = $stockQty <= 0;
+                    $wText = $product->warranty ?: ($product->warrantyRecord?->duration ?? '');
+                @endphp
+                <div class="pos-product-row flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 py-3 px-1 {{ $isOut ? 'opacity-60 bg-[#fef2f2]' : 'hover:bg-[#f8fafc]' }}"
+                     data-search="{{ strtolower($product->name . ' ' . $product->sku) }}">
+                    <div class="flex-1 min-w-0">
+                        <div class="font-semibold text-[13px] text-[#1e293b] truncate">{{ $product->name }}</div>
+                        <div class="text-[10px] text-[#94a3b8]">SKU: {{ $product->sku ?: 'N/A' }}</div>
+                        @if($wText)
+                            <div class="text-[10px] text-[#667eea] mt-0.5"><i class="fas fa-shield-alt"></i> {{ $wText }}</div>
+                        @endif
+                        <div class="text-[10px] mt-0.5 font-medium {{ $isOut ? 'text-[#ef4444]' : 'text-[#10b981]' }}">
+                            <i class="fas fa-boxes"></i> Stock: {{ $stockQty }}
+                        </div>
+                    </div>
+                    <div class="font-bold text-[#10b981] text-sm whitespace-nowrap tabular-nums shrink-0">
+                        {{ $cur }}{{ number_format($product->selling_price, 2) }}
+                    </div>
+                    <button type="button"
+                            @disabled($isOut)
+                            onclick="addPosItem({{ $product->id }}, @js($product->name), @js($product->sku ?: 'N/A'), {{ (float) $product->selling_price }}, @js($wText), {{ $stockQty }})"
+                            @if(!$isOut) style="background: linear-gradient(135deg, #667eea, #764ba2);" @endif
+                            class="px-3 py-2 rounded-lg text-xs font-medium text-white whitespace-nowrap shrink-0 {{ $isOut ? 'bg-[#94a3b8] cursor-not-allowed' : 'cursor-pointer' }}">
+                        <i class="fas fa-plus"></i> Add
+                    </button>
+                </div>
+            @endforeach
+        </div>
+    </div>
+</div>
+
+{{-- Payment Details Modal --}}
+<div id="posPaymentModal" class="fixed inset-0 z-50 bg-black/60 hidden items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-[20px] w-full max-w-[650px] max-h-[95vh] overflow-y-auto shadow-2xl">
+        <div class="px-5 py-4 text-white flex items-center justify-between" style="background: linear-gradient(135deg, #667eea, #764ba2);">
+            <div class="flex items-center gap-2.5">
+                <i class="fas fa-credit-card shrink-0"></i>
+                <h4 class="text-base font-semibold m-0">Payment Details</h4>
+            </div>
+            <button type="button" onclick="closePosPaymentModal()" class="w-7 h-7 rounded-full bg-white/20 text-white shrink-0">&times;</button>
+        </div>
+
+        <form method="POST" action="{{ route('pos.checkout') }}" id="posCheckoutForm">
+            @csrf
+            <input type="hidden" name="customer_id" id="modalCustomerId">
+            <input type="hidden" name="sale_date" id="modalSaleDate">
+            <div id="modalCartHiddenInputs"></div>
+
+            <div class="p-5 bg-[#f8fafc] border-b border-[#eef2f6]">
+                <h5 class="text-sm font-semibold text-slate-700 mb-3"><i class="fas fa-shopping-cart text-[#667eea] mr-1.5"></i> Order Summary</h5>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                    <div class="min-w-0 bg-white p-2.5 rounded-[10px] border border-[#eef2f6] text-center">
+                        <span class="block text-[10px] text-[#64748b]">Total Items</span>
+                        <span class="block text-base font-bold text-[#1e293b] tabular-nums" id="mItemCount">0</span>
+                    </div>
+                    <div class="min-w-0 bg-white p-2.5 rounded-[10px] border border-[#eef2f6] text-center">
+                        <span class="block text-[10px] text-[#64748b]">Subtotal</span>
+                        <span class="block text-base font-bold text-[#1e293b] tabular-nums truncate" id="mSubtotal">{{ $cur }}0.00</span>
+                    </div>
+                    <div class="min-w-0 bg-white p-2.5 rounded-[10px] border border-[#eef2f6] text-center">
+                        <span class="block text-[10px] text-[#64748b]">Previous Due</span>
+                        <span class="block text-base font-bold text-[#ef4444] tabular-nums truncate" id="mPrevDue">{{ $cur }}0.00</span>
+                    </div>
+                    <div class="min-w-0 p-2.5 rounded-[10px] text-center text-white" style="background: linear-gradient(135deg, #667eea, #764ba2);">
+                        <span class="block text-[10px] text-white/80">Total Amount</span>
+                        <span class="block text-base font-bold tabular-nums truncate" id="mTotalAmount">{{ $cur }}0.00</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-5 space-y-3">
+                <div id="walkInBanner" class="hidden px-3.5 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium">
+                    <i class="fas fa-exclamation-triangle mr-1"></i> Walk-in Customer selected: Full payment is required (due cannot be left on Walk-in bills).
+                </div>
+                <div id="posModalError" class="hidden px-3.5 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold"></div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-semibold text-[#475569] mb-1">Discount Amount</label>
+                        <input type="number" step="0.01" min="0" name="discount" id="mDiscount" value="0" oninput="updatePosModalTotals()"
+                               class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-lg text-[13px] tabular-nums">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-[#475569] mb-1">Vat, Tax &amp; AIT</label>
+                        <input type="number" step="0.01" min="0" name="vat" id="mVat" value="0" oninput="updatePosModalTotals()"
+                               class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-lg text-[13px] tabular-nums">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-semibold text-[#475569] mb-1">Payment Account</label>
+                        <select name="account_id" required class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-lg text-[13px]">
+                            @foreach($accounts as $acc)
+                                <option value="{{ $acc->id }}">{{ $acc->account_name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-[#475569] mb-1">Received Amount</label>
+                        <div class="flex gap-2 min-w-0">
+                            <input type="number" step="0.01" min="0" name="paid" id="mPaid" value="" placeholder="Click PAID or enter amount" oninput="updatePosModalTotals()"
+                                   class="flex-1 min-w-0 px-3 py-2 border-2 border-[#e2e8f0] rounded-lg text-[13px] tabular-nums">
+                            <button type="button" onclick="fillFullPaid()" style="background: linear-gradient(135deg, #667eea, #764ba2);"
+                                    class="px-3 py-1.5 rounded-md text-[11px] font-semibold text-white shrink-0 cursor-pointer">PAID</button>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-semibold text-[#475569] mb-1">Note</label>
+                    <input type="text" name="note" placeholder="Write your note here..."
+                           class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-lg text-[13px]">
+                </div>
+
+                <div class="bg-[#f8fafc] rounded-[10px] p-3.5 space-y-1.5 text-sm">
+                    <div class="flex justify-between pb-2 border-b border-[#e2e8f0]"><span>Subtotal:</span><strong id="sSubtotal">{{ $cur }}0.00</strong></div>
+                    <div class="flex justify-between text-[#ef4444]"><span>Discount:</span><strong id="sDiscount">{{ $cur }}0.00</strong></div>
+                    <div class="flex justify-between text-[#667eea]"><span>Vat, Tax &amp; AIT:</span><strong id="sVat">{{ $cur }}0.00</strong></div>
+                    <div class="flex justify-between font-bold border-t border-[#e2e8f0] pt-2"><span>Net Payable Amount:</span><strong id="sNet">{{ $cur }}0.00</strong></div>
+                    <div class="flex justify-between text-[#10b981]"><span>Received Amount:</span><strong id="sReceived">{{ $cur }}0.00</strong></div>
+                    <div class="flex justify-between font-bold border-t border-[#e2e8f0] pt-2"><span>Current Invoice Due:</span><strong class="text-[#ef4444]" id="sDue">{{ $cur }}0.00</strong></div>
+                </div>
+            </div>
+
+            <div class="px-5 py-3.5 bg-[#f8fafc] border-t border-[#eef2f6] flex flex-wrap justify-end gap-2.5">
+                <button type="button" onclick="closePosPaymentModal()" class="px-5 py-2 rounded-lg bg-[#f1f5f9] text-[#475569] text-[13px] font-semibold">Cancel</button>
+                <button type="submit" style="background: linear-gradient(135deg, #10b981, #059669);" class="px-6 py-2 rounded-lg text-white text-[13px] font-semibold">
+                    <i class="fas fa-check-circle mr-1"></i> Confirm Order
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const cur = @js($cur);
+const posCart = [];
+function showPosCartWarning(msg) {
+    const el = document.getElementById('posCartWarning');
+    if (!msg) { el.classList.add('hidden'); el.textContent = ''; return; }
+    el.textContent = msg;
+    el.classList.remove('hidden');
+}
+function addPosItem(id, name, sku, price, warranty, maxStock) {
+    const limit = Math.max(0, parseInt(maxStock, 10) || 0);
+    if (limit <= 0) {
+        const msg = `${name} is out of stock.`;
+        showPosCartWarning(msg);
+        if (window.showCenterPopup) window.showCenterPopup('warning', 'Out of Stock', msg);
+        return;
+    }
+    const existing = posCart.find(i => i.product_id === id);
+    if (existing) {
+        if (existing.quantity >= existing.maxStock) {
+            const msg = `Only ${existing.maxStock} unit(s) available for ${existing.name}.`;
+            showPosCartWarning(msg);
+            if (window.showCenterPopup) window.showCenterPopup('warning', 'Stock Limit Reached', msg);
+            return;
+        }
+        existing.quantity += 1;
+    } else {
+        posCart.push({ product_id: id, name, sku, price, quantity: 1, maxStock: limit, serial_no: '', warranty: warranty || '' });
+    }
+    showPosCartWarning('');
+    renderPosCart();
+}
+function clearPosCart() {
+    posCart.length = 0;
+    showPosCartWarning('');
+    renderPosCart();
+}
+function removePosItem(idx) {
+    posCart.splice(idx, 1);
+    showPosCartWarning('');
+    renderPosCart();
+}
+function updateCartQty(idx, raw) {
+    const item = posCart[idx];
+    if (!item) return;
+    let q = parseInt(raw, 10) || 1;
+    if (q < 1) q = 1;
+    if (q > item.maxStock) {
+        q = item.maxStock;
+        const msg = `Maximum available stock for ${item.name} is ${item.maxStock}.`;
+        showPosCartWarning(msg);
+        if (window.showCenterPopup) window.showCenterPopup('warning', 'Stock Limit Reached', msg);
+    } else {
+        showPosCartWarning('');
+    }
+    item.quantity = q;
+    renderPosCart();
+}
+function renderPosCart() {
+    const body = document.getElementById('posCartBody');
+    if (!posCart.length) {
+        body.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-slate-400"><i class="fas fa-cart-plus text-4xl text-slate-300 block mb-2"></i><div class="font-semibold text-slate-600">Cart is empty</div><small>Search and add products to continue</small></td></tr>';
+        updatePosCartTotals();
+        return;
+    }
+    body.innerHTML = posCart.map((it, idx) => `
+        <tr class="border-b border-[#eef2f6]">
+            <td class="py-2.5 px-2.5"><strong class="text-slate-800">${it.name}</strong><br><small class="text-slate-400">SKU: ${it.sku} · Stock: ${it.maxStock}</small></td>
+            <td class="py-2.5 px-2"><input type="text" value="${it.serial_no}" oninput="posCart[${idx}].serial_no=this.value" placeholder="Serial No" class="w-24 px-2 py-1 border border-[#e2e8f0] rounded"></td>
+            <td class="py-2.5 px-2">${it.warranty ? `<span class="bg-[#eef2ff] text-[#667eea] px-2.5 py-0.5 rounded-full text-[11px] whitespace-nowrap">${it.warranty}</span>` : '<span class="text-slate-400">—</span>'}</td>
+            <td class="py-2.5 px-2 text-center"><input type="number" min="1" max="${it.maxStock}" value="${it.quantity}" onchange="updateCartQty(${idx}, this.value)" class="w-16 px-2 py-1 border border-[#e2e8f0] rounded text-center tabular-nums"></td>
+            <td class="py-2.5 px-2 text-right"><input type="number" step="0.01" min="0" value="${it.price}" oninput="posCart[${idx}].price=Math.max(0,parseFloat(this.value)||0);updatePosCartTotals()" class="w-24 px-2 py-1 border border-[#e2e8f0] rounded text-right tabular-nums"></td>
+            <td class="py-2.5 px-2 text-right font-semibold tabular-nums">${(it.quantity * it.price).toFixed(2)}</td>
+            <td class="py-2.5 px-2 text-center"><button type="button" onclick="removePosItem(${idx})" class="bg-[#ef4444] text-white px-2 py-1 rounded"><i class="fas fa-trash-alt"></i></button></td>
+        </tr>
+    `).join('');
+    updatePosCartTotals();
+}
+function updatePosCartTotals() {
+    const sub = posCart.reduce((s, i) => s + (i.quantity * i.price), 0);
+    document.getElementById('posSubtotalText').textContent = cur + sub.toFixed(2);
+    document.getElementById('posTotalText').textContent = cur + sub.toFixed(2);
+}
+function filterProductRows(term) {
+    const q = term.toLowerCase().trim();
+    document.querySelectorAll('.pos-product-row').forEach(el => {
+        el.style.display = !q || el.dataset.search.includes(q) ? 'flex' : 'none';
+    });
+}
+document.getElementById('posSideSearch').addEventListener('input', e => filterProductRows(e.target.value));
+document.getElementById('posTopSearch').addEventListener('input', e => filterProductRows(e.target.value));
+
+function setModalError(msg) {
+    const box = document.getElementById('posModalError');
+    if (!msg) {
+        box.classList.add('hidden');
+        box.textContent = '';
+        return;
+    }
+    box.textContent = msg;
+    box.classList.remove('hidden');
+}
+
+function openPosPaymentModal() {
+    if (!posCart.length) {
+        const msg = 'Cart is empty! Please add at least one product before proceeding to payment.';
+        showPosCartWarning(msg);
+        if (window.showCenterPopup) window.showCenterPopup('warning', 'Cart Is Empty', msg);
+        return;
+    }
+    const custSel = document.getElementById('posCustomerSelect');
+    const isWalkIn = !custSel.value;
+    document.getElementById('modalCustomerId').value = custSel.value;
+    document.getElementById('modalSaleDate').value = document.getElementById('posDatePicker').value;
+    document.getElementById('modalCartHiddenInputs').innerHTML = posCart.map((it, idx) => `
+        <input type="hidden" name="items[${idx}][product_id]" value="${it.product_id}">
+        <input type="hidden" name="items[${idx}][quantity]" value="${it.quantity}">
+        <input type="hidden" name="items[${idx}][price]" value="${it.price}">
+        <input type="hidden" name="items[${idx}][serial_no]" value="${it.serial_no}">
+        <input type="hidden" name="items[${idx}][warranty]" value="${it.warranty || 'No Warranty'}">
+    `).join('');
+    document.getElementById('walkInBanner').classList.toggle('hidden', !isWalkIn);
+    setModalError('');
+    // Keep Received Amount empty until PAID is clicked or user types
+    document.getElementById('mPaid').value = '';
+    updatePosModalTotals();
+    document.getElementById('posPaymentModal').classList.remove('hidden');
+    document.getElementById('posPaymentModal').classList.add('flex');
+}
+function closePosPaymentModal() {
+    document.getElementById('posPaymentModal').classList.add('hidden');
+    document.getElementById('posPaymentModal').classList.remove('flex');
+}
+function fillFullPaid() {
+    const sub = posCart.reduce((s, i) => s + (i.quantity * i.price), 0);
+    const disc = parseFloat(document.getElementById('mDiscount').value) || 0;
+    const vat = parseFloat(document.getElementById('mVat').value) || 0;
+    document.getElementById('mPaid').value = Math.max(0, sub - disc + vat).toFixed(2);
+    updatePosModalTotals();
+}
+function updatePosModalTotals() {
+    const sub = posCart.reduce((s, i) => s + (i.quantity * i.price), 0);
+    const disc = Math.max(0, parseFloat(document.getElementById('mDiscount').value) || 0);
+    const vat = Math.max(0, parseFloat(document.getElementById('mVat').value) || 0);
+    const net = Math.max(0, sub - disc + vat);
+    const rec = Math.max(0, parseFloat(document.getElementById('mPaid').value) || 0);
+    const due = Math.max(0, net - rec);
+    const custSel = document.getElementById('posCustomerSelect');
+    const prevDue = parseFloat(custSel.selectedOptions[0]?.dataset.due || '0') || 0;
+
+    document.getElementById('mItemCount').textContent = posCart.length;
+    document.getElementById('mSubtotal').textContent = cur + sub.toFixed(2);
+    document.getElementById('mPrevDue').textContent = cur + prevDue.toFixed(2);
+    document.getElementById('mTotalAmount').textContent = cur + net.toFixed(2);
+    document.getElementById('sSubtotal').textContent = cur + sub.toFixed(2);
+    document.getElementById('sDiscount').textContent = cur + disc.toFixed(2);
+    document.getElementById('sVat').textContent = cur + vat.toFixed(2);
+    document.getElementById('sNet').textContent = cur + net.toFixed(2);
+    document.getElementById('sReceived').textContent = cur + rec.toFixed(2);
+    document.getElementById('sDue').textContent = cur + due.toFixed(2);
+
+    if (disc > sub + 0.009) {
+        setModalError('Discount cannot exceed subtotal.');
+    } else {
+        setModalError('');
+    }
+}
+
+document.getElementById('posCheckoutForm').addEventListener('submit', function(e) {
+    const sub = posCart.reduce((s, i) => s + (i.quantity * i.price), 0);
+    const disc = parseFloat(document.getElementById('mDiscount').value) || 0;
+    const vat = parseFloat(document.getElementById('mVat').value) || 0;
+    const net = Math.max(0, sub - disc + vat);
+    const rawPaid = document.getElementById('mPaid').value;
+    const rec = rawPaid === '' ? 0 : (parseFloat(rawPaid) || 0);
+    const due = Math.max(0, net - rec);
+    const isWalkIn = !document.getElementById('modalCustomerId').value;
+
+    if (rawPaid === '') {
+        document.getElementById('mPaid').value = '0';
+    }
+    if (disc < 0 || vat < 0 || rec < 0) {
+        e.preventDefault();
+        const msg = 'Discount, VAT, and Received Amount cannot be negative.';
+        setModalError(msg);
+        if (window.showCenterPopup) window.showCenterPopup('error', 'Invalid Amount', msg);
+        return;
+    }
+    if (disc > sub + 0.009) {
+        e.preventDefault();
+        const msg = 'Discount cannot exceed subtotal.';
+        setModalError(msg);
+        if (window.showCenterPopup) window.showCenterPopup('error', 'Invalid Discount', msg);
+        return;
+    }
+    if (isWalkIn && due > 0.009) {
+        e.preventDefault();
+        const msg = 'Walk-in Customer cannot have due balance! Please collect full payment or select a registered customer.';
+        setModalError(msg);
+        if (window.showCenterPopup) window.showCenterPopup('error', 'Full Payment Required', msg);
+        return;
+    }
+});
+</script>
+@endsection

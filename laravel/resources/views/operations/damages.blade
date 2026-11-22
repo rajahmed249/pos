@@ -1,0 +1,52 @@
+@extends('layouts.app')
+
+@section('title', 'Damages — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Sales & Purchase / Damages')
+
+@section('content')
+@php $cur = $appSettings['currency'] ?? '৳'; @endphp
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+        <h2 class="font-display text-base font-bold text-slate-900 mb-4">Record Damaged Stock</h2>
+        <form method="POST" action="{{ route('damages.store') }}" class="space-y-3 text-sm">
+            @csrf
+            <select name="product_id" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                @foreach($products as $p)
+                    <option value="{{ $p->id }}">{{ $p->name }} (Stock: {{ $p->quantity }})</option>
+                @endforeach
+            </select>
+            <input type="number" min="1" name="quantity" value="1" required class="w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums">
+            <input type="text" name="reason" placeholder="Damage reason / remarks" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+            <button type="submit" class="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold">Record Damage</button>
+        </form>
+    </div>
+
+    <div class="lg:col-span-2 min-w-0 bg-white border border-slate-200 rounded-xl p-5 shadow-xs overflow-x-auto">
+        <h2 class="font-display text-base font-bold text-slate-900 mb-4">Damaged Product Log</h2>
+        <table class="w-full text-sm text-left">
+            <thead>
+                <tr class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                    <th class="py-2 pr-3">Date</th>
+                    <th class="py-2 pr-3">Product</th>
+                    <th class="py-2 pr-3 text-right">Qty</th>
+                    <th class="py-2 pr-3">Reason</th>
+                    <th class="py-2 text-right">Loss</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                @forelse($damages as $dmg)
+                    <tr>
+                        <td class="py-2.5 pr-3 text-xs text-slate-500 whitespace-nowrap">{{ $dmg->damage_date?->format('d M Y') ?? '—' }}</td>
+                        <td class="py-2.5 pr-3 font-medium text-slate-900">{{ $dmg->product?->name ?? 'Product' }}</td>
+                        <td class="py-2.5 pr-3 text-right tabular-nums">{{ $dmg->quantity }}</td>
+                        <td class="py-2.5 pr-3 text-xs text-slate-600">{{ $dmg->reason ?: '—' }}</td>
+                        <td class="py-2.5 text-right font-semibold text-red-600 tabular-nums">{{ $cur }}{{ number_format((float) $dmg->loss_amount, 2) }}</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="5" class="py-6 text-center text-slate-400">No damaged stock entries recorded.</td></tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+</div>
+@endsection

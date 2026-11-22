@@ -1,0 +1,80 @@
+@extends('layouts.app')
+
+@section('title', 'Stock Ledger — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Sales & Purchase / Stock')
+
+@section('content')
+@php $cur = $appSettings['currency'] ?? '৳'; @endphp
+<div class="bg-white border border-slate-200 rounded-xl p-5 shadow-xs mb-6">
+    <form method="GET" action="{{ route('stock.index') }}" class="flex flex-wrap gap-3 items-center justify-between">
+        <div class="flex flex-wrap gap-2 items-center flex-1 min-w-[220px]">
+            <input type="text" name="q" value="{{ $search }}" placeholder="Search product name or SKU..." class="px-3 py-2 border border-slate-300 rounded-lg text-sm w-full sm:w-72">
+            <select name="filter" class="px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                <option value="all" @selected($filter === 'all')>All Stock</option>
+                <option value="low" @selected($filter === 'low')>Low Stock</option>
+                <option value="out" @selected($filter === 'out')>Out of Stock</option>
+            </select>
+            <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold">Filter</button>
+        </div>
+    </form>
+
+    <div class="overflow-x-auto mt-4">
+        <table class="w-full text-sm text-left">
+            <thead>
+                <tr class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                    <th class="py-2 pr-3">Code</th>
+                    <th class="py-2 pr-3">Product</th>
+                    <th class="py-2 pr-3">Category / Brand</th>
+                    <th class="py-2 pr-3 text-right">Stock Qty</th>
+                    <th class="py-2 text-right">Cost Value</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                @forelse($products as $p)
+                    <tr>
+                        <td class="py-2.5 pr-3 text-xs font-mono text-slate-500">{{ $p->code }}</td>
+                        <td class="py-2.5 pr-3 font-medium text-slate-900">{{ $p->name }}</td>
+                        <td class="py-2.5 pr-3 text-xs text-slate-600">{{ $p->category?->name ?? '—' }} &middot; {{ $p->brand?->name ?? '—' }}</td>
+                        <td class="py-2.5 pr-3 text-right font-semibold tabular-nums {{ $p->quantity <= 0 ? 'text-red-600' : ($p->quantity <= $p->alert_quantity ? 'text-amber-600' : 'text-emerald-700') }}">
+                            {{ $p->quantity }} {{ $p->unit?->name ?? 'pc' }}
+                        </td>
+                        <td class="py-2.5 text-right tabular-nums text-slate-700">{{ $cur }}{{ number_format((float) $p->purchase_price * (int) $p->quantity, 2) }}</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="5" class="py-6 text-center text-slate-400">No products matched.</td></tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="bg-white border border-slate-200 rounded-xl p-5 shadow-xs overflow-x-auto">
+    <h2 class="font-display text-base font-bold text-slate-900 mb-3">Recent Stock Movements</h2>
+    <table class="w-full text-xs text-left">
+        <thead>
+            <tr class="border-b border-slate-200 uppercase text-slate-500">
+                <th class="py-2 pr-3">Product</th>
+                <th class="py-2 pr-3">Old</th>
+                <th class="py-2 pr-3">New</th>
+                <th class="py-2 pr-3">Diff</th>
+                <th class="py-2">Reason</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+            @forelse($movements as $m)
+                <tr>
+                    <td class="py-2 pr-3 font-medium text-slate-800">{{ $m->product?->name ?? 'Product #' . $m->product_id }}</td>
+                    <td class="py-2 pr-3 tabular-nums">{{ $m->old_quantity }}</td>
+                    <td class="py-2 pr-3 tabular-nums">{{ $m->new_quantity }}</td>
+                    <td class="py-2 pr-3 font-semibold tabular-nums {{ $m->difference >= 0 ? 'text-emerald-600' : 'text-red-600' }}">
+                        {{ $m->difference >= 0 ? '+' . $m->difference : $m->difference }}
+                    </td>
+                    <td class="py-2 text-slate-600">{{ $m->reason ?: '—' }}</td>
+                </tr>
+            @empty
+                <tr><td colspan="5" class="py-5 text-center text-slate-400">No stock movements logged.</td></tr>
+            @endforelse
+        </tbody>
+    </table>
+</div>
+@endsection

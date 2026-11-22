@@ -1,0 +1,72 @@
+@extends('layouts.app')
+
+@section('title', 'Reports — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('breadcrumb', 'Analytics / Reports')
+
+@section('content')
+@php $cur = $appSettings['currency'] ?? '৳'; @endphp
+
+<form method="GET" action="{{ route('reports.index') }}" class="bg-white border border-slate-200 rounded-lg p-4 mb-6 flex flex-wrap gap-3 items-end text-sm">
+    <div>
+        <label class="block text-xs text-slate-600 mb-1">From Date</label>
+        <input type="date" name="from" value="{{ $from }}" class="px-3 py-1.5 border border-slate-300 rounded-md">
+    </div>
+    <div>
+        <label class="block text-xs text-slate-600 mb-1">To Date</label>
+        <input type="date" name="to" value="{{ $to }}" class="px-3 py-1.5 border border-slate-300 rounded-md">
+    </div>
+    <button type="submit" class="px-4 py-1.5 bg-slate-900 text-white rounded-md font-medium">Apply Range</button>
+</form>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-4">
+        <div class="text-xs text-slate-500">Period Revenue</div>
+        <div class="mt-1 text-xl font-bold tabular-nums truncate">{{ $cur }}{{ number_format((float) $salesSummary->revenue, 2) }}</div>
+    </div>
+    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-4">
+        <div class="text-xs text-slate-500">Gross Profit</div>
+        <div class="mt-1 text-xl font-bold tabular-nums text-emerald-700 truncate">{{ $cur }}{{ number_format((float) $salesSummary->gross_profit, 2) }}</div>
+    </div>
+    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-4">
+        <div class="text-xs text-slate-500">Stock Cost Value</div>
+        <div class="mt-1 text-xl font-bold tabular-nums truncate">{{ $cur }}{{ number_format((float) $stockValuation->cost_value, 2) }}</div>
+    </div>
+    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-4">
+        <div class="text-xs text-slate-500">Stock Retail Value</div>
+        <div class="mt-1 text-xl font-bold tabular-nums truncate">{{ $cur }}{{ number_format((float) $stockValuation->retail_value, 2) }}</div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="min-w-0 bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-200 font-display text-sm font-semibold">Top Customer Dues</div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <tbody class="divide-y divide-slate-100">
+                    @foreach($customerDues as $c)
+                        <tr>
+                            <td class="px-4 py-2">{{ $c->name }}</td>
+                            <td class="px-4 py-2 text-right tabular-nums text-red-600 font-medium whitespace-nowrap">{{ $cur }}{{ number_format((float) $c->total_due, 2) }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="min-w-0 bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-200 font-display text-sm font-semibold">Top Supplier Dues</div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <tbody class="divide-y divide-slate-100">
+                    @foreach($supplierDues as $s)
+                        <tr>
+                            <td class="px-4 py-2">{{ $s->name }}</td>
+                            <td class="px-4 py-2 text-right tabular-nums text-amber-700 font-medium whitespace-nowrap">{{ $cur }}{{ number_format((float) $s->total_due, 2) }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+@endsection
