@@ -6,137 +6,207 @@
 @section('content')
 @php $cur = $appSettings['currency'] ?? '৳'; @endphp
 
-<div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start" id="pos-app">
+<div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_350px] xl:grid-cols-[minmax(0,1fr)_400px] gap-5 items-start" id="pos-app">
     {{-- Left Card: New Sale --}}
-    <div class="min-w-0 bg-white rounded-[20px] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100">
-        <div class="flex flex-wrap items-center justify-between gap-2 mb-5">
-            <h3 class="inline-flex items-center gap-2 text-[18px] font-semibold text-[#667eea] pb-2.5 border-b-2 border-[#eef2f6]">
-                <i class="fas fa-cash-register shrink-0"></i> New Sale
-            </h3>
-            <button type="button" onclick="clearPosCart()" class="text-xs font-semibold text-red-500 hover:underline shrink-0">Clear Cart</button>
-        </div>
+    <div class="min-w-0 bg-white rounded-[22px] shadow-[0_8px_28px_rgba(15,23,42,0.06)] border border-slate-200/80 overflow-hidden">
+        <div class="h-1.5 bg-gradient-to-r from-[#065AA4] via-[#4f46e5] to-[#10b981]"></div>
 
-        <div class="relative mb-4">
-            <input type="text" id="posTopSearch" placeholder="Search product by name or barcode..."
-                   class="w-full px-4 py-3 border border-[#e2e8f0] rounded-[10px] text-sm focus:outline-none focus:border-[#667eea]">
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4">
-            <div class="flex items-center gap-2.5 bg-[#f8fafc] px-3 py-2 rounded-[10px] border border-[#e2e8f0] min-w-0">
-                <i class="fas fa-calendar-alt text-[#667eea] shrink-0"></i>
-                <input type="date" id="posDatePicker" value="{{ date('Y-m-d') }}" class="flex-1 min-w-0 bg-transparent border-none text-sm outline-none">
+        <div class="px-4 sm:px-6 py-4 bg-gradient-to-r from-indigo-50/75 via-white to-sky-50/60 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-[0_4px_14px_rgba(79,70,229,0.3)] shrink-0"
+                     style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                    <i class="fas fa-cash-register"></i>
+                </div>
+                <div class="min-w-0">
+                    <h3 class="text-base sm:text-lg font-extrabold text-slate-900 leading-tight truncate">New Sale</h3>
+                    <p class="text-[11px] text-slate-500">Scan barcode, assign customer &amp; bill</p>
+                </div>
             </div>
-            <div class="flex items-center gap-2.5 bg-[#f8fafc] px-3 py-2 rounded-[10px] border border-[#e2e8f0] min-w-0">
-                <i class="fas fa-user text-[#667eea] shrink-0"></i>
-                <select id="posCustomerSelect" class="flex-1 min-w-0 bg-transparent border-none text-sm outline-none">
-                    <option value="" data-due="0">Walk-in Customer</option>
-                    @foreach($customers as $c)
-                        <option value="{{ $c->id }}" data-due="{{ (float) ($c->opening_balance ?? 0) }}">{{ $c->name }} ({{ $c->phone }})</option>
-                    @endforeach
-                </select>
+            <div class="flex items-center gap-2 shrink-0">
+                <span id="posCartCountBadge" class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700 tabular-nums">
+                    0 Items &bull; 0 Qty
+                </span>
+                <button type="button" onclick="clearPosCart()" class="px-2.5 py-1 rounded-full bg-red-50 hover:bg-red-100 text-red-600 text-[11px] font-bold transition-colors cursor-pointer shrink-0">
+                    Clear Cart
+                </button>
             </div>
         </div>
 
-        <div id="posCartWarning" class="hidden mb-3 px-3.5 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium"></div>
-
-        <div class="overflow-x-auto">
-            <table class="w-full min-w-[580px] text-xs border-collapse" id="posCartTable">
-                <thead>
-                    <tr class="bg-[#f8fafc] text-[#475569] font-semibold">
-                        <th class="py-3 px-2.5 text-left">Product</th>
-                        <th class="py-3 px-2 text-left">Serial</th>
-                        <th class="py-3 px-2 text-left">Warranty</th>
-                        <th class="py-3 px-2 text-center">Qty</th>
-                        <th class="py-3 px-2 text-right">Price</th>
-                        <th class="py-3 px-2 text-right">Sub Total</th>
-                        <th class="py-3 px-2 text-center">Action</th>
-                    </tr>
-                </thead>
-                <tbody id="posCartBody">
-                    <tr>
-                        <td colspan="7" class="py-12 text-center text-slate-400">
-                            <i class="fas fa-cart-plus text-4xl text-slate-300 block mb-2"></i>
-                            <div class="font-semibold text-slate-600">Cart is empty</div>
-                            <small>Search and add products to continue</small>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="mt-5 pt-4 border-t-2 border-[#eef2f6] space-y-2">
-            <div class="flex justify-between text-sm text-[#64748b]">
-                <span>Subtotal:</span>
-                <span class="font-semibold tabular-nums" id="posSubtotalText">{{ $cur }}0.00</span>
+        <div class="p-4 sm:p-6">
+            <div class="relative mb-4">
+                <span class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <i class="fas fa-search text-xs"></i>
+                </span>
+                <input type="text" id="posTopSearch" placeholder="Search product by name, SKU, or barcode..."
+                       class="w-full pl-12 pr-4 py-3 border-2 border-slate-200 bg-slate-50/60 focus:bg-white rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#4f46e5] focus:ring-4 focus:ring-[#4f46e5]/10 transition-all">
             </div>
-            <div class="flex justify-between text-[18px] font-bold text-[#667eea]">
-                <span>Total:</span>
-                <span class="tabular-nums" id="posTotalText">{{ $cur }}0.00</span>
-            </div>
-        </div>
 
-        <button type="button" onclick="openPosPaymentModal()"
-                style="background: linear-gradient(135deg, #10b981, #059669);"
-                class="mt-4 w-full py-3.5 px-4 rounded-xl text-white text-base font-semibold flex items-center justify-center gap-2 cursor-pointer">
-            <i class="fas fa-credit-card shrink-0"></i> Proceed to Payment
-        </button>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 my-4">
+                <div class="flex items-center gap-2.5 bg-indigo-50/35 px-3 py-2 rounded-xl border border-indigo-100/90 focus-within:border-[#4f46e5] focus-within:bg-white transition-all min-w-0">
+                    <span class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                        <i class="fas fa-calendar-alt text-xs"></i>
+                    </span>
+                    <div class="flex-1 min-w-0">
+                        <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-none mb-0.5">Sale Date</span>
+                        <input type="date" id="posDatePicker" value="{{ date('Y-m-d') }}" class="w-full min-w-0 bg-transparent border-none text-xs sm:text-sm font-semibold text-slate-800 outline-none">
+                    </div>
+                </div>
+                <div class="flex items-center gap-2.5 bg-indigo-50/35 px-3 py-2 rounded-xl border border-indigo-100/90 focus-within:border-[#4f46e5] focus-within:bg-white transition-all min-w-0">
+                    <span class="w-7 h-7 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">
+                        <i class="fas fa-user text-xs"></i>
+                    </span>
+                    <div class="flex-1 min-w-0">
+                        <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-none mb-0.5">Customer</span>
+                        <select id="posCustomerSelect" class="w-full min-w-0 bg-transparent border-none text-xs sm:text-sm font-semibold text-slate-800 outline-none">
+                            <option value="" data-due="0">Walk-in Customer</option>
+                            @foreach($customers as $c)
+                                <option value="{{ $c->id }}" data-due="{{ (float) ($c->opening_balance ?? 0) }}">{{ $c->name }} ({{ $c->phone }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div id="posCartWarning" class="hidden mb-3 px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium"></div>
+
+            <div class="overflow-x-auto rounded-2xl border border-slate-100">
+                <table class="w-full min-w-[580px] text-xs border-collapse" id="posCartTable">
+                    <thead>
+                        <tr class="bg-gradient-to-r from-slate-50 via-indigo-50/40 to-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200/70">
+                            <th class="py-3 px-3 text-left">Product</th>
+                            <th class="py-3 px-2 text-left">Serial</th>
+                            <th class="py-3 px-2 text-left">Warranty</th>
+                            <th class="py-3 px-2 text-center">Qty</th>
+                            <th class="py-3 px-2 text-right">Price</th>
+                            <th class="py-3 px-2 text-right">Sub Total</th>
+                            <th class="py-3 px-2.5 text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="posCartBody" class="divide-y divide-slate-100">
+                        <tr>
+                            <td colspan="7" class="py-14 px-5 text-center text-slate-400 bg-gradient-to-br from-slate-50/70 via-white to-indigo-50/40">
+                                <div class="w-16 h-16 rounded-2xl mx-auto mb-3 flex items-center justify-center text-indigo-600 shadow-xs"
+                                     style="background: linear-gradient(135deg, rgba(79,70,229,0.12), rgba(124,58,237,0.14));">
+                                    <i class="fas fa-cart-plus text-2xl"></i>
+                                </div>
+                                <div class="text-sm font-bold text-slate-700">Cart is empty</div>
+                                <small class="text-xs text-slate-500">Search or click &ldquo;Add&rdquo; from the Product List to start billing</small>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-5 rounded-2xl bg-gradient-to-r from-slate-50 via-indigo-50/35 to-emerald-50/45 border border-slate-200/80 p-4 space-y-2">
+                <div class="flex justify-between items-center text-xs sm:text-sm text-slate-600">
+                    <span>Subtotal:</span>
+                    <span class="font-semibold tabular-nums text-slate-800" id="posSubtotalText">{{ $cur }}0.00</span>
+                </div>
+                <div class="flex justify-between items-center pt-2 border-t border-slate-200/70">
+                    <span class="text-base sm:text-lg font-extrabold text-slate-900">Total:</span>
+                    <span class="text-lg sm:text-xl font-black text-[#4f46e5] tabular-nums" id="posTotalText">{{ $cur }}0.00</span>
+                </div>
+            </div>
+
+            <button type="button" onclick="openPosPaymentModal()"
+                    style="background: linear-gradient(135deg, #10b981, #059669);"
+                    class="mt-4 w-full py-3.5 px-5 rounded-xl text-white text-sm sm:text-base font-bold flex items-center justify-between shadow-[0_6px_18px_rgba(16,185,129,0.3)] hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(16,185,129,0.38)] transition-all cursor-pointer">
+                <span class="inline-flex items-center gap-2">
+                    <i class="fas fa-credit-card shrink-0"></i> Proceed to Payment
+                </span>
+                <span class="inline-flex items-center gap-1.5 bg-white/20 px-3 py-1 rounded-lg text-xs sm:text-sm font-extrabold tabular-nums">
+                    <span id="posBtnTotalText">{{ $cur }}0.00</span>
+                    <i class="fas fa-chevron-right text-[10px]"></i>
+                </span>
+            </button>
+        </div>
     </div>
 
     {{-- Right Card: Product List --}}
-    <div class="min-w-0 bg-white rounded-[20px] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100">
-        <h3 class="inline-flex items-center gap-2 text-[18px] font-semibold text-[#667eea] mb-4 pb-2.5 border-b-2 border-[#eef2f6]">
-            <i class="fas fa-box shrink-0"></i> Product List
-        </h3>
-        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <h4 class="text-sm font-semibold text-slate-700 shrink-0">All Products</h4>
-            <input type="text" id="posSideSearch" placeholder="Search..."
-                   class="w-full sm:w-44 px-3 py-1.5 border border-[#e2e8f0] rounded-lg text-[13px] outline-none focus:border-[#667eea]">
+    <div class="min-w-0 bg-white rounded-[22px] shadow-[0_8px_28px_rgba(15,23,42,0.06)] border border-slate-200/80 overflow-hidden">
+        <div class="h-1.5 bg-gradient-to-r from-[#4f46e5] via-[#7c3aed] to-[#ec4899]"></div>
+
+        <div class="px-4 sm:px-5 py-4 bg-gradient-to-r from-indigo-50/60 via-white to-violet-50/50 border-b border-slate-100 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <span class="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-xs shrink-0"
+                      style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                    <i class="fas fa-box text-sm"></i>
+                </span>
+                <div class="min-w-0">
+                    <h3 class="text-base font-extrabold text-slate-900 leading-tight truncate">Product List</h3>
+                    <p class="text-[11px] text-slate-500">Quick-add inventory items</p>
+                </div>
+            </div>
+            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700 tabular-nums shrink-0">
+                {{ $products->count() }}
+            </span>
         </div>
 
-        <div class="max-h-[520px] overflow-y-auto divide-y divide-[#eef2f6]" id="posProductList">
-            @foreach($products as $product)
-                @php
-                    $stockQty = (int) ($product->stock_quantity ?? $product->quantity ?? 0);
-                    $isOut = $stockQty <= 0;
-                    $wText = $product->warranty ?: ($product->warrantyRecord?->duration ?? '');
-                @endphp
-                <div class="pos-product-row flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 py-3 px-1 {{ $isOut ? 'opacity-60 bg-[#fef2f2]' : 'hover:bg-[#f8fafc]' }}"
-                     data-search="{{ strtolower($product->name . ' ' . $product->sku) }}">
-                    <div class="flex-1 min-w-0">
-                        <div class="font-semibold text-[13px] text-[#1e293b] truncate">{{ $product->name }}</div>
-                        <div class="text-[10px] text-[#94a3b8]">SKU: {{ $product->sku ?: 'N/A' }}</div>
-                        @if($wText)
-                            <div class="text-[10px] text-[#667eea] mt-0.5"><i class="fas fa-shield-alt"></i> {{ $wText }}</div>
-                        @endif
-                        <div class="text-[10px] mt-0.5 font-medium {{ $isOut ? 'text-[#ef4444]' : 'text-[#10b981]' }}">
-                            <i class="fas fa-boxes"></i> Stock: {{ $stockQty }}
+        <div class="p-4 sm:p-5">
+            <div class="relative mb-3.5">
+                <i class="fas fa-search text-xs text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <input type="text" id="posSideSearch" placeholder="Filter products..."
+                       class="w-full pl-9 pr-3 py-2.5 border-2 border-slate-200 bg-slate-50/60 focus:bg-white rounded-xl text-[13px] outline-none focus:border-[#4f46e5] transition-all">
+            </div>
+
+            <div class="max-h-[540px] overflow-y-auto space-y-2 pr-1" id="posProductList">
+                @foreach($products as $product)
+                    @php
+                        $stockQty = (int) ($product->stock_quantity ?? $product->quantity ?? 0);
+                        $isOut = $stockQty <= 0;
+                        $wText = $product->warranty ?: ($product->warrantyRecord?->duration ?? '');
+                    @endphp
+                    <div class="pos-product-row flex items-center justify-between gap-2.5 p-2.5 rounded-xl border transition-all {{ $isOut ? 'opacity-65 bg-red-50/60 border-red-100' : 'bg-white border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/25' }}"
+                         data-search="{{ strtolower($product->name . ' ' . $product->sku) }}">
+                        <div class="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200/70 flex items-center justify-center overflow-hidden shrink-0">
+                            @if($product->image)
+                                <img src="{{ asset($product->image) }}" alt="{{ $product->name }}" class="w-full h-full object-cover">
+                            @else
+                                <i class="fas fa-box text-slate-400 text-xs"></i>
+                            @endif
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-bold text-[12.5px] text-[#0f172a] truncate">{{ $product->name }}</div>
+                            <div class="text-[10px] text-slate-400 truncate">SKU: {{ $product->sku ?: 'N/A' }}</div>
+                            <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-1 {{ $isOut ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700' }}">
+                                    <i class="fas fa-boxes text-[9px]"></i> {{ $stockQty }}
+                                </span>
+                                @if($wText)
+                                    <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-600 inline-flex items-center gap-1">
+                                        <i class="fas fa-shield-alt text-[9px]"></i> {{ $wText }}
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
+                        <div class="flex flex-col items-end gap-1.5 shrink-0">
+                            <div class="font-extrabold text-emerald-600 text-xs sm:text-[13px] whitespace-nowrap tabular-nums">
+                                {{ $cur }}{{ number_format($product->selling_price, 2) }}
+                            </div>
+                            <button type="button"
+                                    @disabled($isOut)
+                                    onclick="addPosItem({{ $product->id }}, @js($product->name), @js($product->sku ?: 'N/A'), {{ (float) $product->selling_price }}, @js($wText), {{ $stockQty }})"
+                                    @if(!$isOut) style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" @endif
+                                    class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white whitespace-nowrap inline-flex items-center gap-1 shrink-0 shadow-xs {{ $isOut ? 'bg-slate-400 opacity-55 cursor-not-allowed' : 'cursor-pointer hover:brightness-105' }}">
+                                <i class="fas fa-plus text-[9px]"></i> Add
+                            </button>
                         </div>
                     </div>
-                    <div class="font-bold text-[#10b981] text-sm whitespace-nowrap tabular-nums shrink-0">
-                        {{ $cur }}{{ number_format($product->selling_price, 2) }}
-                    </div>
-                    <button type="button"
-                            @disabled($isOut)
-                            onclick="addPosItem({{ $product->id }}, @js($product->name), @js($product->sku ?: 'N/A'), {{ (float) $product->selling_price }}, @js($wText), {{ $stockQty }})"
-                            @if(!$isOut) style="background: linear-gradient(135deg, #667eea, #764ba2);" @endif
-                            class="px-3 py-2 rounded-lg text-xs font-medium text-white whitespace-nowrap shrink-0 {{ $isOut ? 'bg-[#94a3b8] cursor-not-allowed' : 'cursor-pointer' }}">
-                        <i class="fas fa-plus"></i> Add
-                    </button>
-                </div>
-            @endforeach
+                @endforeach
+            </div>
         </div>
     </div>
 </div>
 
 {{-- Payment Details Modal --}}
-<div id="posPaymentModal" class="fixed inset-0 z-50 bg-black/60 hidden items-center justify-center p-3 sm:p-4">
-    <div class="bg-white rounded-[20px] w-full max-w-[650px] max-h-[95vh] overflow-y-auto shadow-2xl">
-        <div class="px-5 py-4 text-white flex items-center justify-between" style="background: linear-gradient(135deg, #667eea, #764ba2);">
+<div id="posPaymentModal" class="fixed inset-0 z-50 bg-slate-950/60 hidden items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-[22px] w-full max-w-[660px] max-h-[95vh] overflow-y-auto shadow-[0_28px_70px_rgba(15,23,42,0.32)] border border-slate-100">
+        <div class="px-5 py-4 text-white flex items-center justify-between" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
             <div class="flex items-center gap-2.5">
                 <i class="fas fa-credit-card shrink-0"></i>
-                <h4 class="text-base font-semibold m-0">Payment Details</h4>
+                <h4 class="text-base font-bold m-0">Payment Details</h4>
             </div>
-            <button type="button" onclick="closePosPaymentModal()" class="w-7 h-7 rounded-full bg-white/20 text-white shrink-0">&times;</button>
+            <button type="button" onclick="closePosPaymentModal()" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white shrink-0 cursor-pointer">&times;</button>
         </div>
 
         <form method="POST" action="{{ route('pos.checkout') }}" id="posCheckoutForm">
@@ -145,29 +215,29 @@
             <input type="hidden" name="sale_date" id="modalSaleDate">
             <div id="modalCartHiddenInputs"></div>
 
-            <div class="p-5 bg-[#f8fafc] border-b border-[#eef2f6]">
-                <h5 class="text-sm font-semibold text-slate-700 mb-3"><i class="fas fa-shopping-cart text-[#667eea] mr-1.5"></i> Order Summary</h5>
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
-                    <div class="min-w-0 bg-white p-2.5 rounded-[10px] border border-[#eef2f6] text-center">
-                        <span class="block text-[10px] text-[#64748b]">Total Items</span>
-                        <span class="block text-base font-bold text-[#1e293b] tabular-nums" id="mItemCount">0</span>
+            <div class="p-5 bg-gradient-to-r from-slate-50 via-indigo-50/35 to-slate-50 border-b border-slate-100">
+                <h5 class="text-xs font-bold uppercase tracking-wider text-slate-600 mb-3"><i class="fas fa-shopping-cart text-[#4f46e5] mr-1.5"></i> Order Summary</h5>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                    <div class="min-w-0 bg-white p-3 rounded-xl border border-slate-200/80 text-center shadow-2xs">
+                        <span class="block text-[10px] font-semibold text-slate-500">Total Items</span>
+                        <span class="block text-base font-extrabold text-slate-900 tabular-nums" id="mItemCount">0</span>
                     </div>
-                    <div class="min-w-0 bg-white p-2.5 rounded-[10px] border border-[#eef2f6] text-center">
-                        <span class="block text-[10px] text-[#64748b]">Subtotal</span>
-                        <span class="block text-base font-bold text-[#1e293b] tabular-nums truncate" id="mSubtotal">{{ $cur }}0.00</span>
+                    <div class="min-w-0 bg-white p-3 rounded-xl border border-slate-200/80 text-center shadow-2xs">
+                        <span class="block text-[10px] font-semibold text-slate-500">Subtotal</span>
+                        <span class="block text-base font-extrabold text-slate-900 tabular-nums truncate" id="mSubtotal">{{ $cur }}0.00</span>
                     </div>
-                    <div class="min-w-0 bg-white p-2.5 rounded-[10px] border border-[#eef2f6] text-center">
-                        <span class="block text-[10px] text-[#64748b]">Previous Due</span>
-                        <span class="block text-base font-bold text-[#ef4444] tabular-nums truncate" id="mPrevDue">{{ $cur }}0.00</span>
+                    <div class="min-w-0 bg-white p-3 rounded-xl border border-slate-200/80 text-center shadow-2xs">
+                        <span class="block text-[10px] font-semibold text-slate-500">Previous Due</span>
+                        <span class="block text-base font-extrabold text-red-600 tabular-nums truncate" id="mPrevDue">{{ $cur }}0.00</span>
                     </div>
-                    <div class="min-w-0 p-2.5 rounded-[10px] text-center text-white" style="background: linear-gradient(135deg, #667eea, #764ba2);">
-                        <span class="block text-[10px] text-white/80">Total Amount</span>
-                        <span class="block text-base font-bold tabular-nums truncate" id="mTotalAmount">{{ $cur }}0.00</span>
+                    <div class="min-w-0 p-3 rounded-xl text-center text-white shadow-sm" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                        <span class="block text-[10px] font-semibold text-white/80">Total Amount</span>
+                        <span class="block text-base font-black tabular-nums truncate" id="mTotalAmount">{{ $cur }}0.00</span>
                     </div>
                 </div>
             </div>
 
-            <div class="p-5 space-y-3">
+            <div class="p-5 space-y-3.5">
                 <div id="walkInBanner" class="hidden px-3.5 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium">
                     <i class="fas fa-exclamation-triangle mr-1"></i> Walk-in Customer selected: Full payment is required (due cannot be left on Walk-in bills).
                 </div>
@@ -175,54 +245,54 @@
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-[11px] font-semibold text-[#475569] mb-1">Discount Amount</label>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">Discount Amount</label>
                         <input type="number" step="0.01" min="0" name="discount" id="mDiscount" value="0" oninput="updatePosModalTotals()"
-                               class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-lg text-[13px] tabular-nums">
+                               class="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-[13px] tabular-nums focus:outline-none focus:border-[#4f46e5]">
                     </div>
                     <div>
-                        <label class="block text-[11px] font-semibold text-[#475569] mb-1">Vat, Tax &amp; AIT</label>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">Vat, Tax &amp; AIT</label>
                         <input type="number" step="0.01" min="0" name="vat" id="mVat" value="0" oninput="updatePosModalTotals()"
-                               class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-lg text-[13px] tabular-nums">
+                               class="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-[13px] tabular-nums focus:outline-none focus:border-[#4f46e5]">
                     </div>
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-[11px] font-semibold text-[#475569] mb-1">Payment Account</label>
-                        <select name="account_id" required class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-lg text-[13px]">
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">Payment Account</label>
+                        <select name="account_id" required class="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-[13px] bg-white focus:outline-none focus:border-[#4f46e5]">
                             @foreach($accounts as $acc)
                                 <option value="{{ $acc->id }}">{{ $acc->account_name }}</option>
                             @endforeach
                         </select>
                     </div>
                     <div>
-                        <label class="block text-[11px] font-semibold text-[#475569] mb-1">Received Amount</label>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">Received Amount</label>
                         <div class="flex gap-2 min-w-0">
                             <input type="number" step="0.01" min="0" name="paid" id="mPaid" value="" placeholder="Click PAID or enter amount" oninput="updatePosModalTotals()"
-                                   class="flex-1 min-w-0 px-3 py-2 border-2 border-[#e2e8f0] rounded-lg text-[13px] tabular-nums">
-                            <button type="button" onclick="fillFullPaid()" style="background: linear-gradient(135deg, #667eea, #764ba2);"
-                                    class="px-3 py-1.5 rounded-md text-[11px] font-semibold text-white shrink-0 cursor-pointer">PAID</button>
+                                   class="flex-1 min-w-0 px-3 py-2.5 border-2 border-slate-200 rounded-xl text-[13px] font-semibold tabular-nums focus:outline-none focus:border-[#4f46e5]">
+                            <button type="button" onclick="fillFullPaid()" style="background: linear-gradient(135deg, #10b981, #059669);"
+                                    class="px-4 py-2 rounded-xl text-xs font-extrabold text-white shrink-0 shadow-xs cursor-pointer">PAID</button>
                         </div>
                     </div>
                 </div>
                 <div>
-                    <label class="block text-[11px] font-semibold text-[#475569] mb-1">Note</label>
+                    <label class="block text-[11px] font-bold text-slate-600 mb-1">Note</label>
                     <input type="text" name="note" placeholder="Write your note here..."
-                           class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-lg text-[13px]">
+                           class="w-full px-3 py-2.5 border-2 border-slate-200 rounded-xl text-[13px] focus:outline-none focus:border-[#4f46e5]">
                 </div>
 
-                <div class="bg-[#f8fafc] rounded-[10px] p-3.5 space-y-1.5 text-sm">
-                    <div class="flex justify-between pb-2 border-b border-[#e2e8f0]"><span>Subtotal:</span><strong id="sSubtotal">{{ $cur }}0.00</strong></div>
-                    <div class="flex justify-between text-[#ef4444]"><span>Discount:</span><strong id="sDiscount">{{ $cur }}0.00</strong></div>
-                    <div class="flex justify-between text-[#667eea]"><span>Vat, Tax &amp; AIT:</span><strong id="sVat">{{ $cur }}0.00</strong></div>
-                    <div class="flex justify-between font-bold border-t border-[#e2e8f0] pt-2"><span>Net Payable Amount:</span><strong id="sNet">{{ $cur }}0.00</strong></div>
-                    <div class="flex justify-between text-[#10b981]"><span>Received Amount:</span><strong id="sReceived">{{ $cur }}0.00</strong></div>
-                    <div class="flex justify-between font-bold border-t border-[#e2e8f0] pt-2"><span>Current Invoice Due:</span><strong class="text-[#ef4444]" id="sDue">{{ $cur }}0.00</strong></div>
+                <div class="bg-slate-50 rounded-2xl border border-slate-200/70 p-4 space-y-1.5 text-sm">
+                    <div class="flex justify-between pb-2 border-b border-slate-200/80"><span class="text-slate-600">Subtotal:</span><strong id="sSubtotal">{{ $cur }}0.00</strong></div>
+                    <div class="flex justify-between text-red-600"><span>Discount:</span><strong id="sDiscount">{{ $cur }}0.00</strong></div>
+                    <div class="flex justify-between text-indigo-600"><span>Vat, Tax &amp; AIT:</span><strong id="sVat">{{ $cur }}0.00</strong></div>
+                    <div class="flex justify-between font-bold border-t border-slate-200/80 pt-2 text-slate-900"><span>Net Payable Amount:</span><strong id="sNet">{{ $cur }}0.00</strong></div>
+                    <div class="flex justify-between text-emerald-600"><span>Received Amount:</span><strong id="sReceived">{{ $cur }}0.00</strong></div>
+                    <div class="flex justify-between font-extrabold border-t border-slate-200/80 pt-2"><span class="text-slate-900">Current Invoice Due:</span><strong class="text-red-600" id="sDue">{{ $cur }}0.00</strong></div>
                 </div>
             </div>
 
-            <div class="px-5 py-3.5 bg-[#f8fafc] border-t border-[#eef2f6] flex flex-wrap justify-end gap-2.5">
-                <button type="button" onclick="closePosPaymentModal()" class="px-5 py-2 rounded-lg bg-[#f1f5f9] text-[#475569] text-[13px] font-semibold">Cancel</button>
-                <button type="submit" style="background: linear-gradient(135deg, #10b981, #059669);" class="px-6 py-2 rounded-lg text-white text-[13px] font-semibold">
+            <div class="px-5 py-3.5 bg-slate-50 border-t border-slate-100 flex flex-wrap justify-end gap-2.5">
+                <button type="button" onclick="closePosPaymentModal()" class="px-5 py-2.5 rounded-xl bg-slate-200/70 hover:bg-slate-200 text-slate-700 text-[13px] font-semibold cursor-pointer">Cancel</button>
+                <button type="submit" style="background: linear-gradient(135deg, #10b981, #059669);" class="px-6 py-2.5 rounded-xl text-white text-[13px] font-bold shadow-sm cursor-pointer">
                     <i class="fas fa-check-circle mr-1"></i> Confirm Order
                 </button>
             </div>
@@ -290,20 +360,30 @@ function updateCartQty(idx, raw) {
 }
 function renderPosCart() {
     const body = document.getElementById('posCartBody');
+    const badge = document.getElementById('posCartCountBadge');
+    const totalUnits = posCart.reduce((s, i) => s + i.quantity, 0);
+    if (badge) badge.textContent = `${posCart.length} ${posCart.length === 1 ? 'Item' : 'Items'} • ${totalUnits} Qty`;
+
     if (!posCart.length) {
-        body.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-slate-400"><i class="fas fa-cart-plus text-4xl text-slate-300 block mb-2"></i><div class="font-semibold text-slate-600">Cart is empty</div><small>Search and add products to continue</small></td></tr>';
+        body.innerHTML = '<tr><td colspan="7" class="py-14 px-5 text-center text-slate-400 bg-gradient-to-br from-slate-50/70 via-white to-indigo-50/40"><div class="w-16 h-16 rounded-2xl mx-auto mb-3 flex items-center justify-center text-indigo-600 shadow-xs" style="background: linear-gradient(135deg, rgba(79,70,229,0.12), rgba(124,58,237,0.14));"><i class="fas fa-cart-plus text-2xl"></i></div><div class="text-sm font-bold text-slate-700">Cart is empty</div><small class="text-xs text-slate-500">Search or click &ldquo;Add&rdquo; from the Product List to start billing</small></td></tr>';
         updatePosCartTotals();
         return;
     }
     body.innerHTML = posCart.map((it, idx) => `
-        <tr class="border-b border-[#eef2f6]">
-            <td class="py-2.5 px-2.5"><strong class="text-slate-800">${it.name}</strong><br><small class="text-slate-400">SKU: ${it.sku} · Stock: ${it.maxStock}</small></td>
-            <td class="py-2.5 px-2"><input type="text" value="${it.serial_no}" oninput="posCart[${idx}].serial_no=this.value" placeholder="Serial No" class="w-24 px-2 py-1 border border-[#e2e8f0] rounded"></td>
-            <td class="py-2.5 px-2">${it.warranty ? `<span class="bg-[#eef2ff] text-[#667eea] px-2.5 py-0.5 rounded-full text-[11px] whitespace-nowrap">${it.warranty}</span>` : '<span class="text-slate-400">—</span>'}</td>
-            <td class="py-2.5 px-2 text-center"><input type="number" min="1" max="${it.maxStock}" value="${it.quantity}" onchange="updateCartQty(${idx}, this.value)" class="w-16 px-2 py-1 border border-[#e2e8f0] rounded text-center tabular-nums"></td>
-            <td class="py-2.5 px-2 text-right"><input type="number" step="0.01" min="0" value="${it.price}" oninput="posCart[${idx}].price=Math.max(0,parseFloat(this.value)||0);updatePosCartTotals()" class="w-24 px-2 py-1 border border-[#e2e8f0] rounded text-right tabular-nums"></td>
-            <td class="py-2.5 px-2 text-right font-semibold tabular-nums">${(it.quantity * it.price).toFixed(2)}</td>
-            <td class="py-2.5 px-2 text-center"><button type="button" onclick="removePosItem(${idx})" class="bg-[#ef4444] text-white px-2 py-1 rounded"><i class="fas fa-trash-alt"></i></button></td>
+        <tr class="hover:bg-indigo-50/25 transition-colors">
+            <td class="py-3 px-3"><strong class="text-slate-800">${it.name}</strong><br><small class="text-[10px] text-slate-400">SKU: ${it.sku} &bull; Max: ${it.maxStock}</small></td>
+            <td class="py-3 px-2"><input type="text" value="${it.serial_no}" oninput="posCart[${idx}].serial_no=this.value" placeholder="Serial No" class="w-24 px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white"></td>
+            <td class="py-3 px-2">${it.warranty ? `<span class="bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap">${it.warranty}</span>` : '<span class="text-slate-400">—</span>'}</td>
+            <td class="py-3 px-2 text-center">
+                <div class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
+                    <button type="button" onclick="updateCartQty(${idx}, ${it.quantity - 1})" class="px-2 py-1 text-slate-600 hover:bg-slate-200/70 cursor-pointer"><i class="fas fa-minus text-[10px]"></i></button>
+                    <input type="number" min="1" max="${it.maxStock}" value="${it.quantity}" onchange="updateCartQty(${idx}, this.value)" class="w-11 py-1 bg-white text-center font-bold tabular-nums border-x border-slate-200">
+                    <button type="button" onclick="updateCartQty(${idx}, ${it.quantity + 1})" class="px-2 py-1 text-slate-600 hover:bg-slate-200/70 cursor-pointer"><i class="fas fa-plus text-[10px]"></i></button>
+                </div>
+            </td>
+            <td class="py-3 px-2 text-right"><input type="number" step="0.01" min="0" value="${it.price}" oninput="posCart[${idx}].price=Math.max(0,parseFloat(this.value)||0);updatePosCartTotals()" class="w-24 px-2.5 py-1.5 border border-slate-200 rounded-lg text-right font-semibold bg-white tabular-nums"></td>
+            <td class="py-3 px-2 text-right font-extrabold text-indigo-700 tabular-nums">${(it.quantity * it.price).toFixed(2)}</td>
+            <td class="py-3 px-2.5 text-center"><button type="button" onclick="removePosItem(${idx})" class="bg-red-50 hover:bg-red-600 text-red-600 hover:text-white border border-red-200/70 px-2 py-1.5 rounded-lg transition-colors cursor-pointer"><i class="fas fa-trash-alt"></i></button></td>
         </tr>
     `).join('');
     updatePosCartTotals();
@@ -312,6 +392,8 @@ function updatePosCartTotals() {
     const sub = posCart.reduce((s, i) => s + (i.quantity * i.price), 0);
     document.getElementById('posSubtotalText').textContent = cur + sub.toFixed(2);
     document.getElementById('posTotalText').textContent = cur + sub.toFixed(2);
+    const btnTot = document.getElementById('posBtnTotalText');
+    if (btnTot) btnTot.textContent = cur + sub.toFixed(2);
 }
 function filterProductRows(term) {
     const q = term.toLowerCase().trim();

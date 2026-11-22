@@ -283,6 +283,7 @@ export function FinanceView({ section, bootstrap, onRefreshBootstrap }: FinanceV
             >
               <select value={expForm.category} onChange={(e) => setExpForm({ ...expForm, category: e.target.value })} className="w-full px-3 py-1.5 border border-slate-300 rounded-md">
                 {bootstrap.expenseCategories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                {bootstrap.expenseCategories.length === 0 && <option value="Other">Other</option>}
               </select>
               <input type="number" step="0.01" min="0.01" required placeholder="Amount" value={expForm.amount} onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} className="w-full px-3 py-1.5 border border-slate-300 rounded-md tabular-nums" />
               <textarea rows={2} placeholder="Description" value={expForm.description} onChange={(e) => setExpForm({ ...expForm, description: e.target.value })} className="w-full px-3 py-1.5 border border-slate-300 rounded-md" />

@@ -6,6 +6,7 @@ use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Unit;
 use App\Models\Warranty;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -18,13 +19,18 @@ class CatalogController extends Controller
         return view('catalog.categories', compact('categories'));
     }
 
-    public function storeCategory(Request $request): RedirectResponse
+    public function storeCategory(Request $request): RedirectResponse|JsonResponse
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'description' => ['nullable', 'string'],
         ]);
-        Category::query()->create($data + ['status' => true]);
+        $category = Category::query()->create($data + ['status' => true]);
+
+        if ($request->expectsJson()) {
+            return response()->json($category, 201);
+        }
+
         return back()->with('success', 'Category added.');
     }
 
@@ -40,10 +46,15 @@ class CatalogController extends Controller
         return view('catalog.brands', compact('brands'));
     }
 
-    public function storeBrand(Request $request): RedirectResponse
+    public function storeBrand(Request $request): RedirectResponse|JsonResponse
     {
         $data = $request->validate(['name' => ['required', 'string', 'max:100']]);
-        Brand::query()->create($data + ['status' => true]);
+        $brand = Brand::query()->create($data + ['status' => true]);
+
+        if ($request->expectsJson()) {
+            return response()->json($brand, 201);
+        }
+
         return back()->with('success', 'Brand added.');
     }
 
@@ -60,17 +71,30 @@ class CatalogController extends Controller
         return view('catalog.warranties', compact('units', 'warranties'));
     }
 
-    public function storeUnit(Request $request): RedirectResponse
+    public function storeUnit(Request $request): RedirectResponse|JsonResponse
     {
         $data = $request->validate(['name' => ['required', 'string', 'max:50'], 'description' => ['nullable', 'string']]);
-        Unit::query()->create($data + ['status' => true]);
+        $unit = Unit::query()->create($data + ['status' => true]);
+
+        if ($request->expectsJson()) {
+            return response()->json($unit, 201);
+        }
+
         return back()->with('success', 'Unit added.');
     }
 
-    public function storeWarranty(Request $request): RedirectResponse
+    public function storeWarranty(Request $request): RedirectResponse|JsonResponse
     {
         $data = $request->validate(['name' => ['required', 'string', 'max:100'], 'duration' => ['nullable', 'string', 'max:50']]);
-        Warranty::query()->create($data + ['status' => true]);
+        if (empty($data['duration'])) {
+            $data['duration'] = $data['name'];
+        }
+        $warranty = Warranty::query()->create($data + ['status' => true]);
+
+        if ($request->expectsJson()) {
+            return response()->json($warranty, 201);
+        }
+
         return back()->with('success', 'Warranty option added.');
     }
 }

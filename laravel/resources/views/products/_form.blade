@@ -1,0 +1,496 @@
+@php
+    $isEdit = isset($product) && $product?->exists;
+    $cur = $appSettings['currency'] ?? '৳';
+    $purchasePriceInit = (float) old('purchase_price', $isEdit ? $product->purchase_price : 0);
+    $sellingPriceInit = (float) old('selling_price', $isEdit ? $product->selling_price : 0);
+    $profitInit = $sellingPriceInit - $purchasePriceInit;
+    $marginInit = $sellingPriceInit > 0 ? round(($profitInit / $sellingPriceInit) * 100) : 0;
+@endphp
+
+<div class="bg-white rounded-[24px] shadow-[0_8px_30px_rgba(15,23,42,0.06)] border border-slate-200/80 overflow-hidden">
+    <div class="h-2 bg-gradient-to-r from-[#4f46e5] via-[#7c3aed] to-[#10b981]"></div>
+
+    <div class="px-5 sm:px-8 py-5 bg-gradient-to-r from-indigo-50/70 via-white to-emerald-50/40 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3.5 min-w-0">
+            <div class="w-11 h-11 rounded-2xl flex items-center justify-center text-white shadow-[0_6px_18px_rgba(79,70,229,0.28)] shrink-0"
+                 style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                <i class="fas fa-box text-lg"></i>
+            </div>
+            <div class="min-w-0">
+                <h2 class="text-lg sm:text-xl font-bold text-[#0f172a] truncate">
+                    {{ $isEdit ? "Edit Product — {$product->name}" : 'Product Information' }}
+                </h2>
+                <p class="text-xs text-slate-500 mt-0.5">
+                    Fill in identity, stock levels, pricing &amp; product photo cleanly
+                </p>
+            </div>
+        </div>
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/70">
+            <i class="fas fa-sparkles"></i> {{ $isEdit ? 'Editing Mode' : 'New Item Entry' }}
+        </span>
+    </div>
+
+    <form method="POST"
+          action="{{ $isEdit ? route('products.update', $product) : route('products.store') }}"
+          enctype="multipart/form-data"
+          class="p-5 sm:p-8 space-y-6 text-sm">
+        @csrf
+        @if($isEdit)
+            @method('PUT')
+        @endif
+
+        {{-- Section 1: Identity & Classification --}}
+        <div class="rounded-2xl border border-indigo-100/90 bg-gradient-to-br from-indigo-50/45 via-white to-violet-50/25 p-4 sm:p-6 space-y-5">
+            <div class="flex items-center gap-2.5 pb-3 border-b border-indigo-100/80">
+                <span class="w-7 h-7 rounded-lg bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shadow-xs">1</span>
+                <div>
+                    <h3 class="text-sm font-bold text-slate-900">Identity &amp; Classification</h3>
+                    <p class="text-[11px] text-slate-500">SKU code, product title, category, brand &amp; warranty</p>
+                </div>
+            </div>
+
+            {{-- Row 1: SKU (25%) & Product Name (75%) --}}
+            <div class="flex flex-col md:flex-row gap-4 sm:gap-5 items-start">
+                <div class="w-full md:w-1/4 shrink-0">
+                    <label class="block text-[13px] font-semibold text-[#334155] mb-1.5">Product Code / SKU</label>
+                    <input type="text" name="sku" placeholder="Enter SKU..."
+                           value="{{ old('sku', $isEdit ? $product->sku : '') }}"
+                           class="w-full px-4 py-3 border-2 border-[#e2e8f0] rounded-xl text-sm text-[#334155] bg-white focus:outline-none focus:border-[#4f46e5] focus:ring-4 focus:ring-[#4f46e5]/10 transition-all">
+                    <p class="text-[11px] text-[#94a3b8] mt-1">Unique identifier (optional)</p>
+                </div>
+
+                <div class="w-full md:flex-1">
+                    <label class="block text-[13px] font-semibold text-[#334155] mb-1.5">
+                        Product Name <span class="text-[#ef4444]">*</span>
+                    </label>
+                    <input type="text" name="name" required placeholder="Enter product name..."
+                           value="{{ old('name', $isEdit ? $product->name : '') }}"
+                           class="w-full px-4 py-3 border-2 border-[#e2e8f0] rounded-xl text-sm text-[#334155] bg-white focus:outline-none focus:border-[#4f46e5] focus:ring-4 focus:ring-[#4f46e5]/10 transition-all">
+                </div>
+            </div>
+
+            {{-- Row 2: Category & Brand --}}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                <div>
+                    <label class="block text-[13px] font-semibold text-[#334155] mb-1.5">
+                        Category <span class="text-[#ef4444]">*</span>
+                    </label>
+                    <div class="flex flex-col sm:flex-row gap-2.5">
+                        <select name="category_id" id="prodCategorySelect" required
+                                class="flex-1 min-w-0 px-4 py-3 border-2 border-[#e2e8f0] rounded-xl text-sm text-[#334155] bg-white focus:outline-none focus:border-[#4f46e5] focus:ring-4 focus:ring-[#4f46e5]/10 transition-all">
+                            <option value="">Select Category</option>
+                            @foreach($categories as $cat)
+                                <option value="{{ $cat->id }}" @selected((string) old('category_id', $isEdit ? $product->category_id : '') === (string) $cat->id)>
+                                    {{ $cat->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <button type="button" onclick="openQuickCatalogModal('category')"
+                                style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
+                                class="px-4 py-3 text-white rounded-xl text-[13px] font-semibold inline-flex items-center justify-center gap-1.5 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-[0_6px_16px_rgba(79,70,229,0.3)] transition-all cursor-pointer shrink-0">
+                            <i class="fas fa-plus"></i> New
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[13px] font-semibold text-[#334155] mb-1.5">Brand</label>
+                    <div class="flex flex-col sm:flex-row gap-2.5">
+                        <select name="brand_id" id="prodBrandSelect"
+                                class="flex-1 min-w-0 px-4 py-3 border-2 border-[#e2e8f0] rounded-xl text-sm text-[#334155] bg-white focus:outline-none focus:border-[#4f46e5] focus:ring-4 focus:ring-[#4f46e5]/10 transition-all">
+                            <option value="">Select Brand</option>
+                            @foreach($brands as $brand)
+                                <option value="{{ $brand->id }}" @selected((string) old('brand_id', $isEdit ? $product->brand_id : '') === (string) $brand->id)>
+                                    {{ $brand->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <button type="button" onclick="openQuickCatalogModal('brand')"
+                                style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
+                                class="px-4 py-3 text-white rounded-xl text-[13px] font-semibold inline-flex items-center justify-center gap-1.5 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-[0_6px_16px_rgba(79,70,229,0.3)] transition-all cursor-pointer shrink-0">
+                            <i class="fas fa-plus"></i> New
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Row 3: Warranty & Main Unit --}}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                <div>
+                    <label class="block text-[13px] font-semibold text-[#334155] mb-1.5">Warranty</label>
+                    <div class="flex flex-col sm:flex-row gap-2.5">
+                        <select name="warranty_id" id="prodWarrantySelect"
+                                class="flex-1 min-w-0 px-4 py-3 border-2 border-[#e2e8f0] rounded-xl text-sm text-[#334155] bg-white focus:outline-none focus:border-[#4f46e5] focus:ring-4 focus:ring-[#4f46e5]/10 transition-all">
+                            <option value="">Select Warranty</option>
+                            @foreach($warranties as $w)
+                                <option value="{{ $w->id }}" @selected((string) old('warranty_id', $isEdit ? $product->warranty_id : '') === (string) $w->id)>
+                                    {{ $w->duration ?: $w->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <button type="button" onclick="openQuickCatalogModal('warranty')"
+                                style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
+                                class="px-4 py-3 text-white rounded-xl text-[13px] font-semibold inline-flex items-center justify-center gap-1.5 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-[0_6px_16px_rgba(79,70,229,0.3)] transition-all cursor-pointer shrink-0">
+                            <i class="fas fa-plus"></i> New
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[13px] font-semibold text-[#334155] mb-1.5">Main Unit</label>
+                    <div class="flex flex-col sm:flex-row gap-2.5">
+                        <select name="unit_id" id="prodUnitSelect"
+                                class="flex-1 min-w-0 px-4 py-3 border-2 border-[#e2e8f0] rounded-xl text-sm text-[#334155] bg-white focus:outline-none focus:border-[#4f46e5] focus:ring-4 focus:ring-[#4f46e5]/10 transition-all">
+                            <option value="">Select Unit</option>
+                            @foreach($units as $u)
+                                <option value="{{ $u->id }}" @selected((string) old('unit_id', $isEdit ? $product->unit_id : '') === (string) $u->id)>
+                                    {{ $u->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <button type="button" onclick="openQuickCatalogModal('unit')"
+                                style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
+                                class="px-4 py-3 text-white rounded-xl text-[13px] font-semibold inline-flex items-center justify-center gap-1.5 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-[0_6px_16px_rgba(79,70,229,0.3)] transition-all cursor-pointer shrink-0">
+                            <i class="fas fa-plus"></i> New
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Section 2: Stock & Pricing Dual Cards --}}
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div class="rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/55 via-white to-teal-50/35 p-4 sm:p-6 space-y-4">
+                <div class="flex items-center gap-2.5 pb-3 border-b border-emerald-100">
+                    <span class="w-7 h-7 rounded-lg bg-emerald-600 text-white text-xs font-bold flex items-center justify-center shadow-xs">
+                        <i class="fas fa-layer-group"></i>
+                    </span>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-900">Stock &amp; Alert Threshold</h3>
+                        <p class="text-[11px] text-slate-500">Inventory opening count and low-stock warning</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[13px] font-semibold text-[#334155] mb-1.5">
+                            {{ $isEdit ? 'Stock Quantity' : 'Opening Stock' }}
+                        </label>
+                        <input type="number" name="stock_quantity" min="0" placeholder="0"
+                               value="{{ old('stock_quantity', $isEdit ? ($product->stock_quantity ?? $product->quantity ?? 0) : 0) }}"
+                               class="w-full px-4 py-3 border-2 border-[#e2e8f0] rounded-xl text-sm text-[#334155] bg-white tabular-nums focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all">
+                        <p class="text-[11px] text-[#64748b] mt-1">{{ $isEdit ? 'Current inventory quantity' : 'Initial stock quantity' }}</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-[13px] font-semibold text-[#334155] mb-1.5">Alert Quantity</label>
+                        <input type="number" name="alert_quantity" min="1" placeholder="5"
+                               value="{{ old('alert_quantity', $isEdit ? ($product->alert_quantity ?? 5) : 5) }}"
+                               class="w-full px-4 py-3 border-2 border-[#e2e8f0] rounded-xl text-sm text-[#334155] bg-white tabular-nums focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all">
+                        <p class="text-[11px] text-[#64748b] mt-1">Notify when stock falls below this quantity</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50/55 via-white to-orange-50/35 p-4 sm:p-6 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-amber-100">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-7 h-7 rounded-lg bg-amber-500 text-white text-xs font-bold flex items-center justify-center shadow-xs">
+                            <i class="fas fa-chart-line"></i>
+                        </span>
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-900">Pricing &amp; Profit</h3>
+                            <p class="text-[11px] text-slate-500">Purchase cost vs customer retail rate</p>
+                        </div>
+                    </div>
+
+                    <span id="profitPreviewBadge"
+                          class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tabular-nums {{ $profitInit >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700' }}">
+                        Profit: {{ $cur }}{{ number_format($profitInit, 2) }} ({{ $marginInit }}%)
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[13px] font-semibold text-[#334155] mb-1.5">Purchase Cost ({{ $cur }})</label>
+                        <input type="number" name="purchase_price" id="purchasePriceInput" step="0.01" min="0" placeholder="0.00"
+                               value="{{ old('purchase_price', $isEdit ? $product->purchase_price : 0) }}"
+                               oninput="updateProfitPreview()"
+                               class="w-full px-4 py-3 border-2 border-[#e2e8f0] rounded-xl text-sm text-[#334155] bg-white tabular-nums focus:outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all">
+                    </div>
+
+                    <div>
+                        <label class="block text-[13px] font-semibold text-[#334155] mb-1.5">
+                            Sale Price ({{ $cur }}) <span class="text-[#ef4444]">*</span>
+                        </label>
+                        <input type="number" name="selling_price" id="sellingPriceInput" step="0.01" min="0" required placeholder="0.00"
+                               value="{{ old('selling_price', $isEdit ? $product->selling_price : 0) }}"
+                               oninput="updateProfitPreview()"
+                               class="w-full px-4 py-3 border-2 border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#0f172a] bg-white tabular-nums focus:outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Section 3: Product Details & Studio Product Image Upload --}}
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+            <div class="lg:col-span-7 rounded-2xl border border-slate-200/80 bg-slate-50/55 p-4 sm:p-6 flex flex-col">
+                <div class="flex items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-200/70">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-7 h-7 rounded-lg bg-slate-800 text-white text-xs font-bold flex items-center justify-center shadow-xs">
+                            <i class="fas fa-file-alt"></i>
+                        </span>
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-900">Product Details</h3>
+                            <p class="text-[11px] text-slate-500">Specifications, model compatibility &amp; warranty notes</p>
+                        </div>
+                    </div>
+                </div>
+
+                <textarea name="description" rows="7" placeholder="Enter product description, hardware specs, model series, or warranty notes..."
+                          class="w-full flex-1 px-4 py-3 border-2 border-[#e2e8f0] rounded-xl text-sm text-[#334155] bg-white focus:outline-none focus:border-[#4f46e5] focus:ring-4 focus:ring-[#4f46e5]/10 transition-all min-h-[180px]">{{ old('description', $isEdit ? $product->description : '') }}</textarea>
+            </div>
+
+            <div class="lg:col-span-5 rounded-2xl border-2 border-indigo-100 bg-gradient-to-br from-indigo-50/65 via-white to-violet-50/65 p-4 sm:p-6 flex flex-col">
+                <div class="flex items-center justify-between gap-2 pb-3 mb-4 border-b border-indigo-100">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-7 h-7 rounded-lg text-white text-xs font-bold flex items-center justify-center shadow-xs"
+                              style="background: linear-gradient(135deg, #4f46e5, #ec4899);">
+                            <i class="fas fa-image"></i>
+                        </span>
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-900">Product Image</h3>
+                            <p class="text-[11px] text-slate-500">POS thumbnail &amp; catalog photo</p>
+                        </div>
+                    </div>
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">MAX 2MB</span>
+                </div>
+
+                <input type="file" name="product_image" id="product_image_input" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden" onchange="previewProductImg(this)">
+                <input type="hidden" name="remove_image" id="remove_image_flag" value="0">
+
+                <div id="productDropzone"
+                     onclick="document.getElementById('product_image_input').click()"
+                     ondragover="event.preventDefault(); this.classList.add('border-indigo-500','bg-indigo-50/90')"
+                     ondragleave="this.classList.remove('border-indigo-500','bg-indigo-50/90')"
+                     ondrop="event.preventDefault(); this.classList.remove('border-indigo-500','bg-indigo-50/90'); handleProductDrop(event)"
+                     class="flex-1 rounded-2xl border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-white/85 hover:bg-white p-5 flex flex-col items-center justify-center text-center transition-all cursor-pointer min-h-[210px]">
+                    <div id="product_empty_state" class="{{ $isEdit && $product->image ? 'hidden' : 'flex flex-col items-center' }}">
+                        <div class="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl shadow-[0_10px_25px_rgba(79,70,229,0.28)] mb-3.5"
+                             style="background: linear-gradient(135deg, #4f46e5, #7c3aed, #ec4899);">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                        </div>
+                        <div class="text-sm font-bold text-slate-800">Drop product photo here</div>
+                        <p class="text-xs text-slate-500 mt-1">or click below to select from your device</p>
+                        <span style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
+                              class="mt-3.5 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white shadow-sm">
+                            <i class="fas fa-upload"></i> Browse Image
+                        </span>
+                        <div class="flex flex-wrap items-center justify-center gap-1.5 mt-4">
+                            <span class="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 text-[10px] font-bold border border-indigo-100">JPG</span>
+                            <span class="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 text-[10px] font-bold border border-indigo-100">PNG</span>
+                            <span class="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 text-[10px] font-bold border border-indigo-100">WEBP</span>
+                            <span class="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 text-[10px] font-bold border border-indigo-100">GIF</span>
+                        </div>
+                        <div class="text-[11px] text-slate-400 mt-2">Recommended: 300 &times; 300 px square photo</div>
+                    </div>
+
+                    <div id="product_preview_wrapper" class="{{ $isEdit && $product->image ? 'flex' : 'hidden' }} w-full flex-col items-center gap-3" onclick="event.stopPropagation()">
+                        <div id="product_image_preview" class="relative w-36 h-36 rounded-2xl border-2 border-indigo-200/80 shadow-md overflow-hidden p-1.5 bg-white">
+                            @if($isEdit && $product->image)
+                                <img src="{{ asset($product->image) }}" alt="{{ $product->name }}" class="w-full h-full rounded-xl object-cover">
+                                <span class="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold shadow-xs">Ready</span>
+                            @endif
+                        </div>
+                        <div id="product_file_name" class="text-xs font-medium text-slate-600 truncate max-w-[230px]">{{ $isEdit && $product->image ? basename($product->image) : 'No file chosen' }}</div>
+                        <div class="flex items-center justify-center gap-2">
+                            <button type="button" onclick="document.getElementById('product_image_input').click()"
+                                    style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
+                                    class="px-3.5 py-1.5 rounded-lg text-white text-xs font-semibold inline-flex items-center gap-1.5 shadow-xs cursor-pointer">
+                                <i class="fas fa-upload"></i> Change Photo
+                            </button>
+                            <button type="button" onclick="clearProductImg()" class="px-3.5 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 text-xs font-semibold inline-flex items-center gap-1 cursor-pointer">
+                                <i class="fas fa-trash"></i> Remove
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Form Actions Footer --}}
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-5 mt-2 border-t-2 border-slate-100">
+            <p class="text-xs text-slate-500">
+                Fields marked with <span class="text-red-500 font-bold">*</span> are required before saving.
+            </p>
+            <div class="flex flex-col-reverse sm:flex-row w-full sm:w-auto justify-end gap-3">
+                <a href="{{ route('products.index') }}"
+                   class="px-7 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm inline-flex items-center justify-center gap-2 transition-colors">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+                <button type="submit" style="background: linear-gradient(135deg, #10b981, #059669);"
+                        class="px-8 py-3 rounded-xl text-white font-semibold text-sm shadow-[0_6px_18px_rgba(16,185,129,0.32)] hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(16,185,129,0.4)] transition-all inline-flex items-center justify-center gap-2 cursor-pointer">
+                    <i class="fas fa-save"></i> {{ $isEdit ? 'Update Product' : 'Submit' }}
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+{{-- Inline Quick-Add Modal for Category / Brand / Warranty / Unit --}}
+<div id="quickCatalogModal" onclick="closeQuickCatalogModal()" class="fixed inset-0 z-50 bg-slate-900/60 hidden items-center justify-center p-4">
+    <form id="quickCatalogForm" onsubmit="submitQuickCatalogModal(event)" onclick="event.stopPropagation()" class="bg-white rounded-[20px] w-full max-w-[440px] shadow-2xl overflow-hidden border border-slate-100">
+        <div class="px-6 py-4 bg-gradient-to-r from-[#f8fafc] to-[#f1f5f9] border-b border-slate-100 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white shadow-sm shrink-0" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                    <i id="quickModalIcon" class="fas fa-tag"></i>
+                </div>
+                <div>
+                    <h3 id="quickModalTitle" class="text-base font-bold text-[#1e293b]">Add New Item</h3>
+                    <p id="quickModalSub" class="text-xs text-[#64748b]">Create new catalog record</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeQuickCatalogModal()" class="w-8 h-8 rounded-full bg-slate-200/70 text-slate-500 hover:text-slate-800 flex items-center justify-center cursor-pointer">&times;</button>
+        </div>
+
+        <div class="p-6">
+            <label id="quickModalLabel" class="block text-xs font-semibold text-[#334155] mb-1.5">Name <span class="text-[#ef4444]">*</span></label>
+            <input type="text" id="quickModalInput" required placeholder="Enter name..."
+                   class="w-full px-3.5 py-2.5 border-2 border-[#e2e8f0] rounded-[10px] text-sm focus:outline-none focus:border-[#4f46e5]">
+            <p id="quickModalHelp" class="text-[11px] text-[#94a3b8] mt-1.5"></p>
+        </div>
+
+        <div class="px-6 py-4 bg-[#fafbfc] border-t border-slate-100 flex justify-end gap-2.5">
+            <button type="button" onclick="closeQuickCatalogModal()" class="px-5 py-2.5 rounded-lg bg-[#f1f5f9] text-[#475569] text-xs font-semibold cursor-pointer">Cancel</button>
+            <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" class="px-5 py-2.5 rounded-lg text-white text-xs font-semibold inline-flex items-center gap-1.5 shadow-sm cursor-pointer">
+                <i class="fas fa-plus"></i> Save &amp; Select
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+const prodCurrency = @js($cur);
+let currentQuickKind = null;
+const quickConfigs = {
+    category: { url: @js(route('categories.store')), selectId: 'prodCategorySelect', icon: 'fas fa-tag', title: 'Add New Category', sub: 'Create a new product category', label: 'Category Name *', placeholder: 'Enter category name...', help: 'Example: Electronics, CCTV Camera, Networking' },
+    brand: { url: @js(route('brands.store')), selectId: 'prodBrandSelect', icon: 'fas fa-copyright', title: 'Add New Brand', sub: 'Create a new product brand', label: 'Brand Name *', placeholder: 'Enter brand name...', help: 'Example: Hikvision, Dahua, Dell, HP' },
+    warranty: { url: @js(route('warranties.store')), selectId: 'prodWarrantySelect', icon: 'fas fa-shield-alt', title: 'Add New Warranty', sub: 'Create a new warranty period', label: 'Warranty Duration *', placeholder: 'e.g., 1 Year, 6 Months...', help: 'Example: 1 Year, 6 Months, 2 Years, Lifetime' },
+    unit: { url: @js(route('units.store')), selectId: 'prodUnitSelect', icon: 'fas fa-cubes', title: 'Add New Unit', sub: 'Create a new measurement unit', label: 'Unit Name *', placeholder: 'e.g., PC, KG, Box...', help: 'Example: PC, KG, Meter, Dozen, Box' }
+};
+
+function updateProfitPreview() {
+    const pp = parseFloat(document.getElementById('purchasePriceInput')?.value || '0') || 0;
+    const sp = parseFloat(document.getElementById('sellingPriceInput')?.value || '0') || 0;
+    const profit = sp - pp;
+    const margin = sp > 0 ? Math.round((profit / sp) * 100) : 0;
+    const badge = document.getElementById('profitPreviewBadge');
+    if (!badge) return;
+    badge.textContent = `Profit: ${prodCurrency}${profit.toFixed(2)} (${margin}%)`;
+    badge.className = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tabular-nums ' +
+        (profit >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700');
+}
+
+function openQuickCatalogModal(kind) {
+    currentQuickKind = kind;
+    const cfg = quickConfigs[kind];
+    if (!cfg) return;
+    document.getElementById('quickModalIcon').className = cfg.icon;
+    document.getElementById('quickModalTitle').textContent = cfg.title;
+    document.getElementById('quickModalSub').textContent = cfg.sub;
+    document.getElementById('quickModalLabel').textContent = cfg.label;
+    const inp = document.getElementById('quickModalInput');
+    inp.value = '';
+    inp.placeholder = cfg.placeholder;
+    document.getElementById('quickModalHelp').textContent = cfg.help;
+    const m = document.getElementById('quickCatalogModal');
+    m.classList.remove('hidden');
+    m.classList.add('flex');
+    setTimeout(() => inp.focus(), 40);
+}
+
+function closeQuickCatalogModal() {
+    const m = document.getElementById('quickCatalogModal');
+    m.classList.add('hidden');
+    m.classList.remove('flex');
+}
+
+async function submitQuickCatalogModal(e) {
+    e.preventDefault();
+    const cfg = quickConfigs[currentQuickKind];
+    const val = document.getElementById('quickModalInput').value.trim();
+    if (!cfg || !val) return;
+    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    const payload = currentQuickKind === 'warranty' ? { name: val, duration: val } : { name: val };
+    try {
+        const res = await fetch(cfg.url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': token },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Could not save item.');
+        const created = await res.json();
+        const select = document.getElementById(cfg.selectId);
+        if (select) {
+            const opt = document.createElement('option');
+            opt.value = created.id;
+            opt.textContent = created.duration || created.name;
+            opt.selected = true;
+            select.appendChild(opt);
+        }
+        closeQuickCatalogModal();
+    } catch (err) {
+        if (window.showCenterPopup) window.showCenterPopup('error', 'Save Failed', err.message || 'Unable to save item.');
+    }
+}
+
+function clearProductImg() {
+    document.getElementById('product_image_input').value = '';
+    document.getElementById('remove_image_flag').value = '1';
+    document.getElementById('product_file_name').textContent = 'No file chosen';
+    document.getElementById('product_image_preview').innerHTML = '';
+    document.getElementById('product_preview_wrapper').classList.add('hidden');
+    document.getElementById('product_preview_wrapper').classList.remove('flex');
+    document.getElementById('product_empty_state').classList.remove('hidden');
+    document.getElementById('product_empty_state').classList.add('flex');
+}
+
+function handleProductDrop(ev) {
+    const file = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+    if (!file) return;
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    const input = document.getElementById('product_image_input');
+    input.files = dt.files;
+    previewProductImg(input);
+}
+
+function previewProductImg(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+        input.value = '';
+        if (window.showCenterPopup) window.showCenterPopup('error', 'File Too Large', 'Maximum product image size is 2MB.');
+        return;
+    }
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+        input.value = '';
+        if (window.showCenterPopup) window.showCenterPopup('error', 'Invalid Format', 'Only JPG, PNG, GIF, and WEBP images are allowed.');
+        return;
+    }
+    document.getElementById('remove_image_flag').value = '0';
+    document.getElementById('product_file_name').textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+        document.getElementById('product_image_preview').innerHTML =
+            `<img src="${ev.target.result}" alt="Preview" class="w-full h-full rounded-xl object-cover">` +
+            `<span class="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold shadow-xs">Ready</span>`;
+        document.getElementById('product_empty_state').classList.add('hidden');
+        document.getElementById('product_empty_state').classList.remove('flex');
+        document.getElementById('product_preview_wrapper').classList.remove('hidden');
+        document.getElementById('product_preview_wrapper').classList.add('flex');
+    };
+    reader.readAsDataURL(file);
+}
+</script>

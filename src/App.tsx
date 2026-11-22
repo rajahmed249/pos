@@ -56,6 +56,7 @@ const ROUTE_TITLES: Record<string, string> = {
   damages: 'Damages',
   units: 'Unit & Warranty',
   products: 'Products',
+  'add-product': 'Add Product',
   categories: 'Categories',
   brands: 'Brand',
   catalog: 'Categories & Brands',
@@ -215,8 +216,9 @@ export default function App() {
         }`}
       >
         {/* Fixed Sticky Topbar (No backdrop-blur to keep UI crystal clear during slide transitions) */}
-        <header className="no-print sticky top-0 z-30 h-16 bg-white border-b border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-3 sm:px-6 lg:px-7 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+        <header className="no-print sticky top-0 z-30 h-16 bg-white border-b border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-3 sm:px-6 lg:px-7 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-4">
+          {/* Left: Sidebar Toggle + Dynamic Active Page Title */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 justify-start">
             {/* Mobile Drawer Toggle */}
             <button
               type="button"
@@ -237,36 +239,37 @@ export default function App() {
               {desktopOpen ? <PanelLeftClose className="w-4 h-4 shrink-0" /> : <PanelLeftOpen className="w-4 h-4 shrink-0" />}
             </button>
 
-            <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 min-w-0 truncate">
-              <button
-                type="button"
-                onClick={() => navigate('dashboard')}
-                className="font-brand font-black tracking-tight text-base sm:text-lg whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity cursor-pointer"
-                title="Go to Home Dashboard"
-              >
-                {isYouthItPos ? (
-                  <>
-                    <span className="text-[#065AA4]">YOUTH</span>{' '}
-                    <span className="text-[#f97316]">IT</span>{' '}
-                    <span className="text-[#4f46e5]">POS</span>
-                  </>
-                ) : (
-                  <span className="text-slate-900">{shopName}</span>
-                )}
-              </button>
-              <span className="hidden sm:inline text-slate-300 shrink-0">/</span>
-              <span className="hidden sm:inline font-semibold text-slate-700 truncate">
-                {ROUTE_TITLES[activeRoute] ?? activeRoute}
-              </span>
-            </div>
+            <span className="font-display text-xs sm:text-sm md:text-base font-bold text-slate-800 truncate">
+              {ROUTE_TITLES[activeRoute] ?? activeRoute}
+            </span>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {/* Center: Bold Colorful YOUTH IT POS Brand */}
+          <div className="flex items-center justify-center shrink-0">
+            <button
+              type="button"
+              onClick={() => navigate('dashboard')}
+              className="font-brand font-black tracking-tight text-[15px] sm:text-lg md:text-xl whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity cursor-pointer"
+              title="Go to Home Dashboard"
+            >
+              {isYouthItPos ? (
+                <>
+                  <span className="text-[#065AA4]">YOUTH</span>{' '}
+                  <span className="text-[#f97316]">IT</span>{' '}
+                  <span className="text-[#4f46e5]">POS</span>
+                </>
+              ) : (
+                <span className="text-slate-900">{shopName}</span>
+              )}
+            </button>
+          </div>
+
+          <div className="flex items-center justify-end gap-1.5 sm:gap-2.5 min-w-0">
             <button
               type="button"
               onClick={() => navigate('backup')}
               title="Backup & Laravel Blade"
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-indigo-200 hover:text-indigo-600 transition-all whitespace-nowrap shrink-0 cursor-pointer"
+              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-2 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-indigo-200 hover:text-indigo-600 transition-all whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Code2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
               <span className="hidden xl:inline">Laravel &amp; Backup</span>
@@ -274,22 +277,23 @@ export default function App() {
             <button
               type="button"
               onClick={() => navigate('pos')}
+              title="Open POS"
               style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-[10px] text-xs font-semibold text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)] hover:shadow-[0_6px_18px_rgba(79,70,229,0.4)] transition-all whitespace-nowrap shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 p-2 sm:px-3.5 sm:py-2 rounded-[10px] text-xs font-semibold text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)] hover:shadow-[0_6px_18px_rgba(79,70,229,0.4)] transition-all whitespace-nowrap shrink-0 cursor-pointer"
             >
               <ShoppingCart className="w-3.5 h-3.5 shrink-0" />
               <span className="hidden sm:inline">Open POS</span>
-              <span className="sm:hidden">POS</span>
             </button>
 
-            {/* Far-Right User Avatar & Name with Hover + Click Dropdown */}
-            <div ref={userMenuRef} className="relative group pl-1 sm:pl-2 border-l border-slate-200">
+            {/* Far-Right User Avatar & Name (Photo-only on mobile, Avatar + Name on desktop) */}
+            <div ref={userMenuRef} className="relative group sm:pl-2 sm:border-l sm:border-slate-200 shrink-0">
               <button
                 type="button"
                 onClick={() => setUserMenuOpen((v) => !v)}
                 aria-expanded={userMenuOpen}
                 aria-haspopup="menu"
-                className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-full border border-slate-200 bg-slate-50/70 hover:bg-indigo-50/70 hover:border-indigo-200 transition-all cursor-pointer shrink-0"
+                aria-label={currentUser?.name || 'User Profile'}
+                className="flex items-center gap-2 p-0.5 sm:pl-1.5 sm:pr-2 sm:py-1 rounded-full border border-slate-200 bg-slate-50/70 hover:bg-indigo-50/70 hover:border-indigo-200 transition-all cursor-pointer shrink-0"
               >
                 <span
                   className="w-8 h-8 rounded-full flex items-center justify-center text-white shadow-xs shrink-0 ring-2 ring-white overflow-hidden"
@@ -305,11 +309,11 @@ export default function App() {
                     <UserCircle2 className="w-5 h-5 shrink-0" />
                   )}
                 </span>
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-800 max-w-[92px] sm:max-w-[160px] truncate">
+                <span className="hidden sm:inline text-xs font-bold uppercase tracking-wide text-slate-800 max-w-[140px] md:max-w-[170px] truncate">
                   {currentUser?.name || 'RAJ AHMED'}
                 </span>
                 <ChevronDown
-                  className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${
+                  className={`hidden sm:block w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${
                     userMenuOpen ? 'rotate-180 text-indigo-600' : 'group-hover:rotate-180 group-hover:text-indigo-600'
                   }`}
                 />
@@ -408,7 +412,7 @@ export default function App() {
           </div>
         </header>
 
-        <main className={`flex-1 min-w-0 ${compact ? 'p-3 sm:p-4' : 'p-3 sm:p-6 lg:p-7'} max-w-[1440px] w-full mx-auto`}>
+        <main className={`flex-1 min-w-0 w-full px-3 sm:px-6 lg:px-7 ${compact ? 'py-4' : 'py-4 sm:py-6 lg:py-7'}`}>
           {activeRoute === 'dashboard' && (
             <DashboardView data={bootstrap} onNavigate={navigate} onOpenInvoice={openInvoice} />
           )}
@@ -431,13 +435,15 @@ export default function App() {
             />
           )}
           {(activeRoute === 'products' ||
+            activeRoute === 'add-product' ||
             activeRoute === 'catalog' ||
             activeRoute === 'units' ||
             activeRoute === 'categories' ||
             activeRoute === 'brands') && (
             <ProductsView
               bootstrap={bootstrap}
-              initialTab={activeRoute}
+              initialTab={activeRoute === 'add-product' ? 'add' : (activeRoute as 'products' | 'units' | 'categories' | 'brands' | 'catalog')}
+              onTabNavigate={navigate}
               onRefreshBootstrap={loadBootstrap}
             />
           )}
@@ -490,6 +496,47 @@ export default function App() {
           {activeRoute === 'backup' && <BackupRestoreView onRefreshBootstrap={loadBootstrap} />}
           {activeRoute === 'laravel' && <LaravelCodeView />}
         </main>
+
+        {/* Fixed Sticky Software Footer */}
+        <footer className="no-print sticky bottom-0 z-20 bg-white border-t border-slate-200/90 shadow-[0_-2px_10px_rgba(15,23,42,0.04)] px-3 sm:px-6 lg:px-7 py-2.5">
+          <div className="h-[2px] bg-gradient-to-r from-[#065AA4] via-[#f97316] to-[#4f46e5] opacity-85 mb-2 -mt-2.5 -mx-3 sm:-mx-6 lg:-mx-7" />
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] sm:text-xs text-slate-600">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-brand font-black tracking-tight shrink-0">
+                {isYouthItPos ? (
+                  <>
+                    <span className="text-[#065AA4]">YOUTH</span>{' '}
+                    <span className="text-[#f97316]">IT</span>{' '}
+                    <span className="text-[#4f46e5]">POS</span>
+                  </>
+                ) : (
+                  <span className="text-slate-900">{shopName}</span>
+                )}
+              </span>
+              <span className="hidden sm:inline text-slate-300">&bull;</span>
+              <span className="hidden md:inline text-slate-500 truncate">
+                All Kinds of IT Product Supplier
+              </span>
+              <span className="text-slate-400 shrink-0">
+                &copy; {new Date().getFullYear()}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-semibold tabular-nums">
+                {settings.shop_phone || '01674297522'}
+              </span>
+              <a
+                href={`https://${(settings.shop_website || 'www.youthit.com.bd').replace(/^https?:\/\//, '')}`}
+                target="_blank"
+                rel="noreferrer"
+                className="hidden sm:inline font-semibold text-indigo-600 hover:text-indigo-700 hover:underline"
+              >
+                {settings.shop_website || 'www.youthit.com.bd'}
+              </a>
+            </div>
+          </div>
+        </footer>
       </div>
 
       {invoiceModal && (

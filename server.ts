@@ -4,7 +4,8 @@ import path from 'node:path';
 import express, { type Request, type Response } from 'express';
 import JSZip from 'jszip';
 import { createServer as createViteServer } from 'vite';
-import { getStore, nextId, saveStore } from './server/posStore.ts';
+import { getStore, nextId, saveStore, type PosStoreData } from './server/posStore.ts';
+import { parseMysqlDumpText, type SqlRow } from './server/sqlParser.ts';
 
 const PORT = 3000;
 const activeSessions = new Map<string, { userId: number; expiresAt: number }>();
@@ -79,11 +80,15 @@ function collectFiles(dir: string, baseDir: string): string[] {
 
 async function startServer() {
   const app = express();
-  app.use(express.json({ limit: '8mb' }));
+  app.use(express.json({ limit: '50mb' }));
 
   const uploadsDir = path.resolve(process.cwd(), 'public/uploads/avatars');
+  const productUploadsDir = path.resolve(process.cwd(), 'public/uploads/products');
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  if (!fs.existsSync(productUploadsDir)) {
+    fs.mkdirSync(productUploadsDir, { recursive: true });
   }
   app.use('/uploads', express.static(path.resolve(process.cwd(), 'public/uploads')));
 
@@ -205,6 +210,7 @@ async function startServer() {
 
     const catMap = new Map(store.categories.map((c) => [Number(c.id), String(c.name ?? '')]));
     const brandMap = new Map(store.brands.map((b) => [Number(b.id), String(b.name ?? '')]));
+    const unitMap = new Map(store.units.map((u) => [Number(u.id), String(u.name ?? '')]));
     const warrantyMap = new Map(store.warranties.map((w) => [Number(w.id), String(w.duration ?? w.name ?? '')]));
 
     let items = includeInactive
@@ -237,10 +243,24 @@ async function startServer() {
       warranty: String(p.warranty || warrantyMap.get(Number(p.warranty_id)) || 'No Warranty'),
       category_name: catMap.get(Number(p.category_id)) ?? 'Uncategorized',
       brand_name: brandMap.get(Number(p.brand_id)) ?? 'No Brand',
+      unit_name: unitMap.get(Number(p.unit_id)) ?? 'PC',
     }));
 
     res.json({ items: sliced, total, page, limit });
   });
+
+  function saveProductImageFromDataUrl(dataUrl: unknown): string | null {
+    const raw = String(dataUrl ?? '');
+    if (!raw) return null;
+    const match = raw.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,([A-Za-z0-9+/=]+)$/i);
+    if (!match) return null;
+    const ext = match[1].toLowerCase() === 'jpeg' ? 'jpg' : match[1].toLowerCase();
+    const buffer = Buffer.from(match[2], 'base64');
+    if (buffer.byteLength > 2 * 1024 * 1024) return null;
+    const fileName = `prod-${Date.now()}-${Math.floor(Math.random() * 10000)}.${ext}`;
+    fs.writeFileSync(path.join(productUploadsDir, fileName), buffer);
+    return `/uploads/products/${fileName}`;
+  }
 
   app.post('/api/products', (req: Request, res: Response) => {
     const store = getStore();
@@ -261,14 +281,22 @@ async function startServer() {
       return;
     }
     const qty = Math.round(rawQty);
+    const warrantyId = body.warranty_id ? Number(body.warranty_id) : null;
+    const matchedWarranty = warrantyId
+      ? store.warranties.find((w) => Number(w.id) === warrantyId)
+      : null;
+    const warrantyText =
+      String(body.warranty ?? '').trim() ||
+      String(matchedWarranty?.duration ?? matchedWarranty?.name ?? 'No Warranty');
+    const savedImagePath = saveProductImageFromDataUrl(body.image_data);
     const newProduct = {
       id: nextId(store.products),
       name: String(body.name).trim(),
       sku: String(body.sku ?? '').trim() || `SKU-${Date.now().toString().slice(-6)}`,
       category_id: body.category_id ? Number(body.category_id) : null,
       brand_id: body.brand_id ? Number(body.brand_id) : null,
-      warranty_id: body.warranty_id ? Number(body.warranty_id) : null,
-      unit_id: body.unit_id ? Number(body.unit_id) : 4,
+      warranty_id: warrantyId,
+      unit_id: body.unit_id ? Number(body.unit_id) : (Number(store.units[0]?.id ?? 4)),
       purchase_price: purchasePrice,
       selling_price: sellingPrice,
       warranty_months: Number(body.warranty_months ?? 0),
@@ -277,9 +305,9 @@ async function startServer() {
       alert_quantity: Math.max(0, Number(body.alert_quantity ?? 5)),
       description: String(body.description ?? ''),
       barcode: String(body.barcode ?? ''),
-      image: null,
+      image: savedImagePath,
       status: 1,
-      warranty: String(body.warranty ?? 'No Warranty'),
+      warranty: warrantyText,
       created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
     };
     store.products.unshift(newProduct);
@@ -319,11 +347,35 @@ async function startServer() {
       }
       product.selling_price = sp;
     }
+    if (body.quantity !== undefined) {
+      const q = Math.max(0, Math.round(Number(body.quantity)));
+      product.quantity = q;
+      product.stock_quantity = q;
+    }
     if (body.sku !== undefined) product.sku = String(body.sku).trim();
+    if (body.barcode !== undefined) product.barcode = String(body.barcode).trim();
+    if (body.description !== undefined) product.description = String(body.description);
     if (body.category_id !== undefined) product.category_id = body.category_id ? Number(body.category_id) : null;
     if (body.brand_id !== undefined) product.brand_id = body.brand_id ? Number(body.brand_id) : null;
+    if (body.unit_id !== undefined) product.unit_id = body.unit_id ? Number(body.unit_id) : null;
+    if (body.warranty_id !== undefined) {
+      const wId = body.warranty_id ? Number(body.warranty_id) : null;
+      product.warranty_id = wId;
+      const matchedW = wId ? store.warranties.find((w) => Number(w.id) === wId) : null;
+      if (matchedW) {
+        product.warranty = String(matchedW.duration ?? matchedW.name ?? 'No Warranty');
+      } else if (body.warranty === undefined) {
+        product.warranty = 'No Warranty';
+      }
+    }
+    if (body.warranty !== undefined) product.warranty = String(body.warranty || 'No Warranty');
     if (body.alert_quantity !== undefined) product.alert_quantity = Math.max(0, Number(body.alert_quantity));
-    if (body.warranty !== undefined) product.warranty = String(body.warranty);
+    if (body.image_data) {
+      const savedPath = saveProductImageFromDataUrl(body.image_data);
+      if (savedPath) product.image = savedPath;
+    } else if (body.remove_image) {
+      product.image = null;
+    }
     saveStore(store);
     res.json(product);
   });
@@ -2060,6 +2112,304 @@ async function startServer() {
     }
     saveStore(payload);
     res.json({ ok: true, products: payload.products.length, sales: payload.sales.length });
+  });
+
+  app.post('/api/backup/import-sql', (req: Request, res: Response) => {
+    const sqlText = String(req.body?.sql ?? '');
+    if (!sqlText.trim()) {
+      res.status(400).json({ error: 'SQL file content is empty.' });
+      return;
+    }
+
+    const { tables, schemas, truncated, incompleteTables } = parseMysqlDumpText(sqlText);
+    const tableNames = Object.keys(tables);
+    if (tableNames.length === 0) {
+      const sizeKb = (Buffer.byteLength(sqlText, 'utf8') / 1024).toFixed(1);
+      const schemaList = Object.keys(schemas).join(', ') || 'none';
+      const cutTable = incompleteTables[0] || 'unknown';
+      res.status(400).json({
+        error: truncated
+          ? `The uploaded SQL file (${sizeKb} KB) is incomplete/truncated inside table "${cutTable}" before ";" finished (schemas found: ${schemaList}). Please export a complete .sql file from phpMyAdmin/MySQL.`
+          : `No valid INSERT INTO table statements were found in this SQL file (${sizeKb} KB).`,
+      });
+      return;
+    }
+
+    const current = getStore();
+    const rawCategories = tables.categories ?? tables.product_categories ?? [];
+    const rawBrands = tables.brands ?? [];
+    const rawUnits = tables.units ?? [];
+    const rawWarranties = tables.warranties ?? [];
+    const rawProducts = tables.products ?? [];
+    const rawCustomers = tables.customers ?? [];
+    const rawSuppliers = tables.suppliers ?? [];
+    const rawAccounts = tables.bank_accounts ?? tables.accounts ?? [];
+    const rawExpenseCats = tables.expense_categories ?? [];
+    const rawExpenses = tables.expenses ?? [];
+    const rawSales = tables.sales ?? tables.sells ?? [];
+    const rawSaleItems = tables.sale_items ?? tables.sell_items ?? [];
+    const rawPurchases = tables.purchases ?? [];
+    const rawPurchaseItems = tables.purchase_items ?? [];
+    const rawActualPayments = tables.actual_payments ?? [];
+
+    const custNameMap = new Map(rawCustomers.map((c) => [Number(c.id), String(c.name ?? '')]));
+    const prodNameMap = new Map(rawProducts.map((p) => [Number(p.id), String(p.name ?? '')]));
+    const expCatMap = new Map(rawExpenseCats.map((c) => [Number(c.id), String(c.name ?? '')]));
+    const acctNameMap = new Map(
+      rawAccounts.map((a) => [Number(a.id), String(a.account_name ?? a.name ?? 'Account')])
+    );
+
+    const warranties = rawWarranties.map((w) => ({
+      ...w,
+      id: Number(w.id),
+      name: String(w.name ?? w.duration ?? 'Warranty'),
+      duration: String(w.duration ?? w.name ?? ''),
+      status: Number(w.status ?? 1),
+    }));
+
+    const products = rawProducts.map((p) => {
+      const qty = Number(p.stock_quantity ?? p.quantity ?? p.stock ?? 0);
+      return {
+        ...p,
+        id: Number(p.id),
+        name: String(p.name ?? ''),
+        sku: String(p.sku ?? p.code ?? ''),
+        category_id: p.category_id ? Number(p.category_id) : null,
+        brand_id: p.brand_id ? Number(p.brand_id) : null,
+        unit_id: (p.unit_id ?? p.main_unit_id) ? Number(p.unit_id ?? p.main_unit_id) : null,
+        warranty_id: p.warranty_id ? Number(p.warranty_id) : null,
+        purchase_price: Number(p.purchase_price ?? p.purchase_cost ?? p.cost_price ?? 0),
+        selling_price: Number(p.selling_price ?? p.sale_price ?? p.price ?? 0),
+        quantity: qty,
+        stock_quantity: qty,
+        alert_quantity: Number(p.alert_quantity ?? 5),
+        status: Number(p.status ?? 1),
+      };
+    });
+
+    const customers = rawCustomers.map((c) => ({
+      ...c,
+      id: Number(c.id),
+      name: String(c.name ?? ''),
+      email: c.email ? String(c.email) : '',
+      phone: c.phone ? String(c.phone) : '',
+      address: c.address ? String(c.address) : '',
+      opening_balance: Number(c.opening_balance ?? c.due ?? 0),
+      status: Number(c.status ?? 1),
+    }));
+
+    const suppliers = rawSuppliers.map((s) => ({
+      ...s,
+      id: Number(s.id),
+      name: String(s.name ?? ''),
+      email: s.email ? String(s.email) : '',
+      phone: s.phone ? String(s.phone) : '',
+      address: s.address ? String(s.address) : '',
+      opening_balance: Number(s.opening_balance ?? s.due ?? 0),
+      status: Number(s.status ?? 1),
+    }));
+
+    const bank_accounts = rawAccounts.map((a) => ({
+      ...a,
+      id: Number(a.id),
+      bank_name: String(a.bank_name ?? ''),
+      account_name: String(a.account_name ?? a.name ?? 'Account'),
+      branch: a.branch ?? null,
+      opening_balance: Number(a.opening_balance ?? 0),
+      balance: Number(a.balance ?? a.current_balance ?? a.opening_balance ?? 0),
+    }));
+
+    const expenses = rawExpenses.map((ex) => ({
+      ...ex,
+      id: Number(ex.id),
+      category: String(ex.category ?? (ex.expense_category_id ? expCatMap.get(Number(ex.expense_category_id)) : '') ?? 'Other'),
+      amount: Number(ex.amount ?? 0),
+      expense_date: String(ex.expense_date ?? ex.date ?? ex.created_at ?? '').slice(0, 10),
+      description: String(ex.description ?? ex.note ?? ''),
+    }));
+
+    const sales = rawSales.map((s) => {
+      const cid = s.customer_id ? Number(s.customer_id) : null;
+      const receivable = Number(s.receivable ?? s.final_receivable ?? s.total_amount ?? s.total ?? 0);
+      const paid = Number(s.paid ?? s.paid_amount ?? 0);
+      const due = Number(s.due ?? s.due_amount ?? Math.max(0, receivable - paid));
+      return {
+        ...s,
+        id: Number(s.id),
+        invoice_no: String(s.invoice_no ?? s.invoice ?? `INV-${s.id}`),
+        customer_id: cid,
+        customer_name: String(s.customer_name ?? (cid ? custNameMap.get(cid) : '') ?? 'Walk-in Customer'),
+        date: String(s.date ?? s.sell_date ?? s.sale_date ?? s.created_at ?? '').slice(0, 10),
+        discount: Number(s.discount ?? 0),
+        vat: Number(s.vat ?? 0),
+        receivable,
+        paid,
+        due,
+        purchase_cost: Number(s.purchase_cost ?? s.total_cost ?? 0),
+        profit: Number(s.profit ?? 0),
+        status: String(s.status ?? 'completed'),
+        payment_status: String(
+          s.payment_status ?? (due <= 0 ? 'paid' : paid > 0 ? 'partial' : 'due')
+        ),
+      };
+    });
+
+    const sale_items = rawSaleItems.map((it) => ({
+      ...it,
+      id: Number(it.id),
+      product_id: it.product_id ? Number(it.product_id) : null,
+      sale_id: Number(it.sale_id ?? it.sell_id ?? 0),
+      product_name: String(it.product_name ?? (it.product_id ? prodNameMap.get(Number(it.product_id)) : '') ?? 'Product'),
+      quantity: Number(it.quantity ?? it.qty ?? 1),
+      price: Number(it.price ?? it.rate ?? it.unit_price ?? 0),
+      total: Number(it.total ?? it.sub_total ?? 0),
+    }));
+
+    const purchases = rawPurchases.map((p) => {
+      const total = Number(p.total ?? p.total_amount ?? 0);
+      const paid = Number(p.paid ?? p.paid_amount ?? 0);
+      const due = Number(p.due ?? p.due_amount ?? Math.max(0, total - paid));
+      return {
+        ...p,
+        id: Number(p.id),
+        invoice_no: String(p.invoice_no ?? `PUR-${p.id}`),
+        supplier_id: p.supplier_id ? Number(p.supplier_id) : null,
+        total,
+        paid,
+        due,
+      };
+    });
+
+    const purchase_items = rawPurchaseItems.map((pi) => ({
+      ...pi,
+      id: Number(pi.id),
+      purchase_id: Number(pi.purchase_id ?? 0),
+      product_id: pi.product_id ? Number(pi.product_id) : null,
+      quantity: Number(pi.quantity ?? pi.qty ?? 1),
+      price: Number(pi.price ?? pi.rate ?? 0),
+      total: Number(pi.total ?? pi.sub_total ?? 0),
+    }));
+
+    const actualReceives: SqlRow[] = rawActualPayments
+      .filter((r) => String(r.payment_type ?? '') === 'receive')
+      .map((r) => ({
+        id: Number(r.id),
+        sale_id: null,
+        customer_id: r.customer_id ? Number(r.customer_id) : null,
+        amount: Number(r.amount ?? 0),
+        payment_date: String(r.date ?? r.created_at ?? ''),
+        payment_method: Number(r.wallet_payment ?? 0) === 1 ? 'wallet' : 'cash',
+        reference_no: null,
+        note: r.note ? String(r.note) : null,
+        created_by: 1,
+        created_at: String(r.created_at ?? r.date ?? ''),
+      }));
+
+    const actualPays: SqlRow[] = rawActualPayments
+      .filter((r) => String(r.payment_type ?? '') === 'pay')
+      .map((r) => ({
+        id: Number(r.id),
+        purchase_id: null,
+        supplier_id: r.supplier_id ? Number(r.supplier_id) : null,
+        amount: Number(r.amount ?? 0),
+        payment_date: String(r.date ?? r.created_at ?? ''),
+        payment_method: Number(r.wallet_payment ?? 0) === 1 ? 'wallet' : 'cash',
+        reference_no: null,
+        note: r.note ? String(r.note) : null,
+        created_by: 1,
+        created_at: String(r.created_at ?? r.date ?? ''),
+      }));
+
+    const a2aTransactions: SqlRow[] = (tables.account_to_account_transections ?? []).map((t) => ({
+      id: Number(t.id),
+      bank_account_id: t.to ? Number(t.to) : (t.from ? Number(t.from) : null),
+      account_name: t.to ? (acctNameMap.get(Number(t.to)) ?? 'Account') : 'Transfer',
+      type: 'deposit',
+      amount: Number(t.amount ?? 0),
+      description: String(t.note ?? 'Account Transfer'),
+      transaction_date: String(t.created_at ?? '').slice(0, 10),
+    }));
+
+    const updatedStore: PosStoreData = {
+      ...current,
+      categories: rawCategories,
+      brands: rawBrands,
+      units: rawUnits,
+      warranties,
+      products,
+      stock_movements: tables.stock_movements ?? [],
+      customers,
+      suppliers,
+      owners: tables.owners ?? [],
+      employees: tables.employees ?? [],
+      bank_accounts,
+      bank_transactions: [...(tables.bank_transactions ?? []), ...a2aTransactions],
+      cash_transactions: tables.cash_transactions ?? [],
+      expense_categories: rawExpenseCats,
+      expenses,
+      sales,
+      sale_items,
+      payments: [...(tables.payments ?? []), ...actualReceives],
+      purchases,
+      purchase_items,
+      supplier_payments: [...(tables.supplier_payments ?? []), ...actualPays],
+      estimates: tables.estimates ?? [],
+      estimate_items: tables.estimate_items ?? [],
+      returns: tables.returns ?? tables.return_items ?? [],
+      damages: tables.damages ?? [],
+    };
+
+    saveStore(updatedStore);
+    res.json({
+      ok: true,
+      truncated,
+      tablesImported: tableNames.length,
+      counts: {
+        products: updatedStore.products.length,
+        categories: updatedStore.categories.length,
+        brands: updatedStore.brands.length,
+        customers: updatedStore.customers.length,
+        suppliers: updatedStore.suppliers.length,
+        sales: updatedStore.sales.length,
+        purchases: updatedStore.purchases.length,
+        payments: updatedStore.payments.length + updatedStore.supplier_payments.length,
+        bankAccounts: updatedStore.bank_accounts.length,
+      },
+    });
+  });
+
+  app.post('/api/backup/clear', (_req: Request, res: Response) => {
+    const current = getStore();
+    const cleared: PosStoreData = {
+      ...current,
+      categories: [],
+      brands: [],
+      units: [],
+      warranties: [],
+      products: [],
+      stock_movements: [],
+      customers: [],
+      suppliers: [],
+      owners: [],
+      employees: [],
+      bank_accounts: [],
+      bank_transactions: [],
+      cash_transactions: [],
+      expense_categories: [],
+      expenses: [],
+      sales: [],
+      sale_items: [],
+      payments: [],
+      purchases: [],
+      purchase_items: [],
+      supplier_payments: [],
+      estimates: [],
+      estimate_items: [],
+      returns: [],
+      damages: [],
+    };
+    saveStore(cleared);
+    res.json({ ok: true });
   });
 
   // ---- Laravel 13 Codebase Inspector & ZIP Export ----

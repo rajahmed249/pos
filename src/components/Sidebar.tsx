@@ -20,6 +20,7 @@ import {
   LogOut,
   Package,
   Phone,
+  PlusCircle,
   Receipt,
   RotateCcw,
   Ruler,
@@ -78,6 +79,7 @@ const ICON_MAP: Record<string, typeof Circle> = {
   'list-tree': ListTree,
   'code-2': Code2,
   store: Store,
+  'plus-circle': PlusCircle,
 };
 
 const GROUP_ICONS: Record<string, typeof Circle> = {
@@ -280,13 +282,13 @@ export function Sidebar({
                               }}
                               className={`relative w-full text-left pl-9 pr-3.5 py-2 text-[12px] transition-all cursor-pointer flex items-center gap-2.5 rounded-lg ${
                                 active
-                                  ? 'bg-[#ffd166]/15 text-[#ffd166] font-semibold'
-                                  : 'text-white/70 hover:bg-white/5 hover:text-white'
+                                  ? 'bg-[#ffd166] text-[#1a1a2e] font-semibold shadow-[0_3px_12px_rgba(255,215,0,0.28)]'
+                                  : 'text-white/75 hover:bg-[#ffd166]/10 hover:text-white'
                               }`}
                             >
                               <Icon
                                 className={`w-3.5 h-3.5 shrink-0 ${
-                                  active ? 'text-[#ffd166]' : 'text-white/45'
+                                  active ? 'text-[#1a1a2e]' : 'text-[#ffd166]/75'
                                 }`}
                               />
                               <span className="truncate">{menu.title}</span>

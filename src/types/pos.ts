@@ -34,10 +34,12 @@ export interface Product {
   unit_id: number | null;
   category_name?: string;
   brand_name?: string;
+  unit_name?: string;
   purchase_price: number;
   selling_price: number;
   quantity: number;
   alert_quantity: number;
+  description?: string;
   barcode: string;
   warranty: string;
   image?: string | null;

@@ -48,6 +48,12 @@ function splitTuples(valuesPart: string): string[][] {
     }
 
     if (ch === "'") {
+      // Handle SQL doubled single quotes '' inside strings
+      if (inString && valuesPart[i + 1] === "'") {
+        currentField += "\\'";
+        i++;
+        continue;
+      }
       inString = !inString;
       currentField += ch;
       continue;
@@ -92,24 +98,110 @@ function splitTuples(valuesPart: string): string[][] {
   return rows;
 }
 
-export function parseMysqlDump(sqlPath: string): Record<string, SqlRow[]> {
-  const content = fs.readFileSync(sqlPath, 'utf8');
-  const tables: Record<string, SqlRow[]> = {};
-
-  const insertRegex = /INSERT INTO `([a-zA-Z0-9_]+)` \(([^)]+)\) VALUES\s*([\s\S]*?);\s*(?=\n|$)/g;
+function extractCreateTableSchemas(content: string): Record<string, string[]> {
+  const schemas: Record<string, string[]> = {};
+  const createRegex = /CREATE TABLE(?: IF NOT EXISTS)? `([a-zA-Z0-9_]+)`\s*\(([\s\S]*?)\)\s*ENGINE=/gi;
   let match: RegExpExecArray | null;
 
-  while ((match = insertRegex.exec(content)) !== null) {
+  while ((match = createRegex.exec(content)) !== null) {
     const tableName = match[1];
+    const body = match[2];
+    const cols: string[] = [];
+    for (const rawLine of body.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      const colMatch = line.match(/^`([^`]+)`\s+/);
+      if (colMatch) {
+        cols.push(colMatch[1]);
+      }
+    }
+    if (cols.length > 0) {
+      schemas[tableName] = cols;
+    }
+  }
+
+  return schemas;
+}
+
+function findStatementEnd(content: string, startIdx: number): number {
+  let inString = false;
+  let escapeNext = false;
+  for (let i = startIdx; i < content.length; i++) {
+    const ch = content[i];
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      escapeNext = true;
+      continue;
+    }
+    if (ch === "'") {
+      if (inString && content[i + 1] === "'") {
+        i++;
+        continue;
+      }
+      inString = !inString;
+      continue;
+    }
+    if (!inString && ch === ';') {
+      return i;
+    }
+  }
+
+  // Fallback recovery if an unescaped quote inside a string prevented finding ';'
+  // Look for mysqldump block end markers like ");\n/*!40000 ALTER TABLE" or ";\nUNLOCK TABLES"
+  const tail = content.slice(startIdx);
+  const boundaryMatch = tail.match(/;\r?\n(?:\/\*!40000 ALTER TABLE|UNLOCK TABLES;|DROP TABLE IF EXISTS|CREATE TABLE|INSERT(?:\s+IGNORE)?\s+INTO)/);
+  if (boundaryMatch && boundaryMatch.index !== undefined) {
+    return startIdx + boundaryMatch.index;
+  }
+
+  return -1;
+}
+
+export function parseMysqlDumpText(content: string): {
+  tables: Record<string, SqlRow[]>;
+  schemas: Record<string, string[]>;
+  truncated: boolean;
+  incompleteTables: string[];
+} {
+  const schemas = extractCreateTableSchemas(content);
+  const tables: Record<string, SqlRow[]> = {};
+  const incompleteTables: string[] = [];
+  let truncated = false;
+
+  const insertHeadRegex = /INSERT(?:\s+IGNORE)?\s+INTO `([a-zA-Z0-9_]+)`(?:\s*\(([^)]+)\))?\s+VALUES\s*/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = insertHeadRegex.exec(content)) !== null) {
+    const tableName = match[1];
+    const explicitCols = match[2];
+    const valuesStart = match.index + match[0].length;
+    const stmtEnd = findStatementEnd(content, valuesStart);
+
+    if (stmtEnd === -1) {
+      truncated = true;
+      incompleteTables.push(tableName);
+      break;
+    }
+
+    insertHeadRegex.lastIndex = stmtEnd + 1;
+
     if (tableName.includes('backup')) {
       continue;
     }
 
-    const columns = match[2]
-      .split(',')
-      .map((c) => c.trim().replace(/^`|`$/g, ''));
+    const columns = explicitCols
+      ? explicitCols.split(',').map((c) => c.trim().replace(/^`|`$/g, ''))
+      : (schemas[tableName] ?? []);
 
-    const tuples = splitTuples(match[3]);
+    if (columns.length === 0) {
+      continue;
+    }
+
+    const valuesPart = content.slice(valuesStart, stmtEnd);
+    const tuples = splitTuples(valuesPart);
+
     if (!tables[tableName]) {
       tables[tableName] = [];
     }
@@ -123,5 +215,10 @@ export function parseMysqlDump(sqlPath: string): Record<string, SqlRow[]> {
     }
   }
 
-  return tables;
+  return { tables, schemas, truncated, incompleteTables };
+}
+
+export function parseMysqlDump(sqlPath: string): Record<string, SqlRow[]> {
+  const content = fs.readFileSync(sqlPath, 'utf8');
+  return parseMysqlDumpText(content).tables;
 }

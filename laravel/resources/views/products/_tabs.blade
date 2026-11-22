@@ -1,0 +1,42 @@
+@php
+    $activeTab = $activeTab ?? 'products';
+@endphp
+
+<div class="bg-white rounded-[20px] p-1.5 shadow-[0_1px_3px_rgba(0,0,0,0.08)] border border-[#f1f5f9] flex sm:inline-flex flex-wrap gap-1 w-full sm:w-auto">
+    <a href="{{ route('products.index') }}"
+       @if($activeTab === 'products') style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" @endif
+       class="px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 sm:gap-2 transition-all {{ $activeTab === 'products' ? 'text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)]' : 'text-[#64748b] hover:bg-[#f8fafc] hover:text-[#334155]' }}">
+        <i class="fas fa-list"></i> Products
+    </a>
+
+    <a href="{{ route('products.create') }}"
+       @if($activeTab === 'add') style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" @endif
+       class="px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 sm:gap-2 transition-all {{ $activeTab === 'add' ? 'text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)]' : 'text-[#64748b] hover:bg-[#f8fafc] hover:text-[#334155]' }}">
+        <i class="fas fa-plus-circle"></i> Add Product
+    </a>
+
+    @if($activeTab === 'edit')
+        <span style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
+              class="px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)] inline-flex items-center gap-1.5 sm:gap-2">
+            <i class="fas fa-edit"></i> Edit Product
+        </span>
+    @endif
+
+    <a href="{{ route('categories.index') }}"
+       @if($activeTab === 'categories') style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" @endif
+       class="px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 sm:gap-2 transition-all {{ $activeTab === 'categories' ? 'text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)]' : 'text-[#64748b] hover:bg-[#f8fafc] hover:text-[#334155]' }}">
+        <i class="fas fa-sliders-h"></i> Categories
+    </a>
+
+    <a href="{{ route('brands.index') }}"
+       @if($activeTab === 'brands') style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" @endif
+       class="px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 sm:gap-2 transition-all {{ $activeTab === 'brands' ? 'text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)]' : 'text-[#64748b] hover:bg-[#f8fafc] hover:text-[#334155]' }}">
+        <i class="fas fa-box"></i> Brand
+    </a>
+
+    <a href="{{ route('units.index') }}"
+       @if($activeTab === 'units') style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" @endif
+       class="px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 sm:gap-2 transition-all {{ $activeTab === 'units' ? 'text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)]' : 'text-[#64748b] hover:bg-[#f8fafc] hover:text-[#334155]' }}">
+        <i class="fas fa-shield-alt"></i> Unit &amp; Warranty
+    </a>
+</div>

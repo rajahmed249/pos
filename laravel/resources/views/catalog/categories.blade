@@ -1,9 +1,31 @@
 @extends('layouts.app')
 
 @section('title', 'Categories — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
-@section('breadcrumb', 'Inventory / Categories')
+@section('breadcrumb', 'Categories')
 
 @section('content')
+<div class="space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div class="w-11 h-11 sm:w-[56px] sm:h-[56px] shrink-0 rounded-2xl flex items-center justify-center text-white text-xl sm:text-2xl shadow-[0_8px_24px_rgba(79,70,229,0.35)]"
+                 style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                <i class="fas fa-cubes shrink-0"></i>
+            </div>
+            <div class="min-w-0">
+                <h1 class="text-xl sm:text-[26px] font-extrabold text-[#0f172a] truncate">
+                    Product <span class="bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] bg-clip-text text-transparent">Management</span>
+                </h1>
+                <p class="text-[12px] sm:text-[13px] text-[#64748b] mt-0.5"><i class="far fa-calendar-alt mr-1"></i>{{ date('d F, Y') }} &bull; <i class="far fa-clock mr-1"></i>{{ date('h:i A') }}</p>
+            </div>
+        </div>
+        <a href="{{ route('products.create') }}" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
+           class="inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-[10px] text-[13px] font-semibold text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)] hover:-translate-y-0.5 transition-all shrink-0">
+            <i class="fas fa-plus-circle"></i> Add Product
+        </a>
+    </div>
+
+    @include('products._tabs', ['activeTab' => 'categories'])
+
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-5 h-fit">
         <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">Add Category</h2>
@@ -41,5 +63,6 @@
             </table>
         </div>
     </div>
+</div>
 </div>
 @endsection

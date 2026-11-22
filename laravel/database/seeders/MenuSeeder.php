@@ -31,27 +31,28 @@ class MenuSeeder extends Seeder
             ['title' => 'Damages', 'group_label' => 'Sales & Purchase', 'route_name' => 'damages.index', 'url' => '/damages', 'icon' => 'alert-triangle', 'sort_order' => 11, 'roles' => ['admin', 'manager']],
 
             // Product Information
-            ['title' => 'Unit', 'group_label' => 'Product Information', 'route_name' => 'units.index', 'url' => '/units', 'icon' => 'ruler', 'sort_order' => 12, 'roles' => ['admin', 'manager']],
-            ['title' => 'Products', 'group_label' => 'Product Information', 'route_name' => 'products.index', 'url' => '/products', 'icon' => 'package', 'sort_order' => 13, 'roles' => ['admin', 'manager', 'staff']],
+            ['title' => 'Products', 'group_label' => 'Product Information', 'route_name' => 'products.index', 'url' => '/products', 'icon' => 'package', 'sort_order' => 12, 'roles' => ['admin', 'manager', 'staff']],
+            ['title' => 'Add Product', 'group_label' => 'Product Information', 'route_name' => 'products.create', 'url' => '/products/create', 'icon' => 'plus-circle', 'sort_order' => 13, 'roles' => ['admin', 'manager', 'staff']],
             ['title' => 'Categories', 'group_label' => 'Product Information', 'route_name' => 'categories.index', 'url' => '/categories', 'icon' => 'folder-tree', 'sort_order' => 14, 'roles' => ['admin', 'manager']],
             ['title' => 'Brand', 'group_label' => 'Product Information', 'route_name' => 'brands.index', 'url' => '/brands', 'icon' => 'tag', 'sort_order' => 15, 'roles' => ['admin', 'manager']],
+            ['title' => 'Unit', 'group_label' => 'Product Information', 'route_name' => 'units.index', 'url' => '/units', 'icon' => 'ruler', 'sort_order' => 16, 'roles' => ['admin', 'manager']],
 
             // Expenses & Payment
-            ['title' => 'Expenses', 'group_label' => 'Expenses & Payment', 'route_name' => 'expenses.index', 'url' => '/expenses', 'icon' => 'wallet', 'sort_order' => 16, 'roles' => ['admin', 'manager']],
-            ['title' => 'Payments', 'group_label' => 'Expenses & Payment', 'route_name' => 'payments.index', 'url' => '/payments', 'icon' => 'credit-card', 'sort_order' => 17, 'roles' => ['admin', 'manager']],
+            ['title' => 'Expenses', 'group_label' => 'Expenses & Payment', 'route_name' => 'expenses.index', 'url' => '/expenses', 'icon' => 'wallet', 'sort_order' => 17, 'roles' => ['admin', 'manager']],
+            ['title' => 'Payments', 'group_label' => 'Expenses & Payment', 'route_name' => 'payments.index', 'url' => '/payments', 'icon' => 'credit-card', 'sort_order' => 18, 'roles' => ['admin', 'manager']],
 
             // Peoples
-            ['title' => 'Customers', 'group_label' => 'Peoples', 'route_name' => 'customers.index', 'url' => '/customers', 'icon' => 'users', 'sort_order' => 18, 'roles' => ['admin', 'manager', 'staff']],
-            ['title' => 'Suppliers', 'group_label' => 'Peoples', 'route_name' => 'suppliers.index', 'url' => '/suppliers', 'icon' => 'building-2', 'sort_order' => 19, 'roles' => ['admin', 'manager']],
-            ['title' => 'Employee & Salary', 'group_label' => 'Peoples', 'route_name' => 'employees.index', 'url' => '/employees', 'icon' => 'badge-dollar-sign', 'sort_order' => 20, 'roles' => ['admin', 'manager']],
+            ['title' => 'Customers', 'group_label' => 'Peoples', 'route_name' => 'customers.index', 'url' => '/customers', 'icon' => 'users', 'sort_order' => 19, 'roles' => ['admin', 'manager', 'staff']],
+            ['title' => 'Suppliers', 'group_label' => 'Peoples', 'route_name' => 'suppliers.index', 'url' => '/suppliers', 'icon' => 'building-2', 'sort_order' => 20, 'roles' => ['admin', 'manager']],
+            ['title' => 'Employee & Salary', 'group_label' => 'Peoples', 'route_name' => 'employees.index', 'url' => '/employees', 'icon' => 'badge-dollar-sign', 'sort_order' => 21, 'roles' => ['admin', 'manager']],
 
             // Reports
-            ['title' => 'Reports', 'group_label' => 'Reports', 'route_name' => 'reports.index', 'url' => '/reports', 'icon' => 'bar-chart-3', 'sort_order' => 21, 'roles' => ['admin', 'manager']],
+            ['title' => 'Reports', 'group_label' => 'Reports', 'route_name' => 'reports.index', 'url' => '/reports', 'icon' => 'bar-chart-3', 'sort_order' => 22, 'roles' => ['admin', 'manager']],
 
             // Settings & Customize
-            ['title' => 'Shop Settings', 'group_label' => 'Settings & Customize', 'route_name' => 'settings.index', 'url' => '/settings', 'icon' => 'sliders', 'sort_order' => 22, 'roles' => ['admin']],
-            ['title' => 'User Management', 'group_label' => 'Settings & Customize', 'route_name' => 'users.index', 'url' => '/users', 'icon' => 'user-cog', 'sort_order' => 23, 'roles' => ['admin']],
-            ['title' => 'Backup & Restore', 'group_label' => 'Settings & Customize', 'route_name' => 'backup.index', 'url' => '/backup', 'icon' => 'database-backup', 'sort_order' => 24, 'roles' => ['admin']],
+            ['title' => 'Shop Settings', 'group_label' => 'Settings & Customize', 'route_name' => 'settings.index', 'url' => '/settings', 'icon' => 'sliders', 'sort_order' => 23, 'roles' => ['admin']],
+            ['title' => 'User Management', 'group_label' => 'Settings & Customize', 'route_name' => 'users.index', 'url' => '/users', 'icon' => 'user-cog', 'sort_order' => 24, 'roles' => ['admin']],
+            ['title' => 'Backup & Restore', 'group_label' => 'Settings & Customize', 'route_name' => 'backup.index', 'url' => '/backup', 'icon' => 'database-backup', 'sort_order' => 25, 'roles' => ['admin']],
         ];
 
         foreach ($items as $item) {
