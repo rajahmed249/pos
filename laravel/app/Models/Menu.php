@@ -60,6 +60,9 @@ class Menu extends Model
         if (!$this->is_active) {
             return false;
         }
+        if ($role === 'super_admin') {
+            return true;
+        }
         $allowed = $this->roles ?? [];
         if (empty($allowed)) {
             return true;

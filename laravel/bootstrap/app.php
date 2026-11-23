@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnforceIdleTimeout;
 use App\Http\Middleware\EnsureUserHasRole;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -13,6 +14,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Full CSRF protection enabled on all web forms (use @csrf in Blade)
+        $middleware->web(append: [
+            EnforceIdleTimeout::class,
+        ]);
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
         ]);

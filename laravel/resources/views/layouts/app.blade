@@ -9,10 +9,15 @@
     <link rel="shortcut icon" type="image/png" href="{{ asset($appSettings['shop_favicon'] ?? 'assets/images/favicon.png') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Public+Sans:wght@400;500;600&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <style>
+        .font-brand-wordmark {
+            font-family: 'Sora', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
         :root {
             --sidebar-width: 260px;
         }
@@ -185,11 +190,11 @@
             @endif
             <div class="min-w-0">
                 <div class="font-semibold text-white truncate">{{ auth()->user()?->name }}</div>
-                <div class="text-white/50 mt-0.5 truncate">{{ ucfirst(auth()->user()?->role ?? 'staff') }} &middot; {{ $appSettings['shop_phone'] ?? '01674297522' }}</div>
+                <div class="text-white/50 mt-0.5 truncate">{{ ucwords(str_replace('_', ' ', auth()->user()?->role ?? 'staff')) }} &middot; {{ $appSettings['shop_phone'] ?? '01674297522' }}</div>
             </div>
         </a>
 
-        <form method="POST" action="{{ route('logout') }}">
+        <form id="idleLogoutForm" method="POST" action="{{ route('logout') }}">
             @csrf
             <button type="submit"
                     class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] border border-red-400/20 bg-red-500/10 text-[13px] font-medium text-red-200 hover:bg-red-500/20 hover:text-white transition-all cursor-pointer">
@@ -218,11 +223,11 @@
         </div>
 
         <div class="flex items-center justify-center shrink-0">
-            <a href="{{ route('dashboard') }}" class="font-brand font-black tracking-tight text-[15px] sm:text-lg md:text-xl whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity" title="Go to Home Dashboard">
+            <a href="{{ route('dashboard') }}" class="font-brand-wordmark font-extrabold text-[17px] sm:text-[20px] md:text-[22px] whitespace-nowrap shrink-0 hover:opacity-85 transition-opacity flex items-center gap-1.5" title="Go to Home Dashboard">
                 @if($isYouthIt)
-                    <span class="text-[#065AA4]">YOUTH</span>
-                    <span class="text-[#f97316]">IT</span>
-                    <span class="text-[#4f46e5]">POS</span>
+                    <span class="bg-gradient-to-b from-[#0284c7] via-[#065AA4] to-[#1d4ed8] bg-clip-text text-transparent">Youth</span>
+                    <span class="bg-gradient-to-b from-[#f59e0b] via-[#f97316] to-[#ea580c] bg-clip-text text-transparent">IT</span>
+                    <span class="bg-gradient-to-b from-[#10b981] via-[#059669] to-[#047857] bg-clip-text text-transparent">POS</span>
                 @else
                     <span class="text-slate-900">{{ $shopName }}</span>
                 @endif
@@ -270,7 +275,7 @@
                             @endif
                             <div class="min-w-0">
                                 <div class="text-xs font-bold uppercase tracking-wide text-slate-900 truncate">{{ auth()->user()?->name ?? 'RAJ AHMED' }}</div>
-                                <div class="text-[11px] font-semibold text-indigo-600 capitalize">Role: {{ auth()->user()?->role ?? 'Admin' }}</div>
+                                <div class="text-[11px] font-semibold text-indigo-600 capitalize">Role: {{ str_replace('_', ' ', auth()->user()?->role ?? 'Admin') }}</div>
                                 <div class="text-[11px] text-slate-500 truncate">{{ auth()->user()?->email ?? 'rajahmed249@gmail.com' }}</div>
                             </div>
                         </div>
@@ -463,6 +468,29 @@
             window.showCenterPopup('error', 'Action Required', @js($errors->first()));
         });
     @endif
+    // 1-Hour Continuous Inactivity Auto-Logout (3,600,000 ms)
+    var idleLimitMs = 60 * 60 * 1000;
+    var lastActivityMs = Date.now();
+    var lastIdleThrottle = 0;
+    function touchIdleActivity() {
+        var now = Date.now();
+        if (now - lastIdleThrottle < 1000) return;
+        lastIdleThrottle = now;
+        lastActivityMs = now;
+    }
+    function checkIdleLogout() {
+        if (Date.now() - lastActivityMs >= idleLimitMs) {
+            var form = document.getElementById('idleLogoutForm');
+            if (form) form.submit();
+        }
+    }
+    ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'pointerdown'].forEach(function(ev) {
+        window.addEventListener(ev, touchIdleActivity, { passive: true });
+    });
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') checkIdleLogout();
+    });
+    setInterval(checkIdleLogout, 15000);
 })();
 </script>
 </body>

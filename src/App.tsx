@@ -12,7 +12,7 @@ import {
   User as UserIcon,
   UserCircle2,
 } from 'lucide-react';
-import { apiFetch } from './lib/api.ts';
+import { apiFetch, setApiAuthToken, setOnUnauthorized } from './lib/api.ts';
 import type { BootstrapPayload, Sale, SaleItem, UserAccount } from './types/pos.ts';
 import { Sidebar } from './components/Sidebar.tsx';
 import { LoginView } from './components/LoginView.tsx';
@@ -73,21 +73,33 @@ const ROUTE_TITLES: Record<string, string> = {
   laravel: 'Laravel 13 Blade & Export',
 };
 
+const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000; // 1 continuous hour of inactivity
+
 export default function App() {
   const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
+  const [publicSettings, setPublicSettings] = useState<Record<string, string>>({
+    shop_name: 'YOUTH IT POS',
+    shop_logo: '/assets/images/logo.jpg',
+    shop_favicon: '/assets/images/favicon.png',
+  });
+  const [authReady, setAuthReady] = useState<boolean>(false);
+  const [setupRequired, setSetupRequired] = useState<boolean>(false);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const [activeRoute, setActiveRoute] = useState<string>(getInitialRoute);
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
-  const [activeRole, setActiveRole] = useState<string>('admin');
-  const [showLogin, setShowLogin] = useState<boolean>(
-    () => window.location.pathname.replace(/^\/+|\/+$/g, '') === 'login'
-  );
+  const [activeRole, setActiveRole] = useState<string>('super_admin');
+  const [showLogin, setShowLogin] = useState<boolean>(true);
   // Desktop view keeps sidebar ALWAYS active by default; toggles smoothly open/closed with push layout
   const [desktopOpen, setDesktopOpen] = useState<boolean>(true);
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
   const [usersTab, setUsersTab] = useState<'directory' | 'roles' | 'account'>('directory');
   const [userMenuOpen, setUserMenuOpen] = useState<boolean>(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const authTokenRef = useRef<string | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
+  const isLoggingOutRef = useRef<boolean>(false);
+  const handleLogoutRef = useRef<(reason?: string) => Promise<void>>(async () => {});
   const [invoiceModal, setInvoiceModal] = useState<{
     sale: Sale;
     items: SaleItem[];
@@ -95,24 +107,87 @@ export default function App() {
   } | null>(null);
 
   function loadBootstrap() {
-    apiFetch<BootstrapPayload>('/api/bootstrap').then((data) => {
-      setBootstrap(data);
-      setCurrentUser((prev) => {
-        if (prev) {
-          const refreshed = data.users?.find((u) => u.id === prev.id);
-          return refreshed ?? prev;
-        }
-        return data.users?.find((u) => u.is_active) ?? data.users?.[0] ?? null;
+    apiFetch<BootstrapPayload>('/api/bootstrap')
+      .then((data) => {
+        setBootstrap(data);
+        setCurrentUser((prev) => {
+          if (prev) {
+            const refreshed = data.users?.find((u) => u.id === prev.id);
+            return refreshed ?? prev;
+          }
+          return data.users?.find((u) => u.is_active) ?? data.users?.[0] ?? null;
+        });
+      })
+      .catch(() => {
+        // 401 handled globally by unauthorizedHandler
       });
-    });
   }
 
+  async function handleLogout(reason?: string) {
+    if (isLoggingOutRef.current) return;
+    isLoggingOutRef.current = true;
+    const tokenToRevoke = authTokenRef.current;
+    setApiAuthToken(null);
+    authTokenRef.current = null;
+    setAuthToken(null);
+    setCurrentUser(null);
+    setBootstrap(null);
+    setUserMenuOpen(false);
+    setSessionNotice(reason ?? null);
+    setShowLogin(true);
+    if (window.location.pathname !== '/login') {
+      window.history.pushState({}, '', '/login');
+    }
+    try {
+      if (tokenToRevoke) {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${tokenToRevoke}` },
+        });
+      }
+    } catch {
+      // continue sign out cleanly
+    } finally {
+      isLoggingOutRef.current = false;
+    }
+  }
+  handleLogoutRef.current = handleLogout;
+
   useEffect(() => {
-    loadBootstrap();
+    setOnUnauthorized(() => {
+      if (authTokenRef.current && !isLoggingOutRef.current) {
+        void handleLogoutRef.current('Session expired after 1 hour of inactivity. Please sign in again.');
+      }
+    });
+
+    apiFetch<{
+      authenticated: boolean;
+      setupRequired: boolean;
+      settings?: Record<string, string>;
+      user?: UserAccount;
+    }>('/api/auth/session')
+      .then((sess) => {
+        if (sess.settings) setPublicSettings(sess.settings);
+        setSetupRequired(Boolean(sess.setupRequired));
+        if (!sess.authenticated) {
+          setShowLogin(true);
+        }
+      })
+      .catch(() => {
+        setShowLogin(true);
+      })
+      .finally(() => {
+        setAuthReady(true);
+      });
+
     const onPop = () => {
       const p = window.location.pathname.replace(/^\/+|\/+$/g, '');
-      setShowLogin(p === 'login');
-      setActiveRoute(getInitialRoute());
+      if (!authTokenRef.current || p === 'login') {
+        setShowLogin(true);
+      } else {
+        setShowLogin(false);
+        setActiveRoute(getInitialRoute());
+      }
     };
     const onOutsideClick = (e: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
@@ -126,36 +201,110 @@ export default function App() {
     document.addEventListener('mousedown', onOutsideClick);
     document.addEventListener('keydown', onKeyDown);
     return () => {
+      setOnUnauthorized(null);
       window.removeEventListener('popstate', onPop);
       document.removeEventListener('mousedown', onOutsideClick);
       document.removeEventListener('keydown', onKeyDown);
     };
   }, []);
 
+  // 1-Hour Continuous Inactivity Auto-Logout
+  useEffect(() => {
+    if (showLogin || !authToken) return;
+
+    lastActivityRef.current = Date.now();
+    let lastThrottle = 0;
+
+    const recordActivity = () => {
+      const now = Date.now();
+      if (now - lastThrottle < 1000) return;
+      lastThrottle = now;
+      lastActivityRef.current = now;
+    };
+
+    const checkIdle = () => {
+      if (Date.now() - lastActivityRef.current >= INACTIVITY_TIMEOUT_MS) {
+        void handleLogoutRef.current('Automatically logged out after 1 hour of inactivity. Please sign in again.');
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkIdle();
+      }
+    };
+
+    const activityEvents: Array<keyof WindowEventMap> = [
+      'mousemove',
+      'mousedown',
+      'keydown',
+      'scroll',
+      'touchstart',
+      'pointerdown',
+    ];
+    for (const ev of activityEvents) {
+      window.addEventListener(ev, recordActivity, { passive: true });
+    }
+    document.addEventListener('visibilitychange', onVisibility);
+    const intervalId = window.setInterval(checkIdle, 15000);
+
+    return () => {
+      for (const ev of activityEvents) {
+        window.removeEventListener(ev, recordActivity);
+      }
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.clearInterval(intervalId);
+    };
+  }, [showLogin, authToken]);
+
   function navigate(routeKey: string) {
+    if (!authTokenRef.current) {
+      setShowLogin(true);
+      return;
+    }
     setShowLogin(false);
     setActiveRoute(routeKey);
     const targetPath = routeKey === 'laravel' ? '/laravel-code' : routeKey === 'dashboard' ? '/' : `/${routeKey}`;
     window.history.pushState({}, '', targetPath);
   }
 
-  async function handleLogout() {
-    try {
-      await apiFetch('/api/auth/logout', {
-        method: 'POST',
-        headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
-      });
-    } catch {
-      // continue sign out cleanly
-    }
-    setAuthToken(null);
-    setShowLogin(true);
-    window.history.pushState({}, '', '/login');
-  }
-
   async function openInvoice(saleId: number, autoPrint = false) {
     const res = await apiFetch<{ sale: Sale; items: SaleItem[] }>(`/api/sales/${saleId}`);
     setInvoiceModal({ ...res, autoPrint });
+  }
+
+  if (!authReady) {
+    return (
+      <div className="min-h-screen bg-[#04071a] flex items-center justify-center p-6">
+        <div className="w-10 h-10 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (showLogin || !authToken) {
+    return (
+      <LoginView
+        settings={bootstrap?.settings ?? publicSettings}
+        setupRequired={setupRequired}
+        sessionNotice={sessionNotice}
+        onSuccess={({ token, user }) => {
+          setApiAuthToken(token);
+          authTokenRef.current = token;
+          lastActivityRef.current = Date.now();
+          setAuthToken(token);
+          setCurrentUser(user);
+          setActiveRole(user.role);
+          setSessionNotice(null);
+          setSetupRequired(false);
+          setShowLogin(false);
+          loadBootstrap();
+          const initialRoute = getInitialRoute();
+          setActiveRoute(initialRoute);
+          const targetPath = initialRoute === 'laravel' ? '/laravel-code' : initialRoute === 'dashboard' ? '/' : `/${initialRoute}`;
+          window.history.pushState({}, '', targetPath);
+        }}
+      />
+    );
   }
 
   if (!bootstrap) {
@@ -175,24 +324,6 @@ export default function App() {
   const shopName = (settings.shop_name || 'YOUTH IT POS').trim();
   const isYouthItPos = shopName.toUpperCase().includes('YOUTH IT');
 
-  if (showLogin) {
-    return (
-      <LoginView
-        settings={settings}
-        users={bootstrap.users}
-        canReturnToWorkspace={Boolean(authToken || currentUser)}
-        onReturnToWorkspace={() => navigate(activeRoute)}
-        onSuccess={({ token, user }) => {
-          setAuthToken(token);
-          setCurrentUser(user);
-          setActiveRole(user.role);
-          loadBootstrap();
-          navigate('dashboard');
-        }}
-      />
-    );
-  }
-
   return (
     <div className="min-h-screen overflow-x-clip bg-[#f8fafc] text-slate-900">
       <Sidebar
@@ -203,7 +334,7 @@ export default function App() {
         currentUser={currentUser}
         activeRole={activeRole}
         onRoleChange={setActiveRole}
-        onLogout={handleLogout}
+        onLogout={() => void handleLogout()}
         desktopOpen={desktopOpen}
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
@@ -244,19 +375,25 @@ export default function App() {
             </span>
           </div>
 
-          {/* Center: Bold Colorful YOUTH IT POS Brand */}
+          {/* Center: Youth IT POS Brand matching Login Card */}
           <div className="flex items-center justify-center shrink-0">
             <button
               type="button"
               onClick={() => navigate('dashboard')}
-              className="font-brand font-black tracking-tight text-[15px] sm:text-lg md:text-xl whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity cursor-pointer"
+              className="font-brand-wordmark font-extrabold text-[17px] sm:text-[20px] md:text-[22px] whitespace-nowrap shrink-0 hover:opacity-85 transition-opacity cursor-pointer flex items-center gap-1.5"
               title="Go to Home Dashboard"
             >
               {isYouthItPos ? (
                 <>
-                  <span className="text-[#065AA4]">YOUTH</span>{' '}
-                  <span className="text-[#f97316]">IT</span>{' '}
-                  <span className="text-[#4f46e5]">POS</span>
+                  <span className="bg-gradient-to-b from-[#0284c7] via-[#065AA4] to-[#1d4ed8] bg-clip-text text-transparent">
+                    Youth
+                  </span>
+                  <span className="bg-gradient-to-b from-[#f59e0b] via-[#f97316] to-[#ea580c] bg-clip-text text-transparent">
+                    IT
+                  </span>
+                  <span className="bg-gradient-to-b from-[#10b981] via-[#059669] to-[#047857] bg-clip-text text-transparent">
+                    POS
+                  </span>
                 </>
               ) : (
                 <span className="text-slate-900">{shopName}</span>
@@ -347,7 +484,7 @@ export default function App() {
                         {currentUser?.name || 'RAJ AHMED'}
                       </div>
                       <div className="text-[11px] font-semibold text-indigo-600 capitalize">
-                        Role: {currentUser?.role || activeRole}
+                        Role: {(currentUser?.role || activeRole).replace('_', ' ')}
                       </div>
                       <div className="text-[11px] text-slate-500 truncate">
                         {currentUser?.email || 'rajahmed249@gmail.com'}
@@ -398,7 +535,7 @@ export default function App() {
                       type="button"
                       onClick={() => {
                         setUserMenuOpen(false);
-                        handleLogout();
+                        void handleLogout();
                       }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                     >
@@ -488,8 +625,7 @@ export default function App() {
                 loadBootstrap();
               }}
               onOpenLoginPage={() => {
-                setShowLogin(true);
-                window.history.pushState({}, '', '/login');
+                void handleLogout();
               }}
             />
           )}

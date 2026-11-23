@@ -68,6 +68,10 @@ class UserController extends Controller
         }
         unset($data['remove_avatar']);
 
+        if ($user->id === 1 || $user->role === 'super_admin') {
+            $data['role'] = 'super_admin';
+        }
+
         $user->update($data);
 
         return back()->with('success', "Updated user {$user->name}.");
@@ -123,6 +127,10 @@ class UserController extends Controller
 
     public function toggle(User $user): RedirectResponse
     {
+        if ($user->id === 1 || $user->role === 'super_admin' || $user->id === Auth::id()) {
+            return back()->withErrors(['user' => 'Super Admin or currently signed-in account cannot be disabled.']);
+        }
+
         $user->update(['is_active' => !$user->is_active]);
 
         return back()->with('success', 'User status updated.');
@@ -130,8 +138,8 @@ class UserController extends Controller
 
     public function destroy(User $user): RedirectResponse
     {
-        if ($user->id === 1 || $user->id === Auth::id()) {
-            return back()->withErrors(['user' => 'Primary administrator or currently signed-in account cannot be deleted.']);
+        if ($user->id === 1 || $user->role === 'super_admin' || $user->id === Auth::id()) {
+            return back()->withErrors(['user' => 'Super Admin or currently signed-in account cannot be deleted.']);
         }
 
         $user->delete();

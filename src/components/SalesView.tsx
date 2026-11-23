@@ -82,6 +82,10 @@ export function SalesView({
 
     apiFetch<{ items: Sale[]; total: number }>(`/api/sales?${params.toString()}`)
       .then((res) => {
+        if (res.items.length === 0 && res.total > 0 && page > 1) {
+          setPage(Math.max(1, Math.ceil(res.total / limit)));
+          return;
+        }
         setSales(res.items);
         setTotal(res.total);
         setGotoInput(String(page));
@@ -92,6 +96,17 @@ export function SalesView({
   useEffect(() => {
     loadSales();
   }, [page, limit, query, statusFilter]);
+
+  useEffect(() => {
+    if (!accounts.length) {
+      setCollectAccount('');
+      return;
+    }
+    const exists = accounts.some((a) => String(a.id) === collectAccount);
+    if (!exists) {
+      setCollectAccount(String(accounts[0].id));
+    }
+  }, [accounts, collectAccount]);
 
   useEffect(() => {
     function closeMenus() {

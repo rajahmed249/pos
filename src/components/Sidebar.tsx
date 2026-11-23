@@ -108,7 +108,11 @@ export function Sidebar({
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   const visibleMenus = menus
-    .filter((m) => m.is_active && (m.roles.length === 0 || m.roles.includes(activeRole)))
+    .filter(
+      (m) =>
+        m.is_active &&
+        (activeRole === 'super_admin' || m.roles.length === 0 || m.roles.includes(activeRole))
+    )
     .sort((a, b) => a.sort_order - b.sort_order);
 
   const mainItems = visibleMenus.filter(
@@ -329,20 +333,25 @@ export function Sidebar({
             </button>
           )}
 
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-[#ffd166]/70 mb-1 px-1">
-              Active Role
-            </label>
-            <select
-              value={activeRole}
-              onChange={(e) => onRoleChange(e.target.value)}
-              className="w-full px-2.5 py-1.5 rounded-lg bg-black/30 border border-white/10 text-xs text-white/90 focus:outline-none focus:border-[#ffd166]"
-            >
-              <option value="admin" className="bg-[#1a1a2e]">Admin (Full Access)</option>
-              <option value="manager" className="bg-[#1a1a2e]">Manager</option>
-              <option value="staff" className="bg-[#1a1a2e]">Staff</option>
-            </select>
-          </div>
+          {(currentUser?.role === 'super_admin' || currentUser?.role === 'admin') && (
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-[#ffd166]/70 mb-1 px-1">
+                Active Role
+              </label>
+              <select
+                value={activeRole}
+                onChange={(e) => onRoleChange(e.target.value)}
+                className="w-full px-2.5 py-1.5 rounded-lg bg-black/30 border border-white/10 text-xs text-white/90 focus:outline-none focus:border-[#ffd166]"
+              >
+                {currentUser?.role === 'super_admin' && (
+                  <option value="super_admin" className="bg-[#1a1a2e]">Super Admin (Full Access)</option>
+                )}
+                <option value="admin" className="bg-[#1a1a2e]">Admin (Full Access)</option>
+                <option value="manager" className="bg-[#1a1a2e]">Manager</option>
+                <option value="staff" className="bg-[#1a1a2e]">Staff</option>
+              </select>
+            </div>
+          )}
 
           <button
             type="button"

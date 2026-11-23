@@ -125,6 +125,16 @@ class SaleController extends Controller
                     }
                 }
             }
+            if ((float) $sale->paid > 0) {
+                $account = $sale->account_id
+                    ? BankAccount::query()->lockForUpdate()->find($sale->account_id)
+                    : BankAccount::query()->lockForUpdate()->orderBy('id')->first();
+                if ($account) {
+                    $account->update([
+                        'balance' => max(0, (float) $account->balance - (float) $sale->paid),
+                    ]);
+                }
+            }
             $sale->items()->delete();
             $sale->payments()->delete();
             $sale->delete();

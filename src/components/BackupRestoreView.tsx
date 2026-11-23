@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AlertTriangle, Code2, Database, DatabaseBackup, Download, FileUp, Trash2, Upload } from 'lucide-react';
-import { apiFetch } from '../lib/api.ts';
+import { apiDownload, apiFetch } from '../lib/api.ts';
 import { LaravelCodeView } from './LaravelCodeView.tsx';
 
 interface BackupRestoreViewProps {
@@ -152,13 +152,22 @@ export function BackupRestoreView({ onRefreshBootstrap }: BackupRestoreViewProps
             <p className="text-xs text-slate-500 leading-relaxed">
               Export all products, sales, invoices, customers, suppliers, purchases, accounts, expenses, owners, employees, menus, and settings as a single JSON snapshot.
             </p>
-            <a
-              href="/api/backup/export"
+            <button
+              type="button"
+              onClick={() => {
+                setNotice(null);
+                void apiDownload(
+                  '/api/backup/export',
+                  `youthit-pos-backup-${new Date().toISOString().slice(0, 10)}.json`
+                ).catch((err) => {
+                  setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Export failed.' });
+                });
+              }}
               style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold text-white shadow-sm"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold text-white shadow-sm cursor-pointer"
             >
               <Download className="w-4 h-4 shrink-0" /> Download Backup (.json)
-            </a>
+            </button>
           </div>
 
           <div className="min-w-0 bg-white border border-slate-200 rounded-[20px] p-6 shadow-xs space-y-4">

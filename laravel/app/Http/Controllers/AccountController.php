@@ -10,6 +10,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class AccountController extends Controller
@@ -54,6 +55,11 @@ class AccountController extends Controller
 
         DB::transaction(function () use ($data) {
             $account = BankAccount::query()->lockForUpdate()->findOrFail($data['bank_account_id']);
+            if ($data['type'] === 'withdraw' && (float) $data['amount'] > (float) $account->balance + 0.009) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Insufficient balance in ' . $account->account_name . '.',
+                ]);
+            }
             BankTransaction::query()->create($data);
             if ($data['type'] === 'deposit') {
                 $account->increment('balance', (float) $data['amount']);

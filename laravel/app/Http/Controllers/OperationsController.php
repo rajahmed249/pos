@@ -116,16 +116,23 @@ class OperationsController extends Controller
         $filter = trim((string) $request->query('filter', 'all'));
 
         $query = Product::query()->with(['category', 'brand', 'unit'])->orderBy('name');
-        if ($search !== '') {
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%");
-            });
+        $tokens = preg_split('/\s+/', $search, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if (count($tokens) > 0) {
+            foreach ($tokens as $tok) {
+                $term = "%{$tok}%";
+                $query->where(function ($q) use ($term) {
+                    $q->where('name', 'like', $term)
+                      ->orWhere('sku', 'like', $term)
+                      ->orWhere('barcode', 'like', $term)
+                      ->orWhereHas('category', fn ($c) => $c->where('name', 'like', $term))
+                      ->orWhereHas('brand', fn ($b) => $b->where('name', 'like', $term));
+                });
+            }
         }
         if ($filter === 'low') {
-            $query->whereColumn('quantity', '<=', 'alert_quantity')->where('quantity', '>', 0);
+            $query->whereColumn('stock_quantity', '<=', 'alert_quantity')->where('stock_quantity', '>', 0);
         } elseif ($filter === 'out') {
-            $query->where('quantity', '<=', 0);
+            $query->where('stock_quantity', '<=', 0);
         }
 
         $products = $query->get();

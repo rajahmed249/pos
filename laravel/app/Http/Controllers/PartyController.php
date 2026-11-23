@@ -15,7 +15,10 @@ class PartyController extends Controller
         $customers = Customer::query()
             ->withSum('sales as total_billed', 'receivable')
             ->withSum('sales as total_due', 'due')
-            ->when($request->filled('q'), fn ($q) => $q->where('name', 'like', '%' . $request->string('q')->toString() . '%')->orWhere('phone', 'like', '%' . $request->string('q')->toString() . '%'))
+            ->when($request->filled('q'), function ($q) use ($request) {
+                $term = '%' . $request->string('q')->toString() . '%';
+                $q->where(fn ($w) => $w->where('name', 'like', $term)->orWhere('phone', 'like', $term)->orWhere('email', 'like', $term));
+            })
             ->orderByDesc('id')
             ->paginate(25)
             ->withQueryString();
@@ -53,7 +56,10 @@ class PartyController extends Controller
         $suppliers = Supplier::query()
             ->withSum('purchases as total_purchased', 'total')
             ->withSum('purchases as total_due', 'due')
-            ->when($request->filled('q'), fn ($q) => $q->where('name', 'like', '%' . $request->string('q')->toString() . '%')->orWhere('phone', 'like', '%' . $request->string('q')->toString() . '%'))
+            ->when($request->filled('q'), function ($q) use ($request) {
+                $term = '%' . $request->string('q')->toString() . '%';
+                $q->where(fn ($w) => $w->where('name', 'like', $term)->orWhere('phone', 'like', $term)->orWhere('email', 'like', $term));
+            })
             ->orderByDesc('id')
             ->paginate(25)
             ->withQueryString();

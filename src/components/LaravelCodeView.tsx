@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Download, FileCode2 } from 'lucide-react';
-import { apiFetch } from '../lib/api.ts';
+import { apiDownload, apiFetch } from '../lib/api.ts';
 
 type FileScope = 'blade' | 'migrations' | 'backend' | 'all';
 
@@ -44,14 +44,14 @@ export function LaravelCodeView() {
             All views in <span className="font-mono">resources/views/**/*.blade</span> (registered via <span className="font-mono">View::addExtension(&apos;blade&apos;, &apos;blade&apos;)</span>) · Clean URLs with zero <span className="font-mono">index.php</span>
           </p>
         </div>
-        <a
-          href="/api/laravel/download-zip"
-          download="youthit-pos-laravel-13.zip"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium shrink-0"
+        <button
+          type="button"
+          onClick={() => void apiDownload('/api/laravel/download-zip', 'youthit-pos-laravel-13.zip')}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium shrink-0 cursor-pointer"
         >
           <Download className="w-4 h-4 shrink-0" />
           Download Laravel 13 Project (.zip)
-        </a>
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-2 text-xs">

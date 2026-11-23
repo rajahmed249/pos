@@ -71,12 +71,27 @@ export function PosTerminalView({ bootstrap, onSaleComplete }: PosTerminalViewPr
   const topSearchRef = useRef<HTMLDivElement | null>(null);
   const customerBoxRef = useRef<HTMLDivElement | null>(null);
 
+  function loadCatalog(silent = false) {
+    if (!silent) setLoading(true);
+    return Promise.all([
+      apiFetch<{ items: Product[] }>('/api/products?all=1'),
+      apiFetch<{ items: Customer[] }>('/api/customers?all=1'),
+    ])
+      .then(([prodRes, custRes]) => {
+        setProducts(prodRes.items);
+        setCustomers(custRes.items);
+      })
+      .finally(() => {
+        if (!silent) setLoading(false);
+      });
+  }
+
   useEffect(() => {
     let active = true;
     setLoading(true);
     Promise.all([
-      apiFetch<{ items: Product[] }>('/api/products?limit=200'),
-      apiFetch<{ items: Customer[] }>('/api/customers?limit=200'),
+      apiFetch<{ items: Product[] }>('/api/products?all=1'),
+      apiFetch<{ items: Customer[] }>('/api/customers?all=1'),
     ])
       .then(([prodRes, custRes]) => {
         if (!active) return;
@@ -88,6 +103,17 @@ export function PosTerminalView({ bootstrap, onSaleComplete }: PosTerminalViewPr
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!bootstrap.bankAccounts.length) {
+      setAccountId('');
+      return;
+    }
+    const exists = bootstrap.bankAccounts.some((a) => String(a.id) === accountId);
+    if (!exists) {
+      setAccountId(String(bootstrap.bankAccounts[0].id));
+    }
+  }, [bootstrap.bankAccounts, accountId]);
 
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
@@ -102,28 +128,47 @@ export function PosTerminalView({ bootstrap, onSaleComplete }: PosTerminalViewPr
     return () => document.removeEventListener('mousedown', handleOutside);
   }, []);
 
-  const topSearchResults = useMemo(() => {
+  function matchesProductQuery(p: Product, rawQuery: string): boolean {
+    const tokens = rawQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return true;
+    const haystack = [
+      p.name,
+      p.sku,
+      p.barcode,
+      p.category_name,
+      p.brand_name,
+      p.warranty,
+      p.selling_price,
+    ]
+      .map((v) => String(v ?? '').toLowerCase())
+      .join(' ');
+    return tokens.every((t) => haystack.includes(t));
+  }
+
+  const allTopMatches = useMemo(() => {
     const q = topSearch.trim().toLowerCase();
     if (!q) return [];
-    return products
-      .filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          (p.sku && p.sku.toLowerCase().includes(q)) ||
-          (p.barcode && p.barcode.toLowerCase().includes(q))
-      )
-      .slice(0, 20);
+    const matched = products.filter((p) => matchesProductQuery(p, q));
+    matched.sort((a, b) => {
+      const aExact =
+        (a.barcode && a.barcode.toLowerCase() === q) || (a.sku && a.sku.toLowerCase() === q) ? 1 : 0;
+      const bExact =
+        (b.barcode && b.barcode.toLowerCase() === q) || (b.sku && b.sku.toLowerCase() === q) ? 1 : 0;
+      if (aExact !== bExact) return bExact - aExact;
+      const aStarts = a.name.toLowerCase().startsWith(q) ? 1 : 0;
+      const bStarts = b.name.toLowerCase().startsWith(q) ? 1 : 0;
+      if (aStarts !== bStarts) return bStarts - aStarts;
+      return 0;
+    });
+    return matched;
   }, [products, topSearch]);
 
+  const topSearchResults = useMemo(() => allTopMatches.slice(0, 60), [allTopMatches]);
+
   const sideProducts = useMemo(() => {
-    const q = sideSearch.trim().toLowerCase();
+    const q = sideSearch.trim();
     if (!q) return products;
-    return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        (p.sku && p.sku.toLowerCase().includes(q)) ||
-        (p.barcode && p.barcode.toLowerCase().includes(q))
-    );
+    return products.filter((p) => matchesProductQuery(p, q));
   }, [products, sideSearch]);
 
   const selectedCustomer = useMemo(
@@ -133,18 +178,18 @@ export function PosTerminalView({ bootstrap, onSaleComplete }: PosTerminalViewPr
 
   const previousDue = useMemo(() => {
     if (!selectedCustomer) return 0;
-    return Number(selectedCustomer.due ?? selectedCustomer.opening_balance ?? 0);
+    return Math.max(Number(selectedCustomer.due ?? 0), Number(selectedCustomer.opening_balance ?? 0));
   }, [selectedCustomer]);
 
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
     const walkIn = { id: 0, name: 'Walk-in Customer', phone: '', email: '', address: '' } as Customer;
     if (!q) return [walkIn, ...customers];
-    const matches = customers.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.phone && c.phone.toLowerCase().includes(q))
-    );
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const matches = customers.filter((c) => {
+      const text = `${c.name ?? ''} ${c.phone ?? ''} ${c.email ?? ''} ${c.address ?? ''}`.toLowerCase();
+      return tokens.every((t) => text.includes(t));
+    });
     if ('walk-in customer'.includes(q) || 'walkin'.includes(q)) {
       return [walkIn, ...matches];
     }
@@ -249,7 +294,7 @@ export function PosTerminalView({ bootstrap, onSaleComplete }: PosTerminalViewPr
         body: JSON.stringify({
           customer_id: selectedCustomerId > 0 ? selectedCustomerId : null,
           customer_name: selectedCustomer ? selectedCustomer.name : 'Walk-in Customer',
-          account_id: Number(accountId || bootstrap.bankAccounts[0]?.id || 21),
+          account_id: Number(accountId || bootstrap.bankAccounts[0]?.id || 0),
           payment_method: paymentMethod,
           sale_date: saleDate,
           discount: discountNum,
@@ -272,6 +317,7 @@ export function PosTerminalView({ bootstrap, onSaleComplete }: PosTerminalViewPr
       setReceivedAmount('');
       setNote('');
       setSelectedCustomerId(0);
+      loadCatalog(true);
       onSaleComplete(result.sale, result.items);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to complete order.';
@@ -348,7 +394,31 @@ export function PosTerminalView({ bootstrap, onSaleComplete }: PosTerminalViewPr
                     setTopSearch(e.target.value);
                     setTopDropdownOpen(true);
                   }}
-                  placeholder="Search product by name, SKU, or barcode..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const q = topSearch.trim().toLowerCase();
+                      if (!q || allTopMatches.length === 0) return;
+                      const exactMatch = allTopMatches.find(
+                        (p) =>
+                          (p.barcode && p.barcode.toLowerCase() === q) ||
+                          (p.sku && p.sku.toLowerCase() === q)
+                      );
+                      const candidate = exactMatch ?? (allTopMatches.length === 1 ? allTopMatches[0] : null);
+                      if (candidate) {
+                        if (Number(candidate.quantity ?? 0) <= 0) {
+                          const msg = `"${candidate.name}" is out of stock.`;
+                          setError(msg);
+                          showCenterPopup({ type: 'warning', title: 'Out of Stock', message: msg });
+                          return;
+                        }
+                        addToCart(candidate);
+                        setTopSearch('');
+                        setTopDropdownOpen(false);
+                      }
+                    }
+                  }}
+                  placeholder="Search product by name, SKU, barcode, brand, or category..."
                   className="w-full pl-12 pr-9 py-3 border-2 border-slate-200 bg-slate-50/60 focus:bg-white rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#4f46e5] focus:ring-4 focus:ring-[#4f46e5]/10 transition-all"
                 />
                 {topSearch && (
@@ -366,73 +436,81 @@ export function PosTerminalView({ bootstrap, onSaleComplete }: PosTerminalViewPr
               </div>
 
               {topDropdownOpen && topSearch.trim().length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl max-h-[320px] overflow-y-auto z-30 shadow-[0_18px_40px_rgba(15,23,42,0.14)] divide-y divide-slate-100">
+                <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl max-h-[340px] overflow-y-auto z-30 shadow-[0_18px_40px_rgba(15,23,42,0.14)] divide-y divide-slate-100">
                   {topSearchResults.length > 0 ? (
-                    topSearchResults.map((product) => {
-                      const out = Number(product.quantity) <= 0;
-                      return (
-                        <div
-                          key={product.id}
-                          onClick={() => {
-                            if (!out) {
-                              addToCart(product);
-                              setTopSearch('');
-                              setTopDropdownOpen(false);
-                            }
-                          }}
-                          className={`flex items-center justify-between gap-3 px-3.5 py-2.5 transition-colors ${
-                            out
-                              ? 'opacity-60 bg-red-50/60 cursor-not-allowed'
-                              : 'hover:bg-indigo-50/60 cursor-pointer'
-                          }`}
-                        >
-                          <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200/80 flex items-center justify-center overflow-hidden shrink-0">
-                            {product.image ? (
-                              <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <Box className="w-4 h-4 text-slate-400" />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[13px] font-bold text-slate-800 truncate">{product.name}</div>
-                            <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
-                              <span>SKU: {product.sku || 'N/A'}</span>
-                              {product.warranty && product.warranty !== 'No Warranty' && (
-                                <span className="text-indigo-600 font-medium inline-flex items-center gap-1">
-                                  <Shield className="w-3 h-3" /> {product.warranty}
-                                </span>
-                              )}
-                              <span
-                                className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
-                                  out ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700'
-                                }`}
-                              >
-                                {out ? 'Out of Stock' : `Stock: ${product.quantity}`}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2.5 shrink-0">
-                            <span className="text-[13px] font-extrabold text-emerald-600 tabular-nums">
-                              {formatMoney(product.selling_price, cur)}
-                            </span>
-                            <button
-                              type="button"
-                              disabled={out}
-                              onClick={(e) => {
-                                e.stopPropagation();
+                    <>
+                      {topSearchResults.map((product) => {
+                        const out = Number(product.quantity) <= 0;
+                        return (
+                          <div
+                            key={product.id}
+                            onClick={() => {
+                              if (!out) {
                                 addToCart(product);
                                 setTopSearch('');
                                 setTopDropdownOpen(false);
-                              }}
-                              style={!out ? { background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' } : undefined}
-                              className="disabled:bg-slate-300 text-white px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 cursor-pointer shadow-xs"
-                            >
-                              <Plus className="w-3 h-3" /> Add
-                            </button>
+                              }
+                            }}
+                            className={`flex items-center justify-between gap-3 px-3.5 py-2.5 transition-colors ${
+                              out
+                                ? 'opacity-60 bg-red-50/60 cursor-not-allowed'
+                                : 'hover:bg-indigo-50/60 cursor-pointer'
+                            }`}
+                          >
+                            <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200/80 flex items-center justify-center overflow-hidden shrink-0">
+                              {product.image ? (
+                                <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <Box className="w-4 h-4 text-slate-400" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[13px] font-bold text-slate-800 truncate">{product.name}</div>
+                              <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
+                                <span>SKU: {product.sku || 'N/A'}</span>
+                                {product.barcode && <span>Barcode: {product.barcode}</span>}
+                                {product.warranty && product.warranty !== 'No Warranty' && (
+                                  <span className="text-indigo-600 font-medium inline-flex items-center gap-1">
+                                    <Shield className="w-3 h-3" /> {product.warranty}
+                                  </span>
+                                )}
+                                <span
+                                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
+                                    out ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700'
+                                  }`}
+                                >
+                                  {out ? 'Out of Stock' : `Stock: ${product.quantity}`}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2.5 shrink-0">
+                              <span className="text-[13px] font-extrabold text-emerald-600 tabular-nums">
+                                {formatMoney(product.selling_price, cur)}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={out}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  addToCart(product);
+                                  setTopSearch('');
+                                  setTopDropdownOpen(false);
+                                }}
+                                style={!out ? { background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' } : undefined}
+                                className="disabled:bg-slate-300 text-white px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 cursor-pointer shadow-xs"
+                              >
+                                <Plus className="w-3 h-3" /> Add
+                              </button>
+                            </div>
                           </div>
+                        );
+                      })}
+                      {allTopMatches.length > topSearchResults.length && (
+                        <div className="px-3.5 py-2 text-center text-[11px] font-semibold text-indigo-600 bg-indigo-50/40">
+                          Showing {topSearchResults.length} of {allTopMatches.length} matching products — type more to narrow results
                         </div>
-                      );
-                    })
+                      )}
+                    </>
                   ) : (
                     <div className="p-6 text-center text-sm text-slate-400">No matching products found</div>
                   )}

@@ -22,6 +22,7 @@ Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AuthController::class, 'login'])->name('login.attempt');
     Route::get('/forgot-password', [AuthController::class, 'showForgotPassword'])->name('password.forgot');
+    Route::post('/forgot-password/send-code', [AuthController::class, 'sendRecoveryCode'])->name('password.send_code');
     Route::post('/forgot-password', [AuthController::class, 'recoverPassword'])->name('password.recover');
 });
 

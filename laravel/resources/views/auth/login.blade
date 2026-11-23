@@ -1,79 +1,122 @@
 @extends('layouts.guest')
 
-@section('title', 'Sign In — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
+@section('title', 'Welcome Back — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
 
 @section('content')
-<div class="w-full max-w-[440px] bg-white border border-slate-200/90 rounded-[24px] p-6 sm:p-8 shadow-[0_24px_60px_rgba(15,23,42,0.1)]">
-    {{-- Centered Brand Lockup --}}
-    <div class="flex flex-col items-center text-center mb-6">
-        <div class="w-16 h-16 rounded-2xl bg-white border-2 border-indigo-100 p-1.5 shadow-sm flex items-center justify-center mb-3 overflow-hidden">
-            <img src="{{ asset($appSettings['shop_logo'] ?? 'assets/images/logo.jpg') }}" alt="Logo" class="w-full h-full object-contain">
-        </div>
-        <div class="font-brand text-[26px] font-black tracking-tight leading-none">
-            <span class="text-[#065AA4]">YOUTH</span>
-            <span class="text-[#f97316]">IT</span>
-            <span class="text-[#4f46e5]">POS</span>
-        </div>
-        <p class="text-xs text-slate-500 mt-1.5">Sign in with your account credentials to continue</p>
+<div class="relative w-full max-w-[358px] rounded-[28px] overflow-hidden border border-[#7c3aed]/45 shadow-[0_24px_80px_rgba(15,10,48,0.85),0_0_45px_rgba(99,102,241,0.22)]"
+     style="background: linear-gradient(180deg, #2b2a7d 0%, #17194a 26%, #0c1028 60%, #090c20 100%);">
+
+    {{-- Thin Top Blue-Teal-Gold Accent Border --}}
+    <div aria-hidden="true" class="pointer-events-none absolute inset-x-0 top-0 h-[3px] z-20"
+         style="background: linear-gradient(90deg, #0088d1 0%, #0ea5e9 34%, #1f8a88 68%, #938a34 100%);"></div>
+
+    {{-- Top soft radial illumination --}}
+    <div aria-hidden="true" class="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-[300px] h-[220px] rounded-full blur-3xl opacity-55"
+         style="background: radial-gradient(circle, rgba(99,102,241,0.55) 0%, transparent 70%);"></div>
+
+    {{-- Bottom luminous silk wave ribbons --}}
+    <div aria-hidden="true" class="pointer-events-none absolute inset-x-0 bottom-0 h-[118px] overflow-hidden">
+        <div class="absolute inset-x-0 -bottom-5 h-28 blur-2xl opacity-65"
+             style="background: radial-gradient(ellipse at 25% 80%, rgba(59,130,246,0.6), transparent 55%), radial-gradient(ellipse at 78% 75%, rgba(217,70,239,0.6), transparent 55%);"></div>
+        <svg viewBox="0 0 400 120" preserveAspectRatio="none" class="w-full h-full block">
+            <defs>
+                <linearGradient id="bladeLoginWave1" x1="0%" y1="50%" x2="100%" y2="50%">
+                    <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.32" />
+                    <stop offset="45%" stop-color="#7c3aed" stop-opacity="0.5" />
+                    <stop offset="100%" stop-color="#e879f9" stop-opacity="0.46" />
+                </linearGradient>
+                <linearGradient id="bladeLoginWave2" x1="0%" y1="50%" x2="100%" y2="50%">
+                    <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.48" />
+                    <stop offset="50%" stop-color="#8b5cf6" stop-opacity="0.32" />
+                    <stop offset="100%" stop-color="#d946ef" stop-opacity="0.6" />
+                </linearGradient>
+                <linearGradient id="bladeLoginWaveStroke" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.72" />
+                    <stop offset="50%" stop-color="#a78bfa" stop-opacity="0.35" />
+                    <stop offset="100%" stop-color="#f0abfc" stop-opacity="0.75" />
+                </linearGradient>
+            </defs>
+            <path d="M0,92 C75,50 145,108 225,72 C295,42 348,54 400,82 L400,120 L0,120 Z" fill="url(#bladeLoginWave1)" />
+            <path d="M0,100 C62,68 120,36 195,78 C265,116 332,32 400,62 L400,120 L0,120 Z" fill="url(#bladeLoginWave2)" />
+            <path d="M0,95 C68,52 128,42 198,80 C268,114 332,34 400,64" fill="none" stroke="url(#bladeLoginWaveStroke)" stroke-width="1.5" />
+        </svg>
     </div>
 
-    {{-- Mode Switcher --}}
-    <div class="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-xl text-xs font-semibold mb-5">
-        <a href="{{ route('login') }}" class="py-2 rounded-lg bg-white text-slate-900 shadow-xs text-center">Sign In</a>
-        <a href="{{ route('password.forgot') }}" class="py-2 rounded-lg text-slate-600 hover:text-slate-900 text-center">Forgot Password</a>
-    </div>
-
-    @if(session('status'))
-        <div class="mb-4 px-4 py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs font-medium">
-            <i class="fas fa-check-circle mr-1.5"></i>{{ session('status') }}
+    <div class="relative z-10 px-6 pt-7 pb-[106px]">
+        @php
+            $loginShopName = trim((string) ($appSettings['shop_name'] ?? 'YOUTH IT POS'));
+            $isYouthItBrand = str_contains(strtoupper($loginShopName), 'YOUTH IT');
+        @endphp
+        {{-- Classic Logo + YOUTH IT POS Header --}}
+        <div class="flex flex-col items-center text-center mb-5">
+            <div class="w-[64px] h-[64px] rounded-[16px] bg-white border-2 border-[#ffd166] p-1 flex items-center justify-center mb-3 shadow-[0_10px_24px_rgba(255,209,102,0.28),0_10px_28px_rgba(15,10,48,0.65)] overflow-hidden">
+                <img src="{{ asset($appSettings['shop_logo'] ?? 'assets/images/logo.jpg') }}"
+                     alt="{{ $loginShopName }}"
+                     class="w-full h-full object-contain" />
+            </div>
+            <h1 class="font-brand-wordmark text-[27px] sm:text-[29px] font-extrabold leading-tight flex items-center justify-center gap-2">
+                @if($isYouthItBrand)
+                    <span class="bg-gradient-to-b from-[#bae6fd] via-[#38bdf8] to-[#2563eb] bg-clip-text text-transparent drop-shadow-[0_2px_10px_rgba(56,189,248,0.4)]">Youth</span>
+                    <span class="bg-gradient-to-b from-[#fde68a] via-[#fbbf24] to-[#f97316] bg-clip-text text-transparent drop-shadow-[0_2px_10px_rgba(251,191,36,0.45)]">IT</span>
+                    <span class="bg-gradient-to-b from-[#a7f3d0] via-[#34d399] to-[#059669] bg-clip-text text-transparent drop-shadow-[0_2px_10px_rgba(52,211,153,0.4)]">POS</span>
+                @else
+                    <span class="bg-gradient-to-b from-white via-indigo-100 to-indigo-300 bg-clip-text text-transparent">{{ $loginShopName }}</span>
+                @endif
+            </h1>
+            <p class="text-[13px] text-indigo-100/75 mt-1">Welcome Back</p>
         </div>
-    @endif
 
-    @if($errors->any())
-        <div class="mb-4 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-xs font-medium">
-            {{ $errors->first() }}
-        </div>
-    @endif
+        @if(session('status'))
+            <div class="mb-4 px-3.5 py-2 rounded-xl border border-emerald-400/35 bg-emerald-500/15 text-emerald-200 text-xs font-medium">
+                <i class="fas fa-check-circle mr-1.5"></i>{{ session('status') }}
+            </div>
+        @endif
 
-    <form method="POST" action="{{ route('login.attempt') }}" class="space-y-4">
-        @csrf
-        <div>
-            <label for="email" class="block text-xs font-semibold text-slate-700 mb-1.5">Email or Username</label>
-            <div class="relative">
-                <i class="fas fa-envelope text-slate-400 text-xs absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+        @if($errors->any())
+            <div class="mb-4 px-3.5 py-2 rounded-xl border border-rose-400/35 bg-rose-500/15 text-rose-200 text-xs font-medium">
+                {{ $errors->first() }}
+            </div>
+        @endif
+
+        <form method="POST" action="{{ route('login.attempt') }}" class="space-y-3">
+            @csrf
+            <div class="relative flex items-center">
+                <i class="far fa-envelope text-indigo-200/80 text-base absolute left-4 pointer-events-none"></i>
                 <input id="email" name="email" type="text" value="{{ old('email', 'rajahmed249@gmail.com') }}" required autofocus
-                       placeholder="rajahmed249@gmail.com or username"
-                       class="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100">
+                       aria-label="Email address"
+                       placeholder="Email address"
+                       class="w-full pl-11 pr-4 py-3 rounded-[14px] text-sm text-white placeholder:text-indigo-100/65 bg-[#0e132d]/85 border border-indigo-300/20 focus:outline-none focus:border-violet-400/75 focus:ring-2 focus:ring-violet-500/25 transition-all">
             </div>
-        </div>
 
-        <div>
-            <div class="flex items-center justify-between mb-1.5">
-                <label for="password" class="block text-xs font-semibold text-slate-700">Password</label>
-                <a href="{{ route('password.forgot') }}" class="text-xs font-semibold text-indigo-600 hover:underline">
-                    Forgot Password?
-                </a>
-            </div>
-            <div class="relative">
-                <i class="fas fa-lock text-slate-400 text-xs absolute left-3.5 top-1/2 -translate-y-1/2"></i>
-                <input id="password" name="password" type="password" required placeholder="Enter your password"
-                       class="w-full pl-10 pr-10 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100">
-                <button type="button" onclick="var p=document.getElementById('password'); p.type=p.type==='password'?'text':'password';"
-                        class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer">
-                    <i class="fas fa-eye text-xs"></i>
+            <div class="relative flex items-center">
+                <i class="fas fa-lock text-indigo-200/80 text-base absolute left-4 pointer-events-none"></i>
+                <input id="password" name="password" type="password" required
+                       aria-label="Password"
+                       placeholder="Password"
+                       class="w-full pl-11 pr-11 py-3 rounded-[14px] text-sm text-white placeholder:text-indigo-100/65 bg-[#0e132d]/85 border border-indigo-300/20 focus:outline-none focus:border-violet-400/75 focus:ring-2 focus:ring-violet-500/25 transition-all">
+                <button type="button" onclick="var p=document.getElementById('password');var ic=this.querySelector('i');if(p.type==='password'){p.type='text';ic.classList.remove('fa-eye');ic.classList.add('fa-eye-slash');}else{p.type='password';ic.classList.remove('fa-eye-slash');ic.classList.add('fa-eye');}"
+                        aria-label="Toggle password visibility"
+                        class="absolute right-3.5 text-indigo-200/80 hover:text-white p-1 cursor-pointer transition-colors">
+                    <i class="far fa-eye text-base"></i>
                 </button>
             </div>
-        </div>
 
-        <label class="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer pt-0.5">
-            <input type="checkbox" name="remember" class="rounded border-slate-300 text-indigo-600">
-            <span>Keep me signed in on this terminal</span>
-        </label>
+            <div class="flex items-center justify-between gap-2 pt-0.5 pb-0.5 text-xs">
+                <label class="inline-flex items-center gap-2 text-indigo-100/90 cursor-pointer select-none">
+                    <input type="checkbox" name="remember" checked
+                           class="w-4 h-4 rounded border-indigo-200/50 bg-[#0e132d] text-[#7c3aed] focus:ring-violet-400">
+                    <span>Remember me</span>
+                </label>
+                <a href="{{ route('password.forgot') }}" class="font-medium text-[#c084fc] hover:text-[#e879f9] transition-colors whitespace-nowrap">
+                    Forgot password?
+                </a>
+            </div>
 
-        <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
-                class="w-full py-3 px-5 rounded-xl text-sm font-semibold text-white shadow-[0_6px_18px_rgba(79,70,229,0.28)] hover:opacity-95 transition-opacity cursor-pointer">
-            <i class="fas fa-lock mr-1.5"></i> Sign In
-        </button>
-    </form>
+            <button type="submit" style="background: linear-gradient(90deg, #3b82f6 0%, #7c3aed 52%, #e052f5 100%);"
+                    class="w-full py-3 px-5 rounded-[14px] text-[15px] font-semibold text-white shadow-[0_10px_28px_rgba(124,58,237,0.45)] hover:brightness-110 transition-all cursor-pointer">
+                Login
+            </button>
+        </form>
+    </div>
 </div>
 @endsection

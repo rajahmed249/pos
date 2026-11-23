@@ -6,10 +6,12 @@ use App\Models\Damage;
 use App\Models\Product;
 use App\Models\ReturnItem;
 use App\Models\Sale;
+use App\Models\StockMovement;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class ReturnDamageController extends Controller
@@ -52,8 +54,19 @@ class ReturnDamageController extends Controller
                 'created_by' => Auth::id(),
             ]);
 
-            $product->increment('quantity', (int) $data['quantity']);
-            $product->increment('stock_quantity', (int) $data['quantity']);
+            $oldQty = (int) ($product->stock_quantity ?? $product->quantity ?? 0);
+            $newQty = $oldQty + (int) $data['quantity'];
+            $product->update(['quantity' => $newQty, 'stock_quantity' => $newQty]);
+
+            StockMovement::query()->create([
+                'product_id' => $product->id,
+                'old_quantity' => $oldQty,
+                'new_quantity' => $newQty,
+                'difference' => (int) $data['quantity'],
+                'reason' => "Sales Return ({$sale->invoice_no})",
+                'created_by' => Auth::id(),
+                'created_at' => now(),
+            ]);
         });
 
         return back()->with('success', 'Sales return processed and stock restored.');
@@ -69,20 +82,36 @@ class ReturnDamageController extends Controller
 
         DB::transaction(function () use ($data) {
             $product = Product::query()->lockForUpdate()->findOrFail($data['product_id']);
-            $qty = min($product->quantity, (int) $data['quantity']);
-            $loss = $qty * (float) $product->purchase_price;
+            $availableStock = (int) ($product->stock_quantity ?? $product->quantity ?? 0);
+            $reqQty = (int) $data['quantity'];
+            if ($reqQty > $availableStock) {
+                throw ValidationException::withMessages([
+                    'quantity' => "Damaged quantity ({$reqQty}) exceeds available stock ({$availableStock}) for {$product->name}.",
+                ]);
+            }
+            $loss = $reqQty * (float) $product->purchase_price;
 
             Damage::query()->create([
                 'product_id' => $product->id,
-                'quantity' => $qty,
+                'quantity' => $reqQty,
                 'reason' => $data['reason'] ?? null,
                 'loss_amount' => $loss,
                 'damage_date' => now()->toDateString(),
                 'created_by' => Auth::id(),
             ]);
 
-            $product->decrement('quantity', $qty);
-            $product->decrement('stock_quantity', $qty);
+            $newQty = max(0, $availableStock - $reqQty);
+            $product->update(['quantity' => $newQty, 'stock_quantity' => $newQty]);
+
+            StockMovement::query()->create([
+                'product_id' => $product->id,
+                'old_quantity' => $availableStock,
+                'new_quantity' => $newQty,
+                'difference' => -$reqQty,
+                'reason' => $data['reason'] ?? 'Damaged Stock',
+                'created_by' => Auth::id(),
+                'created_at' => now(),
+            ]);
         });
 
         return back()->with('success', 'Damage recorded and stock deducted.');

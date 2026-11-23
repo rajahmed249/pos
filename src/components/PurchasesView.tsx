@@ -29,19 +29,19 @@ export function PurchasesView({ currency, onRefreshBootstrap }: PurchasesViewPro
     const params = new URLSearchParams({ page: String(page), limit: '25' });
     if (query) params.set('q', query);
     apiFetch<{ items: Purchase[]; total: number }>(`/api/purchases?${params.toString()}`).then((res) => {
+      if (res.items.length === 0 && res.total > 0 && page > 1) {
+        setPage(Math.max(1, Math.ceil(res.total / 25)));
+        return;
+      }
       setPurchases(res.items);
       setTotal(res.total);
     });
   }
 
-  useEffect(() => {
-    loadPurchases();
-  }, [page, query]);
-
-  useEffect(() => {
+  function loadCatalog() {
     Promise.all([
-      apiFetch<{ items: Supplier[] }>('/api/suppliers?limit=150'),
-      apiFetch<{ items: Product[] }>('/api/products?limit=200'),
+      apiFetch<{ items: Supplier[] }>('/api/suppliers?all=1'),
+      apiFetch<{ items: Product[] }>('/api/products?all=1'),
     ]).then(([supRes, prodRes]) => {
       setSuppliers(supRes.items);
       setProducts(prodRes.items);
@@ -52,6 +52,14 @@ export function PurchasesView({ currency, onRefreshBootstrap }: PurchasesViewPro
         price: prev.price || String(prodRes.items[0]?.purchase_price ?? '0'),
       }));
     });
+  }
+
+  useEffect(() => {
+    loadPurchases();
+  }, [page, query]);
+
+  useEffect(() => {
+    loadCatalog();
   }, []);
 
   async function handleCreatePurchase(e: React.FormEvent) {
@@ -82,6 +90,7 @@ export function PurchasesView({ currency, onRefreshBootstrap }: PurchasesViewPro
       });
       setNotice({ type: 'success', text: 'Purchase recorded and stock updated!' });
       loadPurchases();
+      loadCatalog();
       onRefreshBootstrap();
     } catch (err) {
       setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save purchase.' });
@@ -129,6 +138,7 @@ export function PurchasesView({ currency, onRefreshBootstrap }: PurchasesViewPro
               onChange={(e) => setForm({ ...form, supplier_id: e.target.value })}
               className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md"
             >
+              {suppliers.length === 0 && <option value="">-- Select Supplier --</option>}
               {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
@@ -144,6 +154,7 @@ export function PurchasesView({ currency, onRefreshBootstrap }: PurchasesViewPro
               }}
               className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md"
             >
+              {products.length === 0 && <option value="">-- Select Product --</option>}
               {products.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
@@ -173,7 +184,7 @@ export function PurchasesView({ currency, onRefreshBootstrap }: PurchasesViewPro
               </select>
             </div>
           </div>
-          <button type="submit" className="w-full py-2 bg-slate-900 text-white rounded-md font-medium cursor-pointer">
+          <button type="submit" disabled={!suppliers.length || !products.length} className="w-full py-2 bg-slate-900 text-white rounded-md font-medium disabled:opacity-50 cursor-pointer">
             Save Purchase
           </button>
         </form>

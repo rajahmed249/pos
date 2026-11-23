@@ -56,22 +56,41 @@ export function FinanceView({ section, bootstrap, onRefreshBootstrap }: FinanceV
     setNotice(null);
     loadSection();
     if (section === 'estimates' || section === 'returns' || section === 'damages') {
-      apiFetch<{ items: Product[] }>('/api/products?limit=150').then((r) => {
+      apiFetch<{ items: Product[] }>('/api/products?all=1').then((r) => {
         setProducts(r.items);
         if (r.items[0]) {
           setEstForm((prev) => ({ ...prev, product_id: prev.product_id || String(r.items[0].id), price: prev.price || String(r.items[0].selling_price) }));
-          setRetForm((prev) => ({ ...prev, product_id: prev.product_id || String(r.items[0].id), price: String(r.items[0].selling_price) }));
+          setRetForm((prev) => ({ ...prev, product_id: prev.product_id || String(r.items[0].id), price: prev.price !== '0' ? prev.price : String(r.items[0].selling_price) }));
           setDmgForm((prev) => ({ ...prev, product_id: prev.product_id || String(r.items[0].id) }));
         }
       });
     }
     if (section === 'returns') {
-      apiFetch<{ items: Sale[] }>('/api/sales?limit=50').then((r) => {
+      apiFetch<{ items: Sale[] }>('/api/sales?all=1').then((r) => {
         setSales(r.items);
         if (r.items[0]) setRetForm((prev) => ({ ...prev, sale_id: prev.sale_id || String(r.items[0].id) }));
       });
     }
   }, [section]);
+
+  useEffect(() => {
+    if (!bootstrap.bankAccounts.length) {
+      setTxForm((prev) => ({ ...prev, bank_account_id: '' }));
+      return;
+    }
+    const exists = bootstrap.bankAccounts.some((a) => String(a.id) === txForm.bank_account_id);
+    if (!exists) {
+      setTxForm((prev) => ({ ...prev, bank_account_id: String(bootstrap.bankAccounts[0].id) }));
+    }
+  }, [bootstrap.bankAccounts, txForm.bank_account_id]);
+
+  useEffect(() => {
+    if (!bootstrap.expenseCategories.length) return;
+    const exists = bootstrap.expenseCategories.some((c) => c.name === expForm.category);
+    if (!exists) {
+      setExpForm((prev) => ({ ...prev, category: bootstrap.expenseCategories[0].name }));
+    }
+  }, [bootstrap.expenseCategories, expForm.category]);
 
   const noticeBar = notice ? (
     <div
@@ -112,13 +131,14 @@ export function FinanceView({ section, bootstrap, onRefreshBootstrap }: FinanceV
                 const p = products.find((x) => String(x.id) === e.target.value);
                 setEstForm({ ...estForm, product_id: e.target.value, price: p ? String(p.selling_price) : estForm.price });
               }} className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md">
+                {products.length === 0 && <option value="">-- Select Product --</option>}
                 {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="number" min={1} value={estForm.quantity} onChange={(e) => setEstForm({ ...estForm, quantity: e.target.value })} className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md tabular-nums" />
                 <input type="number" step="0.01" min={0} value={estForm.price} onChange={(e) => setEstForm({ ...estForm, price: e.target.value })} className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md tabular-nums" />
               </div>
-              <button type="submit" className="w-full py-2 bg-slate-900 text-white rounded-md font-medium cursor-pointer">Create Estimate</button>
+              <button type="submit" disabled={!products.length} className="w-full py-2 bg-slate-900 text-white rounded-md font-medium disabled:opacity-50 cursor-pointer">Create Estimate</button>
             </form>
           </div>
 
@@ -188,6 +208,7 @@ export function FinanceView({ section, bootstrap, onRefreshBootstrap }: FinanceV
                 className="space-y-3 text-sm"
               >
                 <select value={txForm.bank_account_id} onChange={(e) => setTxForm({ ...txForm, bank_account_id: e.target.value })} className="w-full px-3 py-1.5 border border-slate-300 rounded-md">
+                  {accounts.length === 0 && <option value="">-- Select Account --</option>}
                   {accounts.map((a) => <option key={a.id} value={a.id}>{a.account_name}</option>)}
                 </select>
                 <select value={txForm.type} onChange={(e) => setTxForm({ ...txForm, type: e.target.value })} className="w-full px-3 py-1.5 border border-slate-300 rounded-md">
@@ -196,7 +217,7 @@ export function FinanceView({ section, bootstrap, onRefreshBootstrap }: FinanceV
                 </select>
                 <input type="number" step="0.01" min="0.01" required placeholder="Amount" value={txForm.amount} onChange={(e) => setTxForm({ ...txForm, amount: e.target.value })} className="w-full px-3 py-1.5 border border-slate-300 rounded-md tabular-nums" />
                 <input type="text" placeholder="Description" value={txForm.description} onChange={(e) => setTxForm({ ...txForm, description: e.target.value })} className="w-full px-3 py-1.5 border border-slate-300 rounded-md" />
-                <button type="submit" className="w-full py-2 bg-slate-900 text-white rounded-md font-medium cursor-pointer">Post Transaction</button>
+                <button type="submit" disabled={!accounts.length} className="w-full py-2 bg-slate-900 text-white rounded-md font-medium disabled:opacity-50 cursor-pointer">Post Transaction</button>
               </form>
             </div>
 
@@ -346,14 +367,27 @@ export function FinanceView({ section, bootstrap, onRefreshBootstrap }: FinanceV
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-sm mb-5"
           >
             <select value={retForm.sale_id} onChange={(e) => setRetForm({ ...retForm, sale_id: e.target.value })} className="px-3 py-2 border border-slate-300 rounded-lg">
+              {sales.length === 0 && <option value="">-- Select Sale --</option>}
               {sales.map((s) => <option key={s.id} value={s.id}>{s.invoice_no} — {s.customer_name}</option>)}
             </select>
-            <select value={retForm.product_id} onChange={(e) => setRetForm({ ...retForm, product_id: e.target.value })} className="px-3 py-2 border border-slate-300 rounded-lg">
+            <select
+              value={retForm.product_id}
+              onChange={(e) => {
+                const chosen = products.find((p) => String(p.id) === e.target.value);
+                setRetForm({
+                  ...retForm,
+                  product_id: e.target.value,
+                  price: chosen ? String(chosen.selling_price) : retForm.price,
+                });
+              }}
+              className="px-3 py-2 border border-slate-300 rounded-lg"
+            >
+              {products.length === 0 && <option value="">-- Select Product --</option>}
               {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             <input type="number" min={1} value={retForm.quantity} onChange={(e) => setRetForm({ ...retForm, quantity: e.target.value })} className="px-3 py-2 border border-slate-300 rounded-lg tabular-nums" placeholder="Qty" />
             <input type="number" step="0.01" min={0} value={retForm.price} onChange={(e) => setRetForm({ ...retForm, price: e.target.value })} className="px-3 py-2 border border-slate-300 rounded-lg tabular-nums" placeholder="Price" />
-            <button type="submit" className="py-2 px-4 bg-slate-900 text-white rounded-lg font-medium cursor-pointer">Process Return</button>
+            <button type="submit" disabled={!sales.length || !products.length} className="py-2 px-4 bg-slate-900 text-white rounded-lg font-medium disabled:opacity-50 cursor-pointer">Process Return</button>
           </form>
           <div className="divide-y divide-slate-100 text-xs">
             {returnsList.map((r) => (
@@ -386,11 +420,12 @@ export function FinanceView({ section, bootstrap, onRefreshBootstrap }: FinanceV
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm mb-5"
           >
             <select value={dmgForm.product_id} onChange={(e) => setDmgForm({ ...dmgForm, product_id: e.target.value })} className="px-3 py-2 border border-slate-300 rounded-lg">
+              {products.length === 0 && <option value="">-- Select Product --</option>}
               {products.map((p) => <option key={p.id} value={p.id}>{p.name} (Stock: {p.quantity})</option>)}
             </select>
             <input type="number" min={1} value={dmgForm.quantity} onChange={(e) => setDmgForm({ ...dmgForm, quantity: e.target.value })} className="px-3 py-2 border border-slate-300 rounded-lg tabular-nums" placeholder="Qty" />
             <input type="text" placeholder="Damage reason" value={dmgForm.reason} onChange={(e) => setDmgForm({ ...dmgForm, reason: e.target.value })} className="px-3 py-2 border border-slate-300 rounded-lg" />
-            <button type="submit" className="py-2 px-4 bg-red-600 text-white rounded-lg font-medium cursor-pointer">Record Damage</button>
+            <button type="submit" disabled={!products.length} className="py-2 px-4 bg-red-600 text-white rounded-lg font-medium disabled:opacity-50 cursor-pointer">Record Damage</button>
           </form>
           <div className="divide-y divide-slate-100 text-xs">
             {damagesList.map((d) => (

@@ -19,6 +19,10 @@ export function PartiesView({ mode, currency }: PartiesViewProps) {
     const params = new URLSearchParams({ page: String(page), limit: '25' });
     if (query) params.set('q', query);
     apiFetch<{ items: Array<Customer & Supplier>; total: number }>(`/api/${mode}?${params.toString()}`).then((res) => {
+      if (res.items.length === 0 && res.total > 0 && page > 1) {
+        setPage(Math.max(1, Math.ceil(res.total / 25)));
+        return;
+      }
       setRows(res.items);
       setTotal(res.total);
     });

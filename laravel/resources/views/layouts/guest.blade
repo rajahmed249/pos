@@ -8,11 +8,59 @@
     <link rel="shortcut icon" type="image/png" href="{{ asset($appSettings['shop_favicon'] ?? 'assets/images/favicon.png') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Public+Sans:wght@400;500;600&family=Sora:wght@600;700;800&family=Urbanist:wght@500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     @vite(['resources/css/app.css'])
+    <style>
+        .font-brand { font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; font-weight: 900; }
+        .font-brand-wordmark { font-family: 'Sora', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; font-weight: 800; letter-spacing: -0.02em; }
+        .font-login-ui { font-family: 'Urbanist', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
+        @keyframes loginBgShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        @keyframes loginAuroraFloatOne { 0% { transform: translate3d(-12%, -10%, 0) scale(1); } 50% { transform: translate3d(16%, 10%, 0) scale(1.18); } 100% { transform: translate3d(-6%, 14%, 0) scale(0.95); } }
+        @keyframes loginAuroraFloatTwo { 0% { transform: translate3d(10%, 10%, 0) scale(1.06); } 50% { transform: translate3d(-16%, -10%, 0) scale(0.92); } 100% { transform: translate3d(8%, -14%, 0) scale(1.16); } }
+        @keyframes loginAuroraSpin { 0% { transform: translate(-50%, -50%) rotate(0deg) scale(1); } 50% { transform: translate(-50%, -50%) rotate(180deg) scale(1.12); } 100% { transform: translate(-50%, -50%) rotate(360deg) scale(1); } }
+        @keyframes loginRingCW { 0% { transform: translate(-50%, -50%) rotate(0deg); } 100% { transform: translate(-50%, -50%) rotate(360deg); } }
+        @keyframes loginRingCCW { 0% { transform: translate(-50%, -50%) rotate(360deg); } 100% { transform: translate(-50%, -50%) rotate(0deg); } }
+        @keyframes loginBeamStreak { 0% { transform: translate3d(-120%, -60%, 0) rotate(-28deg); opacity: 0; } 15% { opacity: 0.85; } 85% { opacity: 0.85; } 100% { transform: translate3d(220%, 120%, 0) rotate(-28deg); opacity: 0; } }
+        @keyframes loginParticleRise { 0% { transform: translateY(40px) scale(0.6); opacity: 0; } 20% { opacity: 0.9; } 80% { opacity: 0.75; } 100% { transform: translateY(-160px) scale(1.15); opacity: 0; } }
+        .login-bg-shift { background-size: 260% 260%; animation: loginBgShift 7s ease infinite; }
+        .login-aurora-1 { animation: loginAuroraFloatOne 6s ease-in-out infinite alternate; }
+        .login-aurora-2 { animation: loginAuroraFloatTwo 7s ease-in-out infinite alternate; }
+        .login-aurora-spin { animation: loginAuroraSpin 9s linear infinite; }
+        .login-ring-cw { animation: loginRingCW 10s linear infinite; }
+        .login-ring-ccw { animation: loginRingCCW 14s linear infinite; }
+        .login-beam { animation: loginBeamStreak 4.2s linear infinite; }
+        .login-particle { animation: loginParticleRise 3.8s linear infinite; }
+    </style>
 </head>
-<body class="min-h-screen bg-[#f1f5f9] text-slate-900 flex items-center justify-center p-4 sm:p-6 antialiased">
-    @yield('content')
+<body class="login-bg-shift min-h-screen text-white flex items-center justify-center p-4 sm:p-6 antialiased relative overflow-hidden"
+      style="background-image: linear-gradient(125deg, #04071a 0%, #0f1747 28%, #1e114d 54%, #092042 78%, #04071a 100%);">
+    <div aria-hidden="true" class="pointer-events-none fixed inset-0 overflow-hidden">
+        <div class="absolute inset-0 opacity-25"
+             style="background-image: radial-gradient(rgba(165,180,252,0.42) 1px, transparent 1px); background-size: 26px 26px; mask-image: radial-gradient(circle at 50% 50%, black 40%, transparent 92%); -webkit-mask-image: radial-gradient(circle at 50% 50%, black 40%, transparent 92%);"></div>
+        <div class="login-aurora-spin absolute left-1/2 top-1/2 w-[780px] h-[780px] rounded-full blur-[105px] opacity-40"
+             style="background: conic-gradient(from 0deg, #06b6d4, #3b82f6, #8b5cf6, #ec4899, #fbbf24, #06b6d4);"></div>
+        <div class="login-ring-cw absolute left-1/2 top-1/2 w-[540px] h-[540px] sm:w-[620px] sm:h-[620px] rounded-full border border-cyan-400/20 border-dashed"></div>
+        <div class="login-ring-ccw absolute left-1/2 top-1/2 w-[680px] h-[680px] sm:w-[760px] sm:h-[760px] rounded-full border border-fuchsia-400/20"></div>
+        <div class="login-aurora-1 absolute -top-24 -left-20 w-[440px] h-[440px] rounded-full blur-[90px] opacity-65"
+             style="background: radial-gradient(circle, rgba(34,211,238,0.6) 0%, rgba(59,130,246,0.45) 42%, transparent 72%);"></div>
+        <div class="login-aurora-2 absolute -bottom-28 -right-20 w-[480px] h-[480px] rounded-full blur-[95px] opacity-65"
+             style="background: radial-gradient(circle, rgba(244,114,182,0.58) 0%, rgba(124,58,237,0.5) 45%, transparent 74%);"></div>
+        <div class="login-aurora-1 absolute -bottom-20 left-[10%] w-[340px] h-[340px] rounded-full blur-[90px] opacity-45"
+             style="background: radial-gradient(circle, rgba(52,211,153,0.48) 0%, rgba(14,165,233,0.32) 50%, transparent 75%);"></div>
+        <div class="login-beam absolute top-[12%] -left-1/4 w-[380px] h-[2px] rounded-full opacity-75"
+             style="background: linear-gradient(90deg, transparent 0%, #38bdf8 55%, #ffffff 100%); box-shadow: 0 0 14px rgba(56,189,248,0.85); animation-duration: 3.6s;"></div>
+        <div class="login-beam absolute top-[45%] -left-1/4 w-[440px] h-[2px] rounded-full opacity-70"
+             style="background: linear-gradient(90deg, transparent 0%, #c084fc 55%, #f0abfc 100%); box-shadow: 0 0 16px rgba(217,70,239,0.85); animation-delay: 1.4s; animation-duration: 4.4s;"></div>
+        <div class="login-beam absolute top-[72%] -left-1/4 w-[340px] h-[2px] rounded-full opacity-65"
+             style="background: linear-gradient(90deg, transparent 0%, #34d399 55%, #60a5fa 100%); box-shadow: 0 0 14px rgba(52,211,153,0.8); animation-delay: 2.6s; animation-duration: 3.9s;"></div>
+        <span class="login-particle absolute bottom-[12%] left-[12%] w-2 h-2 rounded-full bg-cyan-300/80"></span>
+        <span class="login-particle absolute bottom-[18%] right-[14%] w-2.5 h-2.5 rounded-full bg-fuchsia-300/80" style="animation-delay:0.8s;animation-duration:3.2s;"></span>
+        <span class="login-particle absolute bottom-[26%] left-[22%] w-1.5 h-1.5 rounded-full bg-emerald-300/80" style="animation-delay:1.7s;animation-duration:4.1s;"></span>
+        <span class="login-particle absolute bottom-[10%] right-[24%] w-2 h-2 rounded-full bg-amber-300/80" style="animation-delay:2.3s;animation-duration:3.5s;"></span>
+    </div>
+    <div class="relative z-10 w-full flex items-center justify-center">
+        @yield('content')
+    </div>
 </body>
 </html>

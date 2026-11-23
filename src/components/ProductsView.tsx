@@ -140,6 +140,10 @@ export function ProductsView({
     if (query.trim()) params.set('q', query.trim());
     apiFetch<{ items: Product[]; total: number }>(`/api/products?${params.toString()}`)
       .then((res) => {
+        if (res.items.length === 0 && res.total > 0 && page > 1) {
+          setPage(Math.max(1, Math.ceil(res.total / limit)));
+          return;
+        }
         setProducts(res.items);
         setTotal(res.total);
         setGotoInput(String(page));
@@ -221,7 +225,7 @@ export function ProductsView({
           purchase_price: pp,
           selling_price: sp,
           quantity: qty,
-          alert_quantity: Math.max(1, Number(form.alert_quantity || 5)),
+          alert_quantity: form.alert_quantity === '' ? 5 : Math.max(0, Number(form.alert_quantity)),
           warranty: matchedWarranty ? matchedWarranty.duration || matchedWarranty.name : form.warranty || 'No Warranty',
           image_data: imageData || undefined,
         }),
@@ -272,7 +276,7 @@ export function ProductsView({
           purchase_price: pp,
           selling_price: sp,
           quantity: qty,
-          alert_quantity: Math.max(0, Number(form.alert_quantity || 5)),
+          alert_quantity: form.alert_quantity === '' ? 5 : Math.max(0, Number(form.alert_quantity)),
           description: form.description,
           warranty: matchedWarranty ? matchedWarranty.duration || matchedWarranty.name : 'No Warranty',
           image_data: imageData || undefined,

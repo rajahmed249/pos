@@ -33,12 +33,17 @@
         </div>
 
         <div class="p-4 sm:p-6">
-            <div class="relative mb-4">
-                <span class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none">
+            <div class="relative mb-4" id="posTopSearchWrap">
+                <span class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center absolute left-2 top-3 pointer-events-none">
                     <i class="fas fa-search text-xs"></i>
                 </span>
-                <input type="text" id="posTopSearch" placeholder="Search product by name, SKU, or barcode..."
-                       class="w-full pl-12 pr-4 py-3 border-2 border-slate-200 bg-slate-50/60 focus:bg-white rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#4f46e5] focus:ring-4 focus:ring-[#4f46e5]/10 transition-all">
+                <input type="text" id="posTopSearch" placeholder="Search product by name, SKU, barcode, brand, or category..."
+                       class="w-full pl-12 pr-9 py-3 border-2 border-slate-200 bg-slate-50/60 focus:bg-white rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#4f46e5] focus:ring-4 focus:ring-[#4f46e5]/10 transition-all">
+                <button type="button" id="posTopSearchClear" onclick="clearPosTopSearch()"
+                        class="hidden absolute right-3 top-3.5 text-slate-400 hover:text-slate-600 cursor-pointer">
+                    <i class="fas fa-times text-xs"></i>
+                </button>
+                <div id="posTopDropdown" class="hidden absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl max-h-[340px] overflow-y-auto z-30 shadow-[0_18px_40px_rgba(15,23,42,0.14)] divide-y divide-slate-100"></div>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 my-4">
@@ -137,7 +142,7 @@
                     <p class="text-[11px] text-slate-500">Quick-add inventory items</p>
                 </div>
             </div>
-            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700 tabular-nums shrink-0">
+            <span id="posProductCountBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700 tabular-nums shrink-0">
                 {{ $products->count() }}
             </span>
         </div>
@@ -146,7 +151,11 @@
             <div class="relative mb-3.5">
                 <i class="fas fa-search text-xs text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
                 <input type="text" id="posSideSearch" placeholder="Filter products..."
-                       class="w-full pl-9 pr-3 py-2.5 border-2 border-slate-200 bg-slate-50/60 focus:bg-white rounded-xl text-[13px] outline-none focus:border-[#4f46e5] transition-all">
+                       class="w-full pl-9 pr-8 py-2.5 border-2 border-slate-200 bg-slate-50/60 focus:bg-white rounded-xl text-[13px] outline-none focus:border-[#4f46e5] transition-all">
+                <button type="button" id="posSideSearchClear" onclick="clearPosSideSearch()"
+                        class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer">
+                    <i class="fas fa-times text-xs"></i>
+                </button>
             </div>
 
             <div class="max-h-[540px] overflow-y-auto space-y-2 pr-1" id="posProductList">
@@ -155,9 +164,25 @@
                         $stockQty = (int) ($product->stock_quantity ?? $product->quantity ?? 0);
                         $isOut = $stockQty <= 0;
                         $wText = $product->warranty ?: ($product->warrantyRecord?->duration ?? '');
+                        $searchBlob = strtolower(implode(' ', array_filter([
+                            $product->name,
+                            $product->sku,
+                            $product->barcode,
+                            $product->category?->name,
+                            $product->brand?->name,
+                            $wText,
+                            $product->selling_price,
+                        ])));
                     @endphp
                     <div class="pos-product-row flex items-center justify-between gap-2.5 p-2.5 rounded-xl border transition-all {{ $isOut ? 'opacity-65 bg-red-50/60 border-red-100' : 'bg-white border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/25' }}"
-                         data-search="{{ strtolower($product->name . ' ' . $product->sku) }}">
+                         data-id="{{ $product->id }}"
+                         data-name="{{ $product->name }}"
+                         data-sku="{{ $product->sku ?: 'N/A' }}"
+                         data-barcode="{{ $product->barcode ?? '' }}"
+                         data-price="{{ (float) $product->selling_price }}"
+                         data-warranty="{{ $wText }}"
+                         data-stock="{{ $stockQty }}"
+                         data-search="{{ $searchBlob }}">
                         <div class="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200/70 flex items-center justify-center overflow-hidden shrink-0">
                             @if($product->image)
                                 <img src="{{ asset($product->image) }}" alt="{{ $product->name }}" class="w-full h-full object-cover">
@@ -395,14 +420,116 @@ function updatePosCartTotals() {
     const btnTot = document.getElementById('posBtnTotalText');
     if (btnTot) btnTot.textContent = cur + sub.toFixed(2);
 }
+function matchesTokens(haystack, rawQuery) {
+    const tokens = rawQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    if (!tokens.length) return true;
+    const text = (haystack || '').toLowerCase();
+    return tokens.every(t => text.includes(t));
+}
 function filterProductRows(term) {
     const q = term.toLowerCase().trim();
+    let visible = 0;
     document.querySelectorAll('.pos-product-row').forEach(el => {
-        el.style.display = !q || el.dataset.search.includes(q) ? 'flex' : 'none';
+        const match = !q || matchesTokens(el.dataset.search, q);
+        el.style.display = match ? 'flex' : 'none';
+        if (match) visible += 1;
     });
+    const badge = document.getElementById('posProductCountBadge');
+    if (badge) badge.textContent = visible;
 }
-document.getElementById('posSideSearch').addEventListener('input', e => filterProductRows(e.target.value));
-document.getElementById('posTopSearch').addEventListener('input', e => filterProductRows(e.target.value));
+function renderTopSearchDropdown(rawQuery) {
+    const dropdown = document.getElementById('posTopDropdown');
+    const clearBtn = document.getElementById('posTopSearchClear');
+    const q = rawQuery.trim().toLowerCase();
+    if (clearBtn) clearBtn.classList.toggle('hidden', !q);
+    if (!dropdown) return;
+    if (!q) {
+        dropdown.classList.add('hidden');
+        dropdown.innerHTML = '';
+        return;
+    }
+    const rows = Array.from(document.querySelectorAll('.pos-product-row')).filter(el => matchesTokens(el.dataset.search, q));
+    rows.sort((a, b) => {
+        const aExact = (a.dataset.barcode || '').toLowerCase() === q || (a.dataset.sku || '').toLowerCase() === q ? 1 : 0;
+        const bExact = (b.dataset.barcode || '').toLowerCase() === q || (b.dataset.sku || '').toLowerCase() === q ? 1 : 0;
+        return bExact - aExact;
+    });
+    if (!rows.length) {
+        dropdown.innerHTML = '<div class="p-5 text-center text-sm text-slate-400">No matching products found</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+    const shown = rows.slice(0, 60);
+    dropdown.innerHTML = shown.map(el => {
+        const id = parseInt(el.dataset.id, 10);
+        const name = el.dataset.name || '';
+        const sku = el.dataset.sku || 'N/A';
+        const price = parseFloat(el.dataset.price || '0');
+        const stock = parseInt(el.dataset.stock || '0', 10);
+        const out = stock <= 0;
+        return `<div data-pick-id="${id}" class="pos-top-pick flex items-center justify-between gap-3 px-3.5 py-2.5 ${out ? 'opacity-60 bg-red-50/60 cursor-not-allowed' : 'hover:bg-indigo-50/60 cursor-pointer'}">
+            <div class="min-w-0 flex-1">
+                <div class="text-[13px] font-bold text-slate-800 truncate">${name.replace(/</g, '&lt;')}</div>
+                <div class="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
+                    <span>SKU: ${sku.replace(/</g, '&lt;')}</span>
+                    <span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold ${out ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700'}">${out ? 'Out of Stock' : 'Stock: ' + stock}</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2.5 shrink-0">
+                <span class="text-[13px] font-extrabold text-emerald-600 tabular-nums">${cur}${price.toFixed(2)}</span>
+                <span class="px-2.5 py-1 rounded-lg text-xs font-semibold text-white ${out ? 'bg-slate-300' : ''}" ${out ? '' : 'style="background:linear-gradient(135deg,#4f46e5,#7c3aed)"'}>Add</span>
+            </div>
+        </div>`;
+    }).join('') + (rows.length > shown.length ? `<div class="px-3.5 py-2 text-center text-[11px] font-semibold text-indigo-600 bg-indigo-50/40">Showing ${shown.length} of ${rows.length} matching products — refine search to narrow</div>` : '');
+    dropdown.querySelectorAll('.pos-top-pick').forEach(item => {
+        item.addEventListener('click', () => {
+            const target = document.querySelector(`.pos-product-row[data-id="${item.dataset.pickId}"]`);
+            if (!target) return;
+            addPosItem(parseInt(target.dataset.id, 10), target.dataset.name, target.dataset.sku, parseFloat(target.dataset.price), target.dataset.warranty, parseInt(target.dataset.stock, 10));
+            clearPosTopSearch();
+        });
+    });
+    dropdown.classList.remove('hidden');
+}
+function clearPosTopSearch() {
+    const inp = document.getElementById('posTopSearch');
+    if (inp) inp.value = '';
+    renderTopSearchDropdown('');
+    filterProductRows(document.getElementById('posSideSearch')?.value || '');
+}
+function clearPosSideSearch() {
+    const inp = document.getElementById('posSideSearch');
+    if (inp) inp.value = '';
+    const clearBtn = document.getElementById('posSideSearchClear');
+    if (clearBtn) clearBtn.classList.add('hidden');
+    filterProductRows('');
+}
+document.getElementById('posSideSearch').addEventListener('input', e => {
+    const clearBtn = document.getElementById('posSideSearchClear');
+    if (clearBtn) clearBtn.classList.toggle('hidden', !e.target.value.trim());
+    filterProductRows(e.target.value);
+});
+document.getElementById('posTopSearch').addEventListener('input', e => {
+    renderTopSearchDropdown(e.target.value);
+    filterProductRows(e.target.value);
+});
+document.getElementById('posTopSearch').addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const q = e.target.value.trim().toLowerCase();
+    if (!q) return;
+    const rows = Array.from(document.querySelectorAll('.pos-product-row')).filter(el => matchesTokens(el.dataset.search, q));
+    const exact = rows.find(el => (el.dataset.barcode || '').toLowerCase() === q || (el.dataset.sku || '').toLowerCase() === q) || (rows.length === 1 ? rows[0] : null);
+    if (exact) {
+        addPosItem(parseInt(exact.dataset.id, 10), exact.dataset.name, exact.dataset.sku, parseFloat(exact.dataset.price), exact.dataset.warranty, parseInt(exact.dataset.stock, 10));
+        clearPosTopSearch();
+    }
+});
+document.addEventListener('click', e => {
+    const wrap = document.getElementById('posTopSearchWrap');
+    const dropdown = document.getElementById('posTopDropdown');
+    if (wrap && dropdown && !wrap.contains(e.target)) dropdown.classList.add('hidden');
+});
 
 function setModalError(msg) {
     const box = document.getElementById('posModalError');
@@ -490,9 +617,6 @@ document.getElementById('posCheckoutForm').addEventListener('submit', function(e
     const due = Math.max(0, net - rec);
     const isWalkIn = !document.getElementById('modalCustomerId').value;
 
-    if (rawPaid === '') {
-        document.getElementById('mPaid').value = '0';
-    }
     if (disc < 0 || vat < 0 || rec < 0) {
         e.preventDefault();
         const msg = 'Discount, VAT, and Received Amount cannot be negative.';
@@ -513,6 +637,9 @@ document.getElementById('posCheckoutForm').addEventListener('submit', function(e
         setModalError(msg);
         if (window.showCenterPopup) window.showCenterPopup('error', 'Full Payment Required', msg);
         return;
+    }
+    if (rawPaid === '') {
+        document.getElementById('mPaid').value = '0';
     }
 });
 </script>

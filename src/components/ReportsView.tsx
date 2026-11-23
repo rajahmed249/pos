@@ -23,8 +23,9 @@ interface ReportPayload {
 }
 
 export function ReportsView({ currency }: ReportsViewProps) {
-  const [from, setFrom] = useState('2026-01-01');
-  const [to, setTo] = useState('2026-12-31');
+  const currentYear = new Date().getFullYear();
+  const [from, setFrom] = useState(`${currentYear}-01-01`);
+  const [to, setTo] = useState(`${currentYear}-12-31`);
   const [data, setData] = useState<ReportPayload | null>(null);
 
   function load() {

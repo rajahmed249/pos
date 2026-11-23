@@ -21,6 +21,16 @@
     font-weight: 900;
   }
 
+  .font-brand-wordmark {
+    font-family: 'Sora', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .font-login-ui {
+    font-family: 'Urbanist', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+
   .font-mono, .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
@@ -51,6 +61,152 @@
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes loginBgShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes loginAuroraFloatOne {
+  0% {
+    transform: translate3d(-12%, -10%, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(16%, 10%, 0) scale(1.18);
+  }
+  100% {
+    transform: translate3d(-6%, 14%, 0) scale(0.95);
+  }
+}
+
+@keyframes loginAuroraFloatTwo {
+  0% {
+    transform: translate3d(10%, 10%, 0) scale(1.06);
+  }
+  50% {
+    transform: translate3d(-16%, -10%, 0) scale(0.92);
+  }
+  100% {
+    transform: translate3d(8%, -14%, 0) scale(1.16);
+  }
+}
+
+@keyframes loginAuroraSpin {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) rotate(180deg) scale(1.12);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg) scale(1);
+  }
+}
+
+@keyframes loginRingCW {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+@keyframes loginRingCCW {
+  0% {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+}
+
+@keyframes loginBeamStreak {
+  0% {
+    transform: translate3d(-120%, -60%, 0) rotate(-28deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.85;
+  }
+  85% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate3d(220%, 120%, 0) rotate(-28deg);
+    opacity: 0;
+  }
+}
+
+@keyframes loginParticleRise {
+  0% {
+    transform: translateY(40px) scale(0.6);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  80% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translateY(-160px) scale(1.15);
+    opacity: 0;
+  }
+}
+
+.login-bg-shift {
+  background-size: 260% 260%;
+  animation: loginBgShift 7s ease infinite;
+}
+
+.login-aurora-1 {
+  animation: loginAuroraFloatOne 6s ease-in-out infinite alternate;
+}
+
+.login-aurora-2 {
+  animation: loginAuroraFloatTwo 7s ease-in-out infinite alternate;
+}
+
+.login-aurora-spin {
+  animation: loginAuroraSpin 9s linear infinite;
+}
+
+.login-ring-cw {
+  animation: loginRingCW 10s linear infinite;
+}
+
+.login-ring-ccw {
+  animation: loginRingCCW 14s linear infinite;
+}
+
+.login-beam {
+  animation: loginBeamStreak 4.2s linear infinite;
+}
+
+.login-particle {
+  animation: loginParticleRise 3.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-bg-shift,
+  .login-aurora-1,
+  .login-aurora-2,
+  .login-aurora-spin,
+  .login-ring-cw,
+  .login-ring-ccw,
+  .login-beam,
+  .login-particle {
+    animation: none !important;
   }
 }
 

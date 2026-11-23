@@ -12,6 +12,7 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\StockMovement;
 use App\Models\Warranty;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,19 +22,33 @@ use Illuminate\View\View;
 
 class PosController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request): View|JsonResponse
     {
+        $tokens = preg_split('/\s+/', trim((string) $request->query('q', '')), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
         $products = Product::query()
             ->with(['category', 'brand', 'warrantyRecord'])
             ->where('status', true)
-            ->when($request->filled('q'), function ($q) use ($request) {
-                $term = '%' . $request->string('q')->toString() . '%';
-                $q->where(fn ($w) => $w->where('name', 'like', $term)->orWhere('sku', 'like', $term)->orWhere('barcode', 'like', $term));
+            ->when(count($tokens) > 0, function ($q) use ($tokens) {
+                foreach ($tokens as $tok) {
+                    $term = '%' . $tok . '%';
+                    $q->where(function ($w) use ($term) {
+                        $w->where('name', 'like', $term)
+                            ->orWhere('sku', 'like', $term)
+                            ->orWhere('barcode', 'like', $term)
+                            ->orWhere('warranty', 'like', $term)
+                            ->orWhereHas('category', fn ($c) => $c->where('name', 'like', $term))
+                            ->orWhereHas('brand', fn ($b) => $b->where('name', 'like', $term));
+                    });
+                }
             })
             ->when($request->filled('category_id'), fn ($q) => $q->where('category_id', $request->integer('category_id')))
             ->orderBy('name')
-            ->limit(60)
             ->get();
+
+        if ($request->wantsJson()) {
+            return response()->json(['items' => $products, 'total' => $products->count()]);
+        }
 
         $categories = Category::query()->where('status', true)->orderBy('name')->get();
         $brands = Brand::query()->where('status', true)->orderBy('name')->get();
@@ -69,13 +84,15 @@ class PosController extends Controller
             $totalCost = 0;
             $preparedItems = [];
 
+            $requestedByProduct = [];
             foreach ($validated['items'] as $row) {
                 $product = Product::query()->with('category')->lockForUpdate()->findOrFail($row['product_id']);
                 $qty = (int) $row['quantity'];
+                $requestedByProduct[$product->id] = ($requestedByProduct[$product->id] ?? 0) + $qty;
                 $availableStock = (int) ($product->stock_quantity ?? $product->quantity ?? 0);
-                if ($qty > $availableStock) {
+                if ($requestedByProduct[$product->id] > $availableStock) {
                     throw ValidationException::withMessages([
-                        'items' => "Insufficient stock for {$product->name}. Available: {$availableStock}, Requested: {$qty}.",
+                        'items' => "Insufficient stock for {$product->name}. Available: {$availableStock}, Requested: {$requestedByProduct[$product->id]}.",
                     ]);
                 }
                 $price = (float) $row['price'];

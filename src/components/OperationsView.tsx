@@ -80,13 +80,20 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
       if (stockQuery.trim()) qs.set('q', stockQuery.trim());
       apiFetch<typeof stockData>(`/api/stock?${qs.toString()}`).then((r) => {
         setStockData(r);
-        if (!adjForm.product_id && r.products[0]) {
-          setAdjForm((prev) => ({
-            ...prev,
-            product_id: String(r.products[0].id),
-            quantity: String(r.products[0].quantity),
-          }));
-        }
+        setAdjForm((prev) => {
+          const matched = r.products.find((x) => String(x.id) === prev.product_id);
+          if (matched) {
+            return { ...prev, quantity: String(matched.quantity) };
+          }
+          if (r.products[0]) {
+            return {
+              ...prev,
+              product_id: String(r.products[0].id),
+              quantity: String(r.products[0].quantity),
+            };
+          }
+          return { ...prev, product_id: '', quantity: '' };
+        });
       });
     } else if (section === 'payments') {
       apiFetch<typeof payData>('/api/payments').then((r) => {
@@ -95,6 +102,8 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
           setCollectForm((prev) => ({ ...prev, target_id: String(r.dueSales[0].id), amount: String(r.dueSales[0].due) }));
         } else if (payMode === 'supplier' && r.duePurchases[0]) {
           setCollectForm((prev) => ({ ...prev, target_id: String(r.duePurchases[0].id), amount: String(r.duePurchases[0].due) }));
+        } else {
+          setCollectForm((prev) => ({ ...prev, target_id: '', amount: '' }));
         }
       });
     } else if (section === 'employees') {
@@ -106,6 +115,17 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
     setNotice(null);
     loadSection();
   }, [section, stockFilter, stockQuery]);
+
+  useEffect(() => {
+    if (!bootstrap.bankAccounts.length) {
+      setCollectForm((prev) => ({ ...prev, account_id: '' }));
+      return;
+    }
+    const exists = bootstrap.bankAccounts.some((a) => String(a.id) === collectForm.account_id);
+    if (!exists) {
+      setCollectForm((prev) => ({ ...prev, account_id: String(bootstrap.bankAccounts[0].id) }));
+    }
+  }, [bootstrap.bankAccounts, collectForm.account_id]);
 
   const banner = notice && (
     <div
@@ -409,10 +429,14 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
                 onSubmit={async (e) => {
                   e.preventDefault();
                   setNotice(null);
+                  if (!adjForm.product_id) {
+                    setNotice({ type: 'error', text: 'Please select a product to adjust.' });
+                    return;
+                  }
                   try {
                     await apiFetch(`/api/products/${adjForm.product_id}/adjust`, {
                       method: 'POST',
-                      body: JSON.stringify({ quantity: Number(adjForm.quantity), reason: adjForm.reason }),
+                      body: JSON.stringify({ new_quantity: Number(adjForm.quantity), reason: adjForm.reason }),
                     });
                     setNotice({ type: 'success', text: 'Stock quantity updated.' });
                     loadSection();
@@ -431,13 +455,14 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
                   }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
                 >
+                  {stockData.products.length === 0 && <option value="">-- Select Product --</option>}
                   {stockData.products.map((p) => (
                     <option key={p.id} value={p.id}>{p.name} (Current: {p.quantity})</option>
                   ))}
                 </select>
                 <input type="number" min={0} required placeholder="New Stock Quantity" value={adjForm.quantity} onChange={(e) => setAdjForm({ ...adjForm, quantity: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums" />
                 <input placeholder="Reason" value={adjForm.reason} onChange={(e) => setAdjForm({ ...adjForm, reason: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg" />
-                <button type="submit" style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }} className="w-full py-2.5 text-white rounded-xl font-semibold cursor-pointer">
+                <button type="submit" disabled={!stockData.products.length} style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }} className="w-full py-2.5 text-white rounded-xl font-semibold disabled:opacity-50 cursor-pointer">
                   Update Stock
                 </button>
               </form>

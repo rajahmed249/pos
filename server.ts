@@ -1,14 +1,63 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import express, { type Request, type Response } from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import JSZip from 'jszip';
+import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { getStore, nextId, saveStore, type PosStoreData } from './server/posStore.ts';
 import { parseMysqlDumpText, type SqlRow } from './server/sqlParser.ts';
 
 const PORT = 3000;
+const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 continuous hour of inactivity
+const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+const OTP_COOLDOWN_MS = 45 * 1000;
+const OTP_HMAC_KEY = process.env.OTP_SECRET || crypto.randomBytes(32).toString('hex');
 const activeSessions = new Map<string, { userId: number; expiresAt: number }>();
+const recoveryCodes = new Map<
+  number,
+  { codeHash: string; channel: 'email' | 'sms'; expiresAt: number; sentAt: number; attempts: number }
+>();
+
+type StoreUser = PosStoreData['users'][number];
+type AuthedRequest = Request & { authUser?: StoreUser };
+
+function getPublicSettings(store: PosStoreData) {
+  return {
+    shop_name: store.settings.shop_name || 'YOUTH IT POS',
+    shop_logo: store.settings.shop_logo || '/assets/images/logo.jpg',
+    shop_favicon: store.settings.shop_favicon || '/assets/images/favicon.png',
+    shop_website: store.settings.shop_website || 'www.youthit.com.bd',
+  };
+}
+
+function getValidSession(req: Request): { token: string; user: StoreUser; expiresAt: number } | null {
+  const authHeader = String(req.headers.authorization ?? '');
+  if (!authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7).trim();
+  if (!token) return null;
+  const sess = activeSessions.get(token);
+  if (!sess) return null;
+  if (Date.now() > sess.expiresAt) {
+    activeSessions.delete(token);
+    return null;
+  }
+  const store = getStore();
+  const user = store.users.find((u) => u.id === sess.userId);
+  if (!user || !user.is_active) {
+    activeSessions.delete(token);
+    return null;
+  }
+  // Sliding 1-hour idle timeout
+  sess.expiresAt = Date.now() + IDLE_TIMEOUT_MS;
+  return { token, user, expiresAt: sess.expiresAt };
+}
+
+function hasAnyRole(user: StoreUser | undefined, roles: string[]): boolean {
+  if (!user) return false;
+  if (user.role === 'super_admin') return true;
+  return roles.includes(user.role);
+}
 
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -64,6 +113,16 @@ function sanitizeSearch(q: unknown): string {
   return String(q ?? '').trim().toLowerCase();
 }
 
+function matchesSearchTokens(fields: Array<unknown>, query: string): boolean {
+  if (!query) return true;
+  const tokens = query.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+  const haystack = fields
+    .map((f) => String(f ?? '').toLowerCase())
+    .join(' ');
+  return tokens.every((t) => haystack.includes(t));
+}
+
 function collectFiles(dir: string, baseDir: string): string[] {
   const results: string[] = [];
   if (!fs.existsSync(dir)) return results;
@@ -95,9 +154,71 @@ async function startServer() {
   // Initialize store on boot so real SQL data is ready immediately
   getStore();
 
+  // ---- Centralized API Auth & Role Enforcement ----
+  const PUBLIC_API_PATHS = new Set([
+    '/auth/session',
+    '/auth/login',
+    '/auth/request-recovery-code',
+    '/auth/recover-password',
+    '/auth/logout',
+  ]);
+
+  app.use('/api', (req: AuthedRequest, res: Response, next: NextFunction) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (PUBLIC_API_PATHS.has(req.path)) {
+      next();
+      return;
+    }
+
+    const session = getValidSession(req);
+    if (!session) {
+      res.status(401).json({
+        error: 'Authentication required. Please sign in or re-authenticate after inactivity.',
+      });
+      return;
+    }
+
+    req.authUser = session.user;
+
+    const adminOnlyPrefixes = ['/settings', '/backup', '/laravel'];
+    const isAdminOnly =
+      adminOnlyPrefixes.some((p) => req.path.startsWith(p)) ||
+      (req.path.startsWith('/menus') && req.method !== 'GET') ||
+      (req.path.startsWith('/users') && (req.method === 'POST' || req.method === 'PATCH' || req.method === 'DELETE') && !req.path.endsWith('/avatar'));
+
+    if (isAdminOnly && !hasAnyRole(session.user, ['admin'])) {
+      res.status(403).json({ error: 'Administrator permission required for this action.' });
+      return;
+    }
+
+    const managerPrefixes = [
+      '/owners',
+      '/cashbook',
+      '/accounts',
+      '/expenses',
+      '/purchases',
+      '/suppliers',
+      '/employees',
+      '/returns',
+      '/damages',
+      '/reports',
+    ];
+    const isManagerArea =
+      managerPrefixes.some((p) => req.path.startsWith(p)) ||
+      (req.path.startsWith('/sales/') && req.method === 'DELETE');
+
+    if (isManagerArea && !hasAnyRole(session.user, ['admin', 'manager'])) {
+      res.status(403).json({ error: 'Manager or Administrator permission required for this module.' });
+      return;
+    }
+
+    next();
+  });
+
   // ---- Bootstrap & Dashboard ----
-  app.get('/api/bootstrap', (_req: Request, res: Response) => {
+  app.get('/api/bootstrap', (req: AuthedRequest, res: Response) => {
     const store = getStore();
+    const authUser = req.authUser;
     const todayStr = new Date().toISOString().slice(0, 10);
 
     let todaySales = 0;
@@ -168,7 +289,11 @@ async function startServer() {
     res.json({
       settings: store.settings,
       menus: [...store.menus].sort((a, b) => a.sort_order - b.sort_order),
-      users: store.users.map(sanitizeUser),
+      users: hasAnyRole(authUser, ['admin'])
+        ? store.users.map(sanitizeUser)
+        : authUser
+          ? [sanitizeUser(authUser)]
+          : [],
       categories: store.categories,
       brands: store.brands,
       units: store.units,
@@ -205,8 +330,12 @@ async function startServer() {
     const brandId = req.query.brand_id ? Number(req.query.brand_id) : null;
     const lowStockOnly = req.query.low_stock === '1';
     const includeInactive = req.query.include_inactive === '1';
-    const page = Math.max(1, Number(req.query.page ?? 1));
-    const limit = Math.min(200, Math.max(1, Number(req.query.limit ?? 30)));
+    const fetchAll = req.query.all === '1';
+    const page = fetchAll ? 1 : Math.max(1, Number(req.query.page ?? 1));
+    const rawLimit = Number(req.query.limit ?? 30);
+    const limit = fetchAll
+      ? Math.max(1, store.products.length)
+      : Math.min(10000, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 30));
 
     const catMap = new Map(store.categories.map((c) => [Number(c.id), String(c.name ?? '')]));
     const brandMap = new Map(store.brands.map((b) => [Number(b.id), String(b.name ?? '')]));
@@ -218,17 +347,12 @@ async function startServer() {
       : store.products.filter((p) => Number(p.status ?? 1) === 1);
     if (q) {
       items = items.filter((p) => {
-        const catName = (catMap.get(Number(p.category_id)) ?? '').toLowerCase();
-        const brandName = (brandMap.get(Number(p.brand_id)) ?? '').toLowerCase();
-        const wName = String(p.warranty || warrantyMap.get(Number(p.warranty_id)) || '').toLowerCase();
-        return (
-          String(p.name ?? '').toLowerCase().includes(q) ||
-          String(p.sku ?? '').toLowerCase().includes(q) ||
-          String(p.barcode ?? '').toLowerCase().includes(q) ||
-          catName.includes(q) ||
-          brandName.includes(q) ||
-          wName.includes(q) ||
-          String(p.selling_price ?? '').includes(q)
+        const catName = catMap.get(Number(p.category_id)) ?? '';
+        const brandName = brandMap.get(Number(p.brand_id)) ?? '';
+        const wName = String(p.warranty || warrantyMap.get(Number(p.warranty_id)) || '');
+        return matchesSearchTokens(
+          [p.name, p.sku, p.barcode, catName, brandName, wName, p.selling_price],
+          q
         );
       });
     }
@@ -238,7 +362,7 @@ async function startServer() {
 
     items.sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0));
     const total = items.length;
-    const sliced = items.slice((page - 1) * limit, page * limit).map((p) => ({
+    const sliced = (fetchAll ? items : items.slice((page - 1) * limit, page * limit)).map((p) => ({
       ...p,
       warranty: String(p.warranty || warrantyMap.get(Number(p.warranty_id)) || 'No Warranty'),
       category_name: catMap.get(Number(p.category_id)) ?? 'Uncategorized',
@@ -388,7 +512,12 @@ async function startServer() {
       res.status(404).json({ error: 'Product not found.' });
       return;
     }
-    const newQty = Math.max(0, Math.round(Number(req.body?.new_quantity ?? 0)));
+    const rawQty = Number(req.body?.new_quantity ?? req.body?.quantity);
+    if (!Number.isFinite(rawQty) || rawQty < 0) {
+      res.status(400).json({ error: 'Valid non-negative stock quantity is required.' });
+      return;
+    }
+    const newQty = Math.round(rawQty);
     const oldQty = Number(product.quantity ?? 0);
     product.quantity = newQty;
     product.stock_quantity = newQty;
@@ -398,7 +527,7 @@ async function startServer() {
       old_quantity: oldQty,
       new_quantity: newQty,
       difference: newQty - oldQty,
-      reason: String(req.body?.reason ?? 'Manual Stock Adjustment'),
+      reason: String(req.body?.reason ?? '').trim() || 'Manual Stock Adjustment',
       created_by: 1,
       created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
     });
@@ -494,8 +623,12 @@ async function startServer() {
     const store = getStore();
     const q = sanitizeSearch(req.query.q);
     const paymentStatus = String(req.query.payment_status ?? '');
-    const page = Math.max(1, Number(req.query.page ?? 1));
-    const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 10)));
+    const fetchAll = req.query.all === '1';
+    const page = fetchAll ? 1 : Math.max(1, Number(req.query.page ?? 1));
+    const rawLimit = Number(req.query.limit ?? 10);
+    const limit = fetchAll
+      ? Math.max(1, store.sales.length)
+      : Math.min(5000, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 10));
 
     const custPhoneMap = new Map(store.customers.map((c) => [Number(c.id), String(c.phone ?? '')]));
     const custNameMap = new Map(store.customers.map((c) => [Number(c.id), String(c.name ?? '')]));
@@ -527,11 +660,9 @@ async function startServer() {
     if (q) {
       items = items.filter((s) => {
         const prods = (s.products as Array<{ product_name: string }>) ?? [];
-        return (
-          String(s.invoice_no ?? '').toLowerCase().includes(q) ||
-          String(s.customer_name ?? '').toLowerCase().includes(q) ||
-          String(s.customer_phone ?? '').toLowerCase().includes(q) ||
-          prods.some((p) => p.product_name.toLowerCase().includes(q))
+        return matchesSearchTokens(
+          [s.invoice_no, s.customer_name, s.customer_phone, ...prods.map((p) => p.product_name)],
+          q
         );
       });
     }
@@ -540,7 +671,12 @@ async function startServer() {
     }
     items.sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0));
     const total = items.length;
-    res.json({ items: items.slice((page - 1) * limit, page * limit), total, page, limit });
+    res.json({
+      items: fetchAll ? items : items.slice((page - 1) * limit, page * limit),
+      total,
+      page,
+      limit,
+    });
   });
 
   app.get('/api/sales/:id', (req: Request, res: Response) => {
@@ -584,7 +720,12 @@ async function startServer() {
     const customer = sale.customer_id ? store.customers.find((c) => Number(c.id) === Number(sale.customer_id)) : null;
     const customerOpening = Number(customer?.opening_balance ?? 0);
     const saleDue = Number(sale.due ?? 0);
-    const previous_due = Math.max(0, customerOpening - saleDue);
+    const otherSalesDue = sale.customer_id
+      ? store.sales
+          .filter((s) => Number(s.customer_id) === Number(sale.customer_id) && Number(s.id) !== id)
+          .reduce((sum, s) => sum + Number(s.due ?? 0), 0)
+      : 0;
+    const previous_due = Math.max(Math.max(0, customerOpening - saleDue), otherSalesDue);
 
     const creatorId = Number(sale.created_by ?? sale.user_id ?? 1);
     const creator = store.users.find((u) => Number(u.id) === creatorId);
@@ -861,6 +1002,7 @@ async function startServer() {
       res.status(404).json({ error: 'Sale not found.' });
       return;
     }
+    const sale = store.sales[idx];
     const items = store.sale_items.filter((it) => Number(it.sale_id) === id);
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
     for (const item of items) {
@@ -882,6 +1024,13 @@ async function startServer() {
             created_at: now,
           });
         }
+      }
+    }
+    const paidAmount = Number(sale.paid ?? 0);
+    if (paidAmount > 0 && sale.account_id) {
+      const account = store.bank_accounts.find((a) => Number(a.id) === Number(sale.account_id));
+      if (account) {
+        account.balance = Math.max(0, Number(account.balance ?? 0) - paidAmount);
       }
     }
     store.sale_items = store.sale_items.filter((it) => Number(it.sale_id) !== id);
@@ -922,12 +1071,25 @@ async function startServer() {
       return;
     }
     const supplierId = Number(body.supplier_id);
-    const qty = Math.max(1, Math.round(Number(body.quantity ?? 1)));
-    const price = Math.max(0, Number(body.price ?? product.purchase_price ?? 0));
+    const supplier = store.suppliers.find((s) => Number(s.id) === supplierId);
+    if (!supplier) {
+      res.status(400).json({ error: 'Valid supplier is required.' });
+      return;
+    }
+    const rawQty = Number(body.quantity ?? 1);
+    const rawPrice = Number(body.price ?? product.purchase_price ?? 0);
+    const rawDiscount = Number(body.discount ?? 0);
+    const rawPaid = Number(body.paid ?? 0);
+    if (!Number.isFinite(rawQty) || rawQty < 1 || !Number.isFinite(rawPrice) || rawPrice < 0 || !Number.isFinite(rawDiscount) || rawDiscount < 0 || !Number.isFinite(rawPaid) || rawPaid < 0) {
+      res.status(400).json({ error: 'Quantity must be at least 1 and prices/amounts cannot be negative.' });
+      return;
+    }
+    const qty = Math.round(rawQty);
+    const price = rawPrice;
     const subtotal = qty * price;
-    const discount = Math.max(0, Number(body.discount ?? 0));
+    const discount = Math.min(subtotal, rawDiscount);
     const total = Math.max(0, subtotal - discount);
-    const paid = Math.min(total, Math.max(0, Number(body.paid ?? 0)));
+    const paid = Math.min(total, rawPaid);
     const due = Math.max(0, total - paid);
 
     const purchaseId = nextId(store.purchases);
@@ -1006,11 +1168,21 @@ async function startServer() {
       res.status(404).json({ error: 'Purchase not found.' });
       return;
     }
-    const pay = Math.min(Number(purchase.due ?? 0), Math.max(0, Number(req.body?.amount ?? 0)));
-    if (pay <= 0) {
+    const currentDue = Number(purchase.due ?? 0);
+    if (currentDue <= 0) {
+      res.status(400).json({ error: 'This purchase is already fully paid.' });
+      return;
+    }
+    const rawPay = Number(req.body?.amount ?? 0);
+    if (!Number.isFinite(rawPay) || rawPay <= 0) {
       res.status(400).json({ error: 'Valid positive amount required.' });
       return;
     }
+    if (rawPay > currentDue + 0.01) {
+      res.status(400).json({ error: `Payment amount cannot exceed current due (${currentDue.toFixed(2)}).` });
+      return;
+    }
+    const pay = Math.min(currentDue, rawPay);
     purchase.paid = Number(purchase.paid ?? 0) + pay;
     purchase.paid_amount = purchase.paid;
     purchase.due = Math.max(0, Number(purchase.total ?? 0) - Number(purchase.paid));
@@ -1037,8 +1209,12 @@ async function startServer() {
   app.get('/api/customers', (req: Request, res: Response) => {
     const store = getStore();
     const q = sanitizeSearch(req.query.q);
-    const page = Math.max(1, Number(req.query.page ?? 1));
-    const limit = Math.min(200, Math.max(1, Number(req.query.limit ?? 30)));
+    const fetchAll = req.query.all === '1';
+    const page = fetchAll ? 1 : Math.max(1, Number(req.query.page ?? 1));
+    const rawLimit = Number(req.query.limit ?? 30);
+    const limit = fetchAll
+      ? Math.max(1, store.customers.length)
+      : Math.min(10000, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 30));
 
     const totals = new Map<number, { billed: number; paid: number; due: number; invoices: number }>();
     for (const s of store.sales) {
@@ -1058,12 +1234,16 @@ async function startServer() {
     });
     if (q) {
       items = items.filter((c) =>
-        String(c.name ?? '').toLowerCase().includes(q) ||
-        String(c.phone ?? '').toLowerCase().includes(q)
+        matchesSearchTokens([c.name, c.phone, c.email, c.address], q)
       );
     }
     items.sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0));
-    res.json({ items: items.slice((page - 1) * limit, page * limit), total: items.length, page, limit });
+    res.json({
+      items: fetchAll ? items : items.slice((page - 1) * limit, page * limit),
+      total: items.length,
+      page,
+      limit,
+    });
   });
 
   app.post('/api/customers', (req: Request, res: Response) => {
@@ -1095,8 +1275,12 @@ async function startServer() {
   app.get('/api/suppliers', (req: Request, res: Response) => {
     const store = getStore();
     const q = sanitizeSearch(req.query.q);
-    const page = Math.max(1, Number(req.query.page ?? 1));
-    const limit = Math.min(200, Math.max(1, Number(req.query.limit ?? 30)));
+    const fetchAll = req.query.all === '1';
+    const page = fetchAll ? 1 : Math.max(1, Number(req.query.page ?? 1));
+    const rawLimit = Number(req.query.limit ?? 30);
+    const limit = fetchAll
+      ? Math.max(1, store.suppliers.length)
+      : Math.min(10000, Math.max(1, Number.isFinite(rawLimit) ? rawLimit : 30));
 
     const totals = new Map<number, { purchased: number; paid: number; due: number; orders: number }>();
     for (const p of store.purchases) {
@@ -1116,12 +1300,16 @@ async function startServer() {
     });
     if (q) {
       items = items.filter((s) =>
-        String(s.name ?? '').toLowerCase().includes(q) ||
-        String(s.phone ?? '').toLowerCase().includes(q)
+        matchesSearchTokens([s.name, s.phone, s.email, s.address], q)
       );
     }
     items.sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0));
-    res.json({ items: items.slice((page - 1) * limit, page * limit), total: items.length, page, limit });
+    res.json({
+      items: fetchAll ? items : items.slice((page - 1) * limit, page * limit),
+      total: items.length,
+      page,
+      limit,
+    });
   });
 
   app.post('/api/suppliers', (req: Request, res: Response) => {
@@ -1159,14 +1347,21 @@ async function startServer() {
     const store = getStore();
     const body = req.body ?? {};
     const product = store.products.find((p) => Number(p.id) === Number(body.product_id));
-    if (!product || !body.customer_name) {
+    if (!product || !String(body.customer_name ?? '').trim()) {
       res.status(400).json({ error: 'Customer name and product are required.' });
       return;
     }
-    const qty = Math.max(1, Math.round(Number(body.quantity ?? 1)));
-    const price = Math.max(0, Number(body.price ?? product.selling_price ?? 0));
+    const rawQty = Number(body.quantity ?? 1);
+    const rawPrice = Number(body.price ?? product.selling_price ?? 0);
+    const rawDiscount = Number(body.discount ?? 0);
+    if (!Number.isFinite(rawQty) || rawQty < 1 || !Number.isFinite(rawPrice) || rawPrice < 0 || !Number.isFinite(rawDiscount) || rawDiscount < 0) {
+      res.status(400).json({ error: 'Valid positive quantity and non-negative price/discount are required.' });
+      return;
+    }
+    const qty = Math.round(rawQty);
+    const price = rawPrice;
     const subtotal = qty * price;
-    const discount = Math.max(0, Number(body.discount ?? 0));
+    const discount = Math.min(subtotal, rawDiscount);
     const total = Math.max(0, subtotal - discount);
     const estId = nextId(store.estimates);
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -1258,8 +1453,13 @@ async function startServer() {
 
   app.post('/api/expenses', (req: Request, res: Response) => {
     const store = getStore();
-    const amount = Math.max(0.01, Number(req.body?.amount ?? 0));
-    const category = String(req.body?.category ?? 'Other');
+    const rawAmount = Number(req.body?.amount ?? 0);
+    if (!Number.isFinite(rawAmount) || rawAmount <= 0) {
+      res.status(400).json({ error: 'Valid positive expense amount is required.' });
+      return;
+    }
+    const amount = rawAmount;
+    const category = String(req.body?.category ?? 'Other').trim() || 'Other';
     const exp = {
       id: nextId(store.expenses),
       category,
@@ -1292,8 +1492,15 @@ async function startServer() {
       res.status(400).json({ error: 'Valid sale and product are required.' });
       return;
     }
-    const qty = Math.max(1, Math.round(Number(req.body?.quantity ?? 1)));
-    const price = Math.max(0, Number(req.body?.price ?? product.selling_price ?? 0));
+    const rawQty = Number(req.body?.quantity ?? 1);
+    const rawPrice = Number(req.body?.price ?? product.selling_price ?? 0);
+    if (!Number.isFinite(rawQty) || rawQty < 1 || !Number.isFinite(rawPrice) || rawPrice < 0) {
+      res.status(400).json({ error: 'Valid positive quantity and non-negative price are required.' });
+      return;
+    }
+    const qty = Math.round(rawQty);
+    const price = rawPrice;
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const row = {
       id: nextId(store.returns),
       sale_id: Number(sale.id),
@@ -1303,14 +1510,26 @@ async function startServer() {
       quantity: qty,
       price,
       total_amount: qty * price,
-      reason: String(req.body?.reason ?? 'Customer Return'),
-      return_date: new Date().toISOString().slice(0, 10),
+      reason: String(req.body?.reason ?? '').trim() || 'Customer Return',
+      return_date: now.slice(0, 10),
       created_by: 1,
-      created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      created_at: now,
     };
     store.returns.unshift(row);
-    product.quantity = Number(product.quantity ?? 0) + qty;
-    product.stock_quantity = product.quantity;
+    const oldQty = Number(product.quantity ?? 0);
+    const newQty = oldQty + qty;
+    product.quantity = newQty;
+    product.stock_quantity = newQty;
+    store.stock_movements.unshift({
+      id: nextId(store.stock_movements),
+      product_id: Number(product.id),
+      old_quantity: oldQty,
+      new_quantity: newQty,
+      difference: qty,
+      reason: `Sales Return (${sale.invoice_no})`,
+      created_by: 1,
+      created_at: now,
+    });
     saveStore(store);
     res.status(201).json(row);
   });
@@ -1334,19 +1553,31 @@ async function startServer() {
       });
       return;
     }
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const row = {
       id: nextId(store.damages),
       product_id: Number(product.id),
       quantity: reqQty,
-      reason: String(req.body?.reason ?? 'Damaged item'),
+      reason: String(req.body?.reason ?? '').trim() || 'Damaged item',
       loss_amount: reqQty * Number(product.purchase_price ?? 0),
-      damage_date: new Date().toISOString().slice(0, 10),
+      damage_date: now.slice(0, 10),
       created_by: 1,
-      created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      created_at: now,
     };
     store.damages.unshift(row);
-    product.quantity = available - reqQty;
-    product.stock_quantity = product.quantity;
+    const newQty = available - reqQty;
+    product.quantity = newQty;
+    product.stock_quantity = newQty;
+    store.stock_movements.unshift({
+      id: nextId(store.stock_movements),
+      product_id: Number(product.id),
+      old_quantity: available,
+      new_quantity: newQty,
+      difference: -reqQty,
+      reason: `Damage: ${row.reason}`,
+      created_by: 1,
+      created_at: now,
+    });
     saveStore(store);
     res.status(201).json(row);
   });
@@ -1504,6 +1735,27 @@ async function startServer() {
   });
 
   // ---- Auth & Password Recovery ----
+  app.get('/api/auth/session', (req: Request, res: Response) => {
+    const store = getStore();
+    const publicSettings = getPublicSettings(store);
+    const session = getValidSession(req);
+    if (!session) {
+      res.json({
+        authenticated: false,
+        setupRequired: !store.users.some((u) => Boolean(u.password_hash)),
+        settings: publicSettings,
+      });
+      return;
+    }
+    res.json({
+      authenticated: true,
+      setupRequired: false,
+      user: sanitizeUser(session.user),
+      expiresAt: session.expiresAt,
+      settings: publicSettings,
+    });
+  });
+
   app.post('/api/auth/login', (req: Request, res: Response) => {
     const store = getStore();
     const identifier = String(req.body?.identifier ?? req.body?.email ?? '').trim().toLowerCase();
@@ -1517,51 +1769,350 @@ async function startServer() {
       (u) => u.email.toLowerCase() === identifier || u.name.toLowerCase() === identifier
     );
     if (!user) {
-      res.status(401).json({ error: 'Invalid credentials. Please check your email/username and password.' });
+      res.status(401).json({ error: 'Invalid credentials. Only registered dashboard accounts can sign in.' });
       return;
     }
     if (!user.is_active) {
-      res.status(403).json({ error: 'This account is currently disabled. Contact an administrator.' });
+      res.status(403).json({ error: 'This account is currently disabled. Contact the Super Admin.' });
       return;
     }
 
-    let firstTimeActivated = false;
-    if (user.password_hash) {
-      if (!verifyPassword(password, user.password_hash)) {
-        res.status(401).json({ error: 'Incorrect password. Use Forgot Password to recover access.' });
-        return;
-      }
-    } else {
-      if (password.length < 6) {
-        res.status(400).json({ error: 'First-time password activation requires at least 6 characters.' });
-        return;
-      }
-      user.password_hash = hashPassword(password);
-      saveStore(store);
-      firstTimeActivated = true;
+    if (!user.password_hash) {
+      res.status(401).json({
+        error: 'Password is not configured for this account. Use Forgot password? with your registered phone number to set or recover your password.',
+      });
+      return;
+    }
+
+    if (!verifyPassword(password, user.password_hash)) {
+      res.status(401).json({
+        error: 'Incorrect password. Please enter your authentic password or use Forgot password? to recover it.',
+      });
+      return;
     }
 
     const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = Date.now() + IDLE_TIMEOUT_MS;
     activeSessions.set(token, {
       userId: user.id,
-      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      expiresAt,
     });
 
     res.json({
       token,
-      firstTimeActivated,
+      expiresAt,
       user: sanitizeUser(user),
     });
   });
 
+  function findUserByEmailOrPhone(store: PosStoreData, rawIdentifier: string): StoreUser | undefined {
+    const clean = rawIdentifier.trim().toLowerCase();
+    const digits = normalizePhoneDigits(rawIdentifier);
+    const tail = (d: string) => (d.length >= 8 ? d.slice(-10) : d);
+    return store.users.find((u) => {
+      if (u.email.toLowerCase() === clean || u.name.toLowerCase() === clean) return true;
+      if (digits.length >= 6) {
+        const uDigits = normalizePhoneDigits(u.phone);
+        if (uDigits.length >= 6 && tail(uDigits) === tail(digits)) return true;
+        const shopDigits = normalizePhoneDigits(store.settings.shop_phone);
+        if (['super_admin', 'admin'].includes(u.role) && shopDigits.length >= 6 && tail(shopDigits) === tail(digits)) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }
+
+  function hashRecoveryCode(userId: number, code: string): string {
+    return crypto.createHmac('sha256', OTP_HMAC_KEY).update(`${userId}:${code}`).digest('hex');
+  }
+
+  function isSafeExternalWebhookUrl(rawUrl: string): URL | null {
+    try {
+      const parsed = new URL(rawUrl);
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+      const host = parsed.hostname.toLowerCase();
+      if (
+        host === 'localhost' ||
+        host === '127.0.0.1' ||
+        host === '::1' ||
+        host === '0.0.0.0' ||
+        host.endsWith('.local') ||
+        host.startsWith('10.') ||
+        host.startsWith('192.168.') ||
+        host.startsWith('169.254.') ||
+        /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+      ) {
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  app.post('/api/auth/request-recovery-code', async (req: Request, res: Response) => {
+    const store = getStore();
+    const rawIdentifier = String(req.body?.identifier ?? req.body?.email ?? '').trim();
+    const requestedChannel = String(req.body?.channel ?? '').trim().toLowerCase();
+    if (!rawIdentifier) {
+      res.status(400).json({ error: 'Please enter your registered email address or mobile number.' });
+      return;
+    }
+
+    const channel: 'email' | 'sms' =
+      requestedChannel === 'sms' || requestedChannel === 'email'
+        ? (requestedChannel as 'email' | 'sms')
+        : rawIdentifier.includes('@')
+          ? 'email'
+          : 'sms';
+
+    const smtpHost = process.env.SMTP_HOST || 'mail.youthit.com.bd';
+    const smtpPort = Number(process.env.SMTP_PORT || 465);
+    const smtpUser = process.env.SMTP_USER || 'info@youthit.com.bd';
+    const smtpPass = process.env.SMTP_PASS || '';
+    const smtpFrom = process.env.SMTP_FROM || smtpUser;
+
+    if (channel === 'email') {
+      if (!smtpHost || !smtpUser || !smtpPass) {
+        res.status(503).json({
+          error:
+            'Email password (SMTP_PASS) for info@youthit.com.bd (mail.youthit.com.bd:465) is not configured in Settings -> Secrets yet. Add SMTP_PASS in Secrets to send verification emails.',
+        });
+        return;
+      }
+    } else {
+      const safeSmsUrl = process.env.SMS_GATEWAY_URL ? isSafeExternalWebhookUrl(process.env.SMS_GATEWAY_URL) : null;
+      if (!safeSmsUrl) {
+        res.status(503).json({
+          error:
+            'SMS delivery is not configured in Settings -> Secrets (SMS_GATEWAY_URL, SMS_API_KEY). Configure an SMS gateway or switch to Email once configured.',
+        });
+        return;
+      }
+    }
+
+    const user = findUserByEmailOrPhone(store, rawIdentifier);
+    if (!user || !user.is_active) {
+      res.json({
+        ok: true,
+        channel,
+        message: `If an active account matches that ${channel === 'email' ? 'email' : 'mobile number'}, a 6-digit verification code has been sent.`,
+      });
+      return;
+    }
+
+    const existing = recoveryCodes.get(user.id);
+    if (existing && Date.now() - existing.sentAt < OTP_COOLDOWN_MS && Date.now() < existing.expiresAt) {
+      res.status(429).json({ error: 'Please wait a moment before requesting another verification code.' });
+      return;
+    }
+
+    const code = String(crypto.randomInt(100000, 1000000));
+    const codeHash = hashRecoveryCode(user.id, code);
+    const shopName = store.settings.shop_name || 'Youth IT POS';
+
+    try {
+      if (channel === 'email') {
+        if (!user.email) {
+          res.status(400).json({ error: 'No email address is registered for this account.' });
+          return;
+        }
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpPort === 465,
+          auth: {
+            user: smtpUser,
+            pass: smtpPass,
+          },
+          connectionTimeout: 7_000,
+          greetingTimeout: 7_000,
+          socketTimeout: 10_000,
+        });
+        await transporter.sendMail({
+          from: `${shopName} <${smtpFrom}>`,
+          to: user.email,
+          subject: `${shopName} — Password Recovery Verification Code`,
+          text: `Hello ${user.name},\n\nYour 6-digit password recovery verification code is: ${code}\n\nThis code expires in 10 minutes. If you did not request this, ignore this email.`,
+        });
+      } else {
+        const fallbackShopPhone = ['super_admin', 'admin'].includes(user.role)
+          ? store.settings.shop_phone || ''
+          : '';
+        const targetPhone = String(user.phone || fallbackShopPhone).trim();
+        if (!targetPhone) {
+          res.status(400).json({
+            error: 'No mobile number is registered for this account. Please try Email recovery instead.',
+          });
+          return;
+        }
+        const smsUrl = isSafeExternalWebhookUrl(String(process.env.SMS_GATEWAY_URL))!;
+        const smsSenderId = String(
+          process.env.SMS_SENDER_ID ||
+            smsUrl.searchParams.get('senderid') ||
+            smsUrl.searchParams.get('sender_id') ||
+            smsUrl.searchParams.get('SenderId') ||
+            ''
+        ).trim();
+        const smsRes = await fetch(smsUrl.toString(), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(process.env.SMS_API_KEY ? { Authorization: `Bearer ${process.env.SMS_API_KEY}` } : {}),
+          },
+          body: JSON.stringify({
+            to: targetPhone,
+            number: targetPhone.replace(/^\+/, ''),
+            api_key: process.env.SMS_API_KEY || '',
+            ...(smsSenderId
+              ? {
+                  senderid: smsSenderId,
+                  sender_id: smsSenderId,
+                  SenderId: smsSenderId,
+                  sender: smsSenderId,
+                }
+              : {}),
+            type: 'text',
+            message: `${shopName} recovery code: ${code} (valid 10 min).`,
+          }),
+          signal: AbortSignal.timeout(8_000),
+        });
+        const rawSmsText = await smsRes.text();
+        const redactSecrets = (txt: string) => {
+          let safe = txt.replaceAll(code, '******');
+          if (process.env.SMS_API_KEY) {
+            safe = safe.replaceAll(process.env.SMS_API_KEY, '***');
+          }
+          return safe.trim().slice(0, 160);
+        };
+        const trimmedSms = rawSmsText.trim();
+        const smsContentType = (smsRes.headers.get('content-type') || '').toLowerCase();
+        if (
+          smsContentType.includes('text/html') ||
+          trimmedSms.startsWith('<!doctype') ||
+          trimmedSms.startsWith('<!DOCTYPE') ||
+          trimmedSms.startsWith('<html')
+        ) {
+          throw new Error(
+            'SMS_GATEWAY_URL returned an HTML page instead of an SMS API response. Please enter your actual SMS provider API endpoint in Settings -> Secrets.'
+          );
+        }
+        if (!smsRes.ok) {
+          throw new Error(
+            `SMS gateway rejected request (HTTP ${smsRes.status}): ${redactSecrets(trimmedSms) || 'Check SMS_GATEWAY_URL and SMS_API_KEY.'}`
+          );
+        }
+        if (trimmedSms) {
+          let parsedSms: Record<string, unknown> | null = null;
+          try {
+            const parsed = JSON.parse(trimmedSms);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              parsedSms = parsed as Record<string, unknown>;
+            } else if (Array.isArray(parsed) && parsed[0] && typeof parsed[0] === 'object') {
+              parsedSms = parsed[0] as Record<string, unknown>;
+            }
+          } catch {
+            parsedSms = null;
+          }
+
+          if (parsedSms) {
+            const rawCode =
+              parsedSms.response_code ??
+              parsedSms.status_code ??
+              parsedSms.statusCode ??
+              parsedSms.StatusCode ??
+              parsedSms.error_code ??
+              parsedSms.errorCode ??
+              parsedSms.ErrorCode ??
+              parsedSms.code;
+            const numCode = rawCode !== undefined && rawCode !== null && rawCode !== '' ? Number(rawCode) : NaN;
+            const statusStr = String(parsedSms.status ?? parsedSms.Status ?? parsedSms.result ?? '').toLowerCase();
+            const errField =
+              parsedSms.error_message ??
+              parsedSms.errorMessage ??
+              parsedSms.ErrorMessage ??
+              parsedSms.ErrorDescription ??
+              parsedSms.error ??
+              parsedSms.Error ??
+              parsedSms.errors;
+            const hasExplicitError =
+              Boolean(errField) &&
+              !['0', 'none', 'null', 'false', 'ok', 'success'].includes(String(errField).toLowerCase());
+            const badStatus =
+              parsedSms.ok === false ||
+              parsedSms.success === false ||
+              parsedSms.success === 'false' ||
+              statusStr === 'false' ||
+              statusStr === '0' ||
+              /error|fail|reject|invalid|denied/.test(statusStr);
+            const badNumericCode =
+              Number.isFinite(numCode) &&
+              ![0, 200, 201, 202, 1101].includes(numCode) &&
+              (numCode >= 300 || numCode < 0 || numCode === 1 || numCode === 2);
+
+            if (hasExplicitError || badStatus || badNumericCode) {
+              const detail = String(
+                errField || parsedSms.message || parsedSms.Message || trimmedSms
+              );
+              const extraHint = /sender\s*id/i.test(detail)
+                ? ' — Add SMS_SENDER_ID in Settings -> Secrets.'
+                : '';
+              throw new Error(`SMS gateway error: ${redactSecrets(detail)}${extraHint}`);
+            }
+
+            // Catch generic echo/non-SMS JSON (e.g. webhook returning missing-param message or unrelated JSON)
+            const msgText = String(parsedSms.message ?? parsedSms.Message ?? '');
+            if (/missing|required|invalid|not\s+found|unauthoriz|fail|error/i.test(msgText)) {
+              throw new Error(`SMS gateway error: ${redactSecrets(msgText)}`);
+            }
+          } else {
+            if (/error|fail|invalid|denied|missing|required|balance|sender|not\s+found|unauthoriz|expired|wrong/i.test(trimmedSms)) {
+              throw new Error(`SMS gateway error: ${redactSecrets(trimmedSms)}`);
+            }
+            if (!/\b(ok|success|sent|queued|accepted|submitted|delivered|200|202|1101)\b/i.test(trimmedSms)) {
+              throw new Error(`SMS gateway response did not confirm delivery: ${redactSecrets(trimmedSms)}`);
+            }
+          }
+        }
+      }
+
+      recoveryCodes.set(user.id, {
+        codeHash,
+        channel,
+        expiresAt: Date.now() + OTP_EXPIRY_MS,
+        sentAt: Date.now(),
+        attempts: 0,
+      });
+
+      res.json({
+        ok: true,
+        channel,
+        message: `A 6-digit verification code has been sent to your registered ${channel === 'email' ? 'email' : 'mobile number'}.`,
+      });
+    } catch (err) {
+      const codeHint = (err as { code?: string } | null)?.code;
+      const errMsg = err instanceof Error ? err.message : '';
+      const reason =
+        codeHint === 'EAUTH'
+          ? 'SMTP authentication failed. Please double-check SMTP_PASS for info@youthit.com.bd in Settings -> Secrets.'
+          : codeHint === 'ETIMEDOUT' || codeHint === 'ECONNREFUSED' || codeHint === 'ESOCKET'
+            ? `Could not connect to mail server (${smtpHost}:${smtpPort}). Please verify SMTP_HOST and SMTP_PORT in Settings -> Secrets.`
+            : errMsg.startsWith('SMS')
+              ? errMsg
+              : `Could not deliver the ${channel === 'email' ? 'recovery email' : 'SMS code'}. Please verify your delivery credentials in Settings -> Secrets.`;
+      res.status(502).json({ error: reason });
+    }
+  });
+
   app.post('/api/auth/recover-password', (req: Request, res: Response) => {
     const store = getStore();
-    const identifier = String(req.body?.identifier ?? req.body?.email ?? '').trim().toLowerCase();
-    const phoneInput = normalizePhoneDigits(req.body?.phone);
+    const rawIdentifier = String(req.body?.identifier ?? req.body?.email ?? '').trim();
+    const code = String(req.body?.code ?? '').trim();
     const newPassword = String(req.body?.new_password ?? '');
 
-    if (!identifier || !phoneInput || !newPassword) {
-      res.status(400).json({ error: 'Email/username, registered phone number, and new password are required.' });
+    if (!rawIdentifier || !/^\d{6}$/.test(code) || !newPassword) {
+      res.status(400).json({ error: 'Account email/mobile, 6-digit verification code, and new password are required.' });
       return;
     }
     if (newPassword.length < 6) {
@@ -1569,32 +2120,33 @@ async function startServer() {
       return;
     }
 
-    const user = store.users.find(
-      (u) => u.email.toLowerCase() === identifier || u.name.toLowerCase() === identifier
+    const user = findUserByEmailOrPhone(store, rawIdentifier);
+    if (!user || !user.is_active) {
+      res.status(401).json({ error: 'Invalid or expired verification code.' });
+      return;
+    }
+
+    const entry = recoveryCodes.get(user.id);
+    if (!entry || Date.now() > entry.expiresAt || entry.attempts >= 5) {
+      recoveryCodes.delete(user.id);
+      res.status(401).json({ error: 'Verification code is invalid or expired. Please request a new code.' });
+      return;
+    }
+
+    const candidateHash = hashRecoveryCode(user.id, code);
+    const validCode = crypto.timingSafeEqual(
+      Buffer.from(candidateHash, 'hex'),
+      Buffer.from(entry.codeHash, 'hex')
     );
-    if (!user) {
-      res.status(404).json({ error: 'No matching account found for that email or username.' });
-      return;
-    }
-    if (!user.is_active) {
-      res.status(403).json({ error: 'Disabled accounts cannot reset passwords.' });
-      return;
-    }
 
-    const userPhone = normalizePhoneDigits(user.phone);
-    const shopPhone = normalizePhoneDigits(store.settings.shop_phone);
-    const tail = (digits: string) => (digits.length >= 8 ? digits.slice(-10) : digits);
-    const phoneMatched =
-      (userPhone.length >= 6 && tail(userPhone) === tail(phoneInput)) ||
-      (user.role === 'admin' && shopPhone.length >= 6 && tail(shopPhone) === tail(phoneInput));
-
-    if (!phoneMatched) {
-      res.status(403).json({
-        error: 'Phone number verification failed. Enter the registered phone number for this account.',
-      });
+    if (!validCode) {
+      entry.attempts += 1;
+      if (entry.attempts >= 5) recoveryCodes.delete(user.id);
+      res.status(401).json({ error: 'Incorrect verification code. Please check your email/SMS and try again.' });
       return;
     }
 
+    recoveryCodes.delete(user.id);
     user.password_hash = hashPassword(newPassword);
     saveStore(store);
 
@@ -1604,16 +2156,21 @@ async function startServer() {
 
     res.json({
       ok: true,
-      message: 'Password has been reset successfully. Please sign in with your new password.',
+      message: 'Verification code confirmed and password updated. Please sign in with your new password.',
     });
   });
 
-  app.post('/api/auth/change-password', (req: Request, res: Response) => {
+  app.post('/api/auth/change-password', (req: AuthedRequest, res: Response) => {
     const store = getStore();
-    const userId = Number(req.body?.user_id ?? 0);
+    const authUser = req.authUser;
+    const userId = Number(req.body?.user_id ?? authUser?.id ?? 0);
     const currentPassword = String(req.body?.current_password ?? '');
     const newPassword = String(req.body?.new_password ?? '');
 
+    if (!authUser || (authUser.id !== userId && !hasAnyRole(authUser, ['admin']))) {
+      res.status(403).json({ error: 'You do not have permission to change this password.' });
+      return;
+    }
     if (!userId || newPassword.length < 6) {
       res.status(400).json({ error: 'New password must be at least 6 characters.' });
       return;
@@ -1623,7 +2180,11 @@ async function startServer() {
       res.status(404).json({ error: 'User account not found.' });
       return;
     }
-    if (user.password_hash && !verifyPassword(currentPassword, user.password_hash)) {
+    if (user.role === 'super_admin' && authUser.role !== 'super_admin') {
+      res.status(403).json({ error: 'Only the Super Admin can change the Super Admin password.' });
+      return;
+    }
+    if (user.password_hash && authUser.id === user.id && !verifyPassword(currentPassword, user.password_hash)) {
       res.status(401).json({ error: 'Current password is incorrect.' });
       return;
     }
@@ -1642,12 +2203,17 @@ async function startServer() {
   });
 
   // ---- Users (never expose password hashes) ----
-  app.get('/api/users', (_req: Request, res: Response) => {
+  app.get('/api/users', (req: AuthedRequest, res: Response) => {
     const store = getStore();
+    const authUser = req.authUser;
+    if (!hasAnyRole(authUser, ['admin'])) {
+      res.json(authUser ? [sanitizeUser(authUser)] : []);
+      return;
+    }
     res.json(store.users.map(sanitizeUser));
   });
 
-  app.post('/api/users', (req: Request, res: Response) => {
+  app.post('/api/users', (req: AuthedRequest, res: Response) => {
     const store = getStore();
     const { name, email, role, phone, address, password } = req.body ?? {};
     const cleanName = String(name ?? '').trim();
@@ -1661,18 +2227,20 @@ async function startServer() {
       return;
     }
     const cleanPassword = String(password ?? '');
-    if (cleanPassword && cleanPassword.length < 6) {
-      res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    if (!cleanPassword || cleanPassword.length < 6) {
+      res.status(400).json({ error: 'Password is required (at least 6 characters) when adding a user.' });
       return;
     }
+    const requestedRole = String(role ?? 'staff');
+    const assignedRole = ['admin', 'manager', 'staff'].includes(requestedRole) ? requestedRole : 'staff';
     const user = {
       id: nextId(store.users),
       name: cleanName,
       email: cleanEmail,
-      role: ['admin', 'manager', 'staff'].includes(String(role)) ? String(role) : 'staff',
+      role: assignedRole,
       phone: String(phone ?? '').trim(),
       address: String(address ?? '').trim(),
-      ...(cleanPassword ? { password_hash: hashPassword(cleanPassword) } : {}),
+      password_hash: hashPassword(cleanPassword),
       is_active: true,
       created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
     };
@@ -1681,13 +2249,23 @@ async function startServer() {
     res.status(201).json(sanitizeUser(user));
   });
 
-  app.put('/api/users/:id', (req: Request, res: Response) => {
+  app.put('/api/users/:id', (req: AuthedRequest, res: Response) => {
     const store = getStore();
+    const authUser = req.authUser;
     const user = store.users.find((u) => u.id === Number(req.params.id));
     if (!user) {
       res.status(404).json({ error: 'User not found.' });
       return;
     }
+    if (!authUser || (authUser.id !== user.id && !hasAnyRole(authUser, ['admin']))) {
+      res.status(403).json({ error: 'You do not have permission to edit this user.' });
+      return;
+    }
+    if (user.role === 'super_admin' && authUser.role !== 'super_admin') {
+      res.status(403).json({ error: 'Only the Super Admin can modify the Super Admin account.' });
+      return;
+    }
+
     const body = req.body ?? {};
     if (body.name !== undefined) {
       const n = String(body.name).trim();
@@ -1716,8 +2294,12 @@ async function startServer() {
     } else if (typeof body.profile_image === 'string' && body.profile_image.startsWith('/uploads/')) {
       user.profile_image = body.profile_image;
     }
-    if (body.role !== undefined && ['admin', 'manager', 'staff'].includes(String(body.role))) {
-      user.role = String(body.role);
+    if (body.role !== undefined && hasAnyRole(authUser, ['admin'])) {
+      if (user.id === 1 || user.role === 'super_admin') {
+        user.role = 'super_admin';
+      } else if (['admin', 'manager', 'staff'].includes(String(body.role))) {
+        user.role = String(body.role);
+      }
     }
     if (body.password !== undefined && String(body.password) !== '') {
       const p = String(body.password);
@@ -1726,16 +2308,24 @@ async function startServer() {
         return;
       }
       user.password_hash = hashPassword(p);
+      for (const [tok, sess] of activeSessions.entries()) {
+        if (sess.userId === user.id && authUser.id !== user.id) activeSessions.delete(tok);
+      }
     }
     saveStore(store);
     res.json(sanitizeUser(user));
   });
 
-  app.post('/api/users/:id/avatar', (req: Request, res: Response) => {
+  app.post('/api/users/:id/avatar', (req: AuthedRequest, res: Response) => {
     const store = getStore();
+    const authUser = req.authUser;
     const user = store.users.find((u) => u.id === Number(req.params.id));
     if (!user) {
       res.status(404).json({ error: 'User not found.' });
+      return;
+    }
+    if (!authUser || (authUser.id !== user.id && !hasAnyRole(authUser, ['admin']))) {
+      res.status(403).json({ error: 'You do not have permission to update this profile photo.' });
       return;
     }
     const dataUrl = String(req.body?.image_data ?? '');
@@ -1764,26 +2354,45 @@ async function startServer() {
     res.json(sanitizeUser(user));
   });
 
-  app.patch('/api/users/:id/toggle', (req: Request, res: Response) => {
+  app.patch('/api/users/:id/toggle', (req: AuthedRequest, res: Response) => {
     const store = getStore();
+    const authUser = req.authUser;
     const user = store.users.find((u) => u.id === Number(req.params.id));
     if (!user) {
       res.status(404).json({ error: 'User not found.' });
       return;
     }
+    if (user.id === 1 || user.role === 'super_admin' || user.id === authUser?.id) {
+      res.status(400).json({ error: 'Super Admin or currently signed-in account cannot be disabled.' });
+      return;
+    }
     user.is_active = !user.is_active;
+    if (!user.is_active) {
+      for (const [tok, sess] of activeSessions.entries()) {
+        if (sess.userId === user.id) activeSessions.delete(tok);
+      }
+    }
     saveStore(store);
     res.json(sanitizeUser(user));
   });
 
-  app.delete('/api/users/:id', (req: Request, res: Response) => {
+  app.delete('/api/users/:id', (req: AuthedRequest, res: Response) => {
     const store = getStore();
+    const authUser = req.authUser;
     const targetId = Number(req.params.id);
-    if (targetId === 1) {
-      res.status(400).json({ error: 'Primary administrator account cannot be deleted.' });
+    const targetUser = store.users.find((u) => u.id === targetId);
+    if (!targetUser) {
+      res.status(404).json({ error: 'User not found.' });
+      return;
+    }
+    if (targetId === 1 || targetUser.role === 'super_admin' || targetId === authUser?.id) {
+      res.status(400).json({ error: 'Super Admin or currently signed-in account cannot be deleted.' });
       return;
     }
     store.users = store.users.filter((u) => u.id !== targetId);
+    for (const [tok, sess] of activeSessions.entries()) {
+      if (sess.userId === targetId) activeSessions.delete(tok);
+    }
     saveStore(store);
     res.json({ ok: true });
   });
@@ -1925,6 +2534,7 @@ async function startServer() {
     const q = sanitizeSearch(req.query.q);
     const filter = String(req.query.filter ?? 'all');
     const catMap = new Map(store.categories.map((c) => [Number(c.id), String(c.name ?? '')]));
+    const brandMap = new Map(store.brands.map((b) => [Number(b.id), String(b.name ?? '')]));
     const prodMap = new Map(store.products.map((p) => [Number(p.id), String(p.name ?? 'Product')]));
 
     let products: Array<Record<string, unknown>> = store.products
@@ -1932,15 +2542,13 @@ async function startServer() {
       .map((p) => ({
         ...p,
         category_name: catMap.get(Number(p.category_id)) ?? 'Uncategorized',
+        brand_name: brandMap.get(Number(p.brand_id)) ?? 'No Brand',
         quantity: Number(p.stock_quantity ?? p.quantity ?? 0),
       }));
 
     if (q) {
-      products = products.filter(
-        (p) =>
-          String(p.name ?? '').toLowerCase().includes(q) ||
-          String(p.sku ?? '').toLowerCase().includes(q) ||
-          String(p.category_name ?? '').toLowerCase().includes(q)
+      products = products.filter((p) =>
+        matchesSearchTokens([p.name, p.sku, p.barcode, p.category_name, p.brand_name], q)
       );
     }
     if (filter === 'low') {
@@ -2446,6 +3054,24 @@ async function startServer() {
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename="youthit-pos-laravel-13.zip"');
     res.send(buffer);
+  });
+
+  // Prevent any unmatched or failing /api/* request from falling through to SPA HTML
+  app.use('/api', (_req: Request, res: Response) => {
+    res.status(404).json({ error: 'API endpoint not found.' });
+  });
+
+  app.use('/api', (err: unknown, _req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) {
+      next(err);
+      return;
+    }
+    const status =
+      typeof (err as { status?: number })?.status === 'number'
+        ? (err as { status: number }).status
+        : 500;
+    const message = err instanceof Error ? err.message : 'Unexpected server error.';
+    res.status(status >= 400 && status < 600 ? status : 500).json({ error: message });
   });
 
   // ---- Vite / Static Frontend ----
