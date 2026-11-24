@@ -30,6 +30,8 @@ export function LoginView({
   const [recoverStep, setRecoverStep] = useState<'request' | 'verify'>('request');
   const [recoverChannel, setRecoverChannel] = useState<'email' | 'sms'>('email');
   const [identifier, setIdentifier] = useState('rajahmed249@gmail.com');
+  const [recoverEmail, setRecoverEmail] = useState('rajahmed249@gmail.com');
+  const [recoverPhone, setRecoverPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
@@ -74,6 +76,17 @@ export function LoginView({
   async function handleRequestRecoveryCode(e: React.FormEvent) {
     e.preventDefault();
     setNotice(null);
+    const activeRecoverId = (recoverChannel === 'email' ? recoverEmail : recoverPhone).trim();
+    if (!activeRecoverId) {
+      setNotice({
+        type: 'error',
+        text:
+          recoverChannel === 'email'
+            ? 'Please enter your registered email address.'
+            : 'Please enter your registered mobile number.',
+      });
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await apiFetch<{ ok: boolean; channel: 'email' | 'sms'; message: string }>(
@@ -81,7 +94,7 @@ export function LoginView({
         {
           method: 'POST',
           body: JSON.stringify({
-            identifier,
+            identifier: activeRecoverId,
             channel: recoverChannel,
           }),
         }
@@ -101,6 +114,7 @@ export function LoginView({
   async function handleRecover(e: React.FormEvent) {
     e.preventDefault();
     setNotice(null);
+    const activeRecoverId = (recoverChannel === 'email' ? recoverEmail : recoverPhone).trim() || identifier.trim();
     if (!/^\d{6}$/.test(recoveryCode.trim())) {
       setNotice({ type: 'error', text: 'Please enter the 6-digit verification code sent to you.' });
       return;
@@ -118,7 +132,7 @@ export function LoginView({
       const res = await apiFetch<{ ok: boolean; message: string }>('/api/auth/recover-password', {
         method: 'POST',
         body: JSON.stringify({
-          identifier,
+          identifier: activeRecoverId,
           code: recoveryCode.trim(),
           new_password: newPassword,
         }),
@@ -468,6 +482,11 @@ export function LoginView({
                   onClick={() => {
                     setMode('recover');
                     setRecoverStep('request');
+                    if (identifier.includes('@')) {
+                      setRecoverEmail(identifier);
+                    } else if (/\d{6,}/.test(identifier)) {
+                      setRecoverPhone(identifier);
+                    }
                     setNotice(null);
                   }}
                   className="font-medium text-[#c084fc] hover:text-[#e879f9] transition-colors cursor-pointer whitespace-nowrap"
@@ -492,7 +511,10 @@ export function LoginView({
               <div className="grid grid-cols-2 gap-2 p-1 rounded-[12px] bg-[#0e132d]/85 border border-indigo-300/20 text-xs font-semibold">
                 <button
                   type="button"
-                  onClick={() => setRecoverChannel('email')}
+                  onClick={() => {
+                    setRecoverChannel('email');
+                    setNotice(null);
+                  }}
                   className={`py-2 rounded-[9px] flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                     recoverChannel === 'email'
                       ? 'bg-[#7c3aed] text-white shadow-sm'
@@ -504,7 +526,10 @@ export function LoginView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setRecoverChannel('sms')}
+                  onClick={() => {
+                    setRecoverChannel('sms');
+                    setNotice(null);
+                  }}
                   className={`py-2 rounded-[9px] flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                     recoverChannel === 'sms'
                       ? 'bg-[#7c3aed] text-white shadow-sm'
@@ -523,12 +548,20 @@ export function LoginView({
                   <Phone className="w-[18px] h-[18px] text-indigo-200/80 absolute left-4 pointer-events-none" />
                 )}
                 <input
-                  type="text"
+                  type={recoverChannel === 'email' ? 'email' : 'tel'}
                   required
-                  aria-label="Account email or mobile number"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder={recoverChannel === 'email' ? 'Registered email address' : 'Registered mobile number'}
+                  aria-label={recoverChannel === 'email' ? 'Registered email address' : 'Registered mobile number'}
+                  value={recoverChannel === 'email' ? recoverEmail : recoverPhone}
+                  onChange={(e) =>
+                    recoverChannel === 'email'
+                      ? setRecoverEmail(e.target.value)
+                      : setRecoverPhone(e.target.value)
+                  }
+                  placeholder={
+                    recoverChannel === 'email'
+                      ? 'Registered email address'
+                      : 'Registered mobile number (e.g. 01674297522)'
+                  }
                   className="w-full pl-11 pr-4 py-3 rounded-[14px] text-sm text-white placeholder:text-indigo-100/65 bg-[#0e132d]/85 border border-indigo-300/20 focus:outline-none focus:border-violet-400/75 focus:ring-2 focus:ring-violet-500/25 transition-all"
                 />
               </div>

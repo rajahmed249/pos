@@ -6,9 +6,10 @@ import JSZip from 'jszip';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { getStore, nextId, saveStore, type PosStoreData } from './server/posStore.ts';
+import { generateMysqlDumpSql } from './server/sqlExporter.ts';
 import { parseMysqlDumpText, type SqlRow } from './server/sqlParser.ts';
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 continuous hour of inactivity
 const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 const OTP_COOLDOWN_MS = 45 * 1000;
@@ -123,18 +124,80 @@ function matchesSearchTokens(fields: Array<unknown>, query: string): boolean {
   return tokens.every((t) => haystack.includes(t));
 }
 
+const EXCLUDED_DIRS = new Set([
+  'node_modules',
+  'vendor',
+  '.git',
+  '.aistudio',
+  'tmp',
+  '.cache',
+  '.vite',
+]);
+
+function isExcludedFileName(name: string): boolean {
+  if (name === '.DS_Store' || name === 'server.js') return true;
+  if (/^\.env($|\.)/i.test(name) && name !== '.env.example') return true;
+  if (/\.log$/i.test(name)) return true;
+  return false;
+}
+
 function collectFiles(dir: string, baseDir: string): string[] {
   const results: string[] = [];
   if (!fs.existsSync(dir)) return results;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      results.push(...collectFiles(full, baseDir));
-    } else {
+      if (EXCLUDED_DIRS.has(entry.name)) continue;
+      results.push(...collectFiles(path.join(dir, entry.name), baseDir));
+    } else if (entry.isFile()) {
+      if (isExcludedFileName(entry.name)) continue;
+      const full = path.join(dir, entry.name);
       results.push(path.relative(baseDir, full).replace(/\\/g, '/'));
     }
   }
   return results.sort();
+}
+
+function buildHostingUploadGuide(): string {
+  return `# Youth IT POS — Hosting Deployment Guide
+
+## Included Files & Database
+- \`database/youthit_pos_database.sql\` (and \`laravel/database/sql/youthits_pos.sql\`): Full MySQL 8 / MariaDB schema + all live data from your store.
+- \`data/pos-store.json\`: Live JSON store used by the Node.js + React server.
+- \`public/\`: Shop logos, favicon, QR code, and uploaded avatars/product images.
+- \`.env.example\`: Environment variable template (rename to \`.env\` on hosting and fill in your credentials — secret keys are never bundled in ZIP downloads).
+
+---
+
+## Option 1: cPanel Shared Hosting / PHP 8.3 + Laravel 13 (\`youthit-pos-laravel-13.zip\`)
+1. **Create MySQL Database** in cPanel -> **MySQL Databases** (database, username, password).
+2. **Import Database**: Open cPanel -> **phpMyAdmin**, select your database, go to **Import**, and upload \`database/youthit_pos_database.sql\`.
+3. **Upload Files**: Upload and extract \`youthit-pos-laravel-13.zip\` into your domain folder. Set your domain's **Document Root** to \`.../public\`.
+4. **Configure \`.env\`**: Copy \`.env.example\` to \`.env\` and update:
+   - \`APP_URL\`, \`DB_DATABASE\`, \`DB_USERNAME\`, \`DB_PASSWORD\`
+   - \`MAIL_HOST=mail.youthit.com.bd\`, \`MAIL_PORT=465\`, \`MAIL_ENCRYPTION=ssl\`, \`MAIL_USERNAME\`, \`MAIL_PASSWORD\`
+   - \`SMS_GATEWAY_URL\`, \`SMS_API_KEY\`, \`SMS_SENDER_ID\`
+5. **Install PHP dependencies & generate key** (via Terminal or SSH):
+   \`\`\`bash
+   composer install --no-dev --optimize-autoloader
+   php artisan key:generate
+   \`\`\`
+6. **Admin Password Note for Laravel**: If migrating from the Node.js preview store, use **Forgot Password** (Email/SMS OTP) or run:
+   \`\`\`bash
+   php artisan tinker --execute="App\\Models\\User::where('email','rajahmed249@gmail.com')->update(['password'=>bcrypt('YOUR_PASSWORD')]);"
+   \`\`\`
+
+---
+
+## Option 2: Node.js Hosting / VPS / cPanel Setup Node.js App (\`youthit-pos-full-project.zip\`)
+1. Upload & extract \`youthit-pos-full-project.zip\` on your server.
+2. Copy \`.env.example\` to \`.env\` and configure \`SMTP_*\` / \`SMS_*\` settings.
+3. Install dependencies and start in production mode (prebuilt \`dist/\` is already included):
+   \`\`\`bash
+   npm install --omit=dev
+   NODE_ENV=production PORT=3000 npm start
+   \`\`\`
+   *(If your Node version is older than Node 22.6 or doesn't strip TypeScript directly, run \`npx tsx server.ts\` or install \`tsx\`.)*
+`;
 }
 
 async function startServer() {
@@ -1867,15 +1930,21 @@ async function startServer() {
           ? 'email'
           : 'sms';
 
-    const smtpHost = process.env.SMTP_HOST || 'mail.youthit.com.bd';
+    const rawSmtpHost = (process.env.SMTP_HOST || 'mail.youthit.com.bd').trim();
+    const smtpHost =
+      rawSmtpHost
+        .replace(/^https?:\/\//i, '')
+        .split('/')[0]
+        .split(':')[0]
+        .trim() || 'mail.youthit.com.bd';
     const smtpPort = Number(process.env.SMTP_PORT || 465);
-    const smtpUser = process.env.SMTP_USER || 'info@youthit.com.bd';
+    const smtpUser = (process.env.SMTP_USER || 'info@youthit.com.bd').trim();
     const smtpPass = process.env.SMTP_PASS || '';
-    const smtpFrom = process.env.SMTP_FROM || smtpUser;
+    const smtpFrom = (process.env.SMTP_FROM || smtpUser).trim();
 
     if (channel === 'email') {
       if (!smtpHost || !smtpUser || !smtpPass) {
-        res.status(503).json({
+        res.status(422).json({
           error:
             'Email password (SMTP_PASS) for info@youthit.com.bd (mail.youthit.com.bd:465) is not configured in Settings -> Secrets yet. Add SMTP_PASS in Secrets to send verification emails.',
         });
@@ -1884,7 +1953,7 @@ async function startServer() {
     } else {
       const safeSmsUrl = process.env.SMS_GATEWAY_URL ? isSafeExternalWebhookUrl(process.env.SMS_GATEWAY_URL) : null;
       if (!safeSmsUrl) {
-        res.status(503).json({
+        res.status(422).json({
           error:
             'SMS delivery is not configured in Settings -> Secrets (SMS_GATEWAY_URL, SMS_API_KEY). Configure an SMS gateway or switch to Email once configured.',
         });
@@ -1955,125 +2024,183 @@ async function startServer() {
             smsUrl.searchParams.get('SenderId') ||
             ''
         ).trim();
-        const smsRes = await fetch(smsUrl.toString(), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(process.env.SMS_API_KEY ? { Authorization: `Bearer ${process.env.SMS_API_KEY}` } : {}),
-          },
-          body: JSON.stringify({
-            to: targetPhone,
-            number: targetPhone.replace(/^\+/, ''),
-            api_key: process.env.SMS_API_KEY || '',
-            ...(smsSenderId
-              ? {
-                  senderid: smsSenderId,
-                  sender_id: smsSenderId,
-                  SenderId: smsSenderId,
-                  sender: smsSenderId,
-                }
-              : {}),
-            type: 'text',
-            message: `${shopName} recovery code: ${code} (valid 10 min).`,
-          }),
-          signal: AbortSignal.timeout(8_000),
-        });
-        const rawSmsText = await smsRes.text();
+        const rawDigits = normalizePhoneDigits(targetPhone);
+        const bd13 = rawDigits.startsWith('8801')
+          ? rawDigits
+          : rawDigits.startsWith('01') && rawDigits.length === 11
+            ? `88${rawDigits}`
+            : targetPhone.replace(/^\+/, '');
+        const bd11 = rawDigits.startsWith('8801') && rawDigits.length === 13
+          ? rawDigits.slice(2)
+          : bd13;
+
+        const smsApiKey = String(
+          process.env.SMS_API_KEY ||
+            smsUrl.searchParams.get('api_key') ||
+            smsUrl.searchParams.get('apikey') ||
+            smsUrl.searchParams.get('ApiKey') ||
+            smsUrl.searchParams.get('Apikey') ||
+            smsUrl.searchParams.get('token') ||
+            ''
+        ).trim();
+
         const redactSecrets = (txt: string) => {
           let safe = txt.replaceAll(code, '******');
-          if (process.env.SMS_API_KEY) {
-            safe = safe.replaceAll(process.env.SMS_API_KEY, '***');
-          }
+          if (smsApiKey) safe = safe.replaceAll(smsApiKey, '***');
+          if (smtpPass) safe = safe.replaceAll(smtpPass, '***');
           return safe.trim().slice(0, 160);
         };
-        const trimmedSms = rawSmsText.trim();
-        const smsContentType = (smsRes.headers.get('content-type') || '').toLowerCase();
-        if (
-          smsContentType.includes('text/html') ||
-          trimmedSms.startsWith('<!doctype') ||
-          trimmedSms.startsWith('<!DOCTYPE') ||
-          trimmedSms.startsWith('<html')
-        ) {
-          throw new Error(
-            'SMS_GATEWAY_URL returned an HTML page instead of an SMS API response. Please enter your actual SMS provider API endpoint in Settings -> Secrets.'
-          );
-        }
-        if (!smsRes.ok) {
-          throw new Error(
-            `SMS gateway rejected request (HTTP ${smsRes.status}): ${redactSecrets(trimmedSms) || 'Check SMS_GATEWAY_URL and SMS_API_KEY.'}`
-          );
-        }
-        if (trimmedSms) {
-          let parsedSms: Record<string, unknown> | null = null;
+
+        const dispatchSms = async (phoneValue: string, asForm: boolean): Promise<void> => {
+          const smsMsg = `${shopName} recovery code: ${code} (valid 10 min).`;
+          const baseParams: Record<string, string> = {
+            to: phoneValue,
+            number: phoneValue,
+            numbers: phoneValue,
+            MobileNumber: phoneValue,
+            MobileNumbers: phoneValue,
+            type: 'text',
+            TransactionType: 'T',
+            message: smsMsg,
+            Message: smsMsg,
+          };
+          if (smsApiKey) {
+            baseParams.api_key = smsApiKey;
+            baseParams.apikey = smsApiKey;
+            baseParams.ApiKey = smsApiKey;
+            baseParams.Apikey = smsApiKey;
+            baseParams.token = smsApiKey;
+          }
+          if (smsSenderId) {
+            baseParams.senderid = smsSenderId;
+            baseParams.sender_id = smsSenderId;
+            baseParams.SenderId = smsSenderId;
+            baseParams.SenderName = smsSenderId;
+            baseParams.sender = smsSenderId;
+          }
+          const smsRes = await fetch(smsUrl.toString(), {
+            method: 'POST',
+            headers: {
+              'Content-Type': asForm ? 'application/x-www-form-urlencoded' : 'application/json',
+              ...(smsApiKey ? { Authorization: `Bearer ${smsApiKey}` } : {}),
+            },
+            body: asForm ? new URLSearchParams(baseParams).toString() : JSON.stringify(baseParams),
+            signal: AbortSignal.timeout(8_000),
+          });
+          const rawSmsText = await smsRes.text();
+          const trimmedSms = rawSmsText.trim();
+          const smsContentType = (smsRes.headers.get('content-type') || '').toLowerCase();
+          if (
+            smsContentType.includes('text/html') ||
+            trimmedSms.startsWith('<!doctype') ||
+            trimmedSms.startsWith('<!DOCTYPE') ||
+            trimmedSms.startsWith('<html')
+          ) {
+            throw new Error(
+              'SMS_GATEWAY_URL returned an HTML page instead of an SMS API response. Please enter your actual SMS provider API endpoint in Settings -> Secrets.'
+            );
+          }
+          if (!smsRes.ok) {
+            throw new Error(
+              `SMS gateway rejected request (HTTP ${smsRes.status}): ${redactSecrets(trimmedSms) || 'Check SMS_GATEWAY_URL and SMS_API_KEY.'}`
+            );
+          }
+          if (trimmedSms) {
+            let parsedSms: Record<string, unknown> | null = null;
+            try {
+              const parsed = JSON.parse(trimmedSms);
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                parsedSms = parsed as Record<string, unknown>;
+              } else if (Array.isArray(parsed) && parsed[0] && typeof parsed[0] === 'object') {
+                parsedSms = parsed[0] as Record<string, unknown>;
+              }
+            } catch {
+              parsedSms = null;
+            }
+
+            if (parsedSms) {
+              const rawCode =
+                parsedSms.response_code ??
+                parsedSms.status_code ??
+                parsedSms.statusCode ??
+                parsedSms.StatusCode ??
+                parsedSms.error_code ??
+                parsedSms.errorCode ??
+                parsedSms.ErrorCode ??
+                parsedSms.code;
+              const numCode = rawCode !== undefined && rawCode !== null && rawCode !== '' ? Number(rawCode) : NaN;
+              const statusStr = String(parsedSms.status ?? parsedSms.Status ?? parsedSms.result ?? '').toLowerCase();
+              const errField =
+                parsedSms.error_message ??
+                parsedSms.errorMessage ??
+                parsedSms.ErrorMessage ??
+                parsedSms.ErrorDescription ??
+                parsedSms.error ??
+                parsedSms.Error ??
+                parsedSms.errors;
+              const hasExplicitError =
+                Boolean(errField) &&
+                !['0', 'none', 'null', 'false', 'ok', 'success'].includes(String(errField).toLowerCase());
+              const badStatus =
+                parsedSms.ok === false ||
+                parsedSms.success === false ||
+                parsedSms.success === 'false' ||
+                statusStr === 'false' ||
+                statusStr === '0' ||
+                /error|fail|reject|invalid|denied/.test(statusStr);
+              const badNumericCode =
+                Number.isFinite(numCode) &&
+                ![0, 200, 201, 202, 1101].includes(numCode) &&
+                (numCode >= 300 || numCode < 0 || numCode === 1 || numCode === 2);
+
+              if (hasExplicitError || badStatus || badNumericCode) {
+                const detail = String(
+                  errField || parsedSms.message || parsedSms.Message || trimmedSms
+                );
+                const extraHint = /sender\s*id/i.test(detail)
+                  ? ' — Add SMS_SENDER_ID in Settings -> Secrets.'
+                  : '';
+                throw new Error(`SMS gateway error: ${redactSecrets(detail)}${extraHint}`);
+              }
+
+              const msgText = String(parsedSms.message ?? parsedSms.Message ?? '');
+              if (/missing|required|invalid|not\s+found|unauthoriz|fail|error/i.test(msgText)) {
+                throw new Error(`SMS gateway error: ${redactSecrets(msgText)}`);
+              }
+            } else {
+              if (/error|fail|invalid|denied|missing|required|balance|sender|not\s+found|unauthoriz|expired|wrong/i.test(trimmedSms)) {
+                throw new Error(`SMS gateway error: ${redactSecrets(trimmedSms)}`);
+              }
+              if (!/\b(ok|success|sent|queued|accepted|submitted|delivered|200|202|1101)\b/i.test(trimmedSms)) {
+                throw new Error(`SMS gateway response did not confirm delivery: ${redactSecrets(trimmedSms)}`);
+              }
+            }
+          }
+        };
+
+        const smsAttempts: Array<[string, boolean]> = [
+          [bd13, false],
+          ...(bd11 !== bd13 ? ([[bd11, false]] as Array<[string, boolean]>) : []),
+          [bd13, true],
+          ...(bd11 !== bd13 ? ([[bd11, true]] as Array<[string, boolean]>) : []),
+        ];
+        let lastSmsErr: unknown = null;
+        let smsDelivered = false;
+        for (const [phoneCandidate, asForm] of smsAttempts) {
           try {
-            const parsed = JSON.parse(trimmedSms);
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-              parsedSms = parsed as Record<string, unknown>;
-            } else if (Array.isArray(parsed) && parsed[0] && typeof parsed[0] === 'object') {
-              parsedSms = parsed[0] as Record<string, unknown>;
-            }
-          } catch {
-            parsedSms = null;
-          }
-
-          if (parsedSms) {
-            const rawCode =
-              parsedSms.response_code ??
-              parsedSms.status_code ??
-              parsedSms.statusCode ??
-              parsedSms.StatusCode ??
-              parsedSms.error_code ??
-              parsedSms.errorCode ??
-              parsedSms.ErrorCode ??
-              parsedSms.code;
-            const numCode = rawCode !== undefined && rawCode !== null && rawCode !== '' ? Number(rawCode) : NaN;
-            const statusStr = String(parsedSms.status ?? parsedSms.Status ?? parsedSms.result ?? '').toLowerCase();
-            const errField =
-              parsedSms.error_message ??
-              parsedSms.errorMessage ??
-              parsedSms.ErrorMessage ??
-              parsedSms.ErrorDescription ??
-              parsedSms.error ??
-              parsedSms.Error ??
-              parsedSms.errors;
-            const hasExplicitError =
-              Boolean(errField) &&
-              !['0', 'none', 'null', 'false', 'ok', 'success'].includes(String(errField).toLowerCase());
-            const badStatus =
-              parsedSms.ok === false ||
-              parsedSms.success === false ||
-              parsedSms.success === 'false' ||
-              statusStr === 'false' ||
-              statusStr === '0' ||
-              /error|fail|reject|invalid|denied/.test(statusStr);
-            const badNumericCode =
-              Number.isFinite(numCode) &&
-              ![0, 200, 201, 202, 1101].includes(numCode) &&
-              (numCode >= 300 || numCode < 0 || numCode === 1 || numCode === 2);
-
-            if (hasExplicitError || badStatus || badNumericCode) {
-              const detail = String(
-                errField || parsedSms.message || parsedSms.Message || trimmedSms
-              );
-              const extraHint = /sender\s*id/i.test(detail)
-                ? ' — Add SMS_SENDER_ID in Settings -> Secrets.'
-                : '';
-              throw new Error(`SMS gateway error: ${redactSecrets(detail)}${extraHint}`);
-            }
-
-            // Catch generic echo/non-SMS JSON (e.g. webhook returning missing-param message or unrelated JSON)
-            const msgText = String(parsedSms.message ?? parsedSms.Message ?? '');
-            if (/missing|required|invalid|not\s+found|unauthoriz|fail|error/i.test(msgText)) {
-              throw new Error(`SMS gateway error: ${redactSecrets(msgText)}`);
-            }
-          } else {
-            if (/error|fail|invalid|denied|missing|required|balance|sender|not\s+found|unauthoriz|expired|wrong/i.test(trimmedSms)) {
-              throw new Error(`SMS gateway error: ${redactSecrets(trimmedSms)}`);
-            }
-            if (!/\b(ok|success|sent|queued|accepted|submitted|delivered|200|202|1101)\b/i.test(trimmedSms)) {
-              throw new Error(`SMS gateway response did not confirm delivery: ${redactSecrets(trimmedSms)}`);
+            await dispatchSms(phoneCandidate, asForm);
+            smsDelivered = true;
+            break;
+          } catch (attemptErr) {
+            lastSmsErr = attemptErr;
+            const m = attemptErr instanceof Error ? attemptErr.message : '';
+            if (!/invalid mobile|invalid number|missing|required|blank/i.test(m)) {
+              throw attemptErr;
             }
           }
+        }
+        if (!smsDelivered && lastSmsErr) {
+          throw lastSmsErr;
         }
       }
 
@@ -2093,6 +2220,12 @@ async function startServer() {
     } catch (err) {
       const codeHint = (err as { code?: string } | null)?.code;
       const errMsg = err instanceof Error ? err.message : '';
+      const redact = (txt: string) => {
+        let s = txt.replaceAll(code, '******');
+        if (smtpPass) s = s.replaceAll(smtpPass, '***');
+        if (process.env.SMS_API_KEY) s = s.replaceAll(process.env.SMS_API_KEY, '***');
+        return s.trim().slice(0, 140);
+      };
       const reason =
         codeHint === 'EAUTH'
           ? 'SMTP authentication failed. Please double-check SMTP_PASS for info@youthit.com.bd in Settings -> Secrets.'
@@ -2100,8 +2233,8 @@ async function startServer() {
             ? `Could not connect to mail server (${smtpHost}:${smtpPort}). Please verify SMTP_HOST and SMTP_PORT in Settings -> Secrets.`
             : errMsg.startsWith('SMS')
               ? errMsg
-              : `Could not deliver the ${channel === 'email' ? 'recovery email' : 'SMS code'}. Please verify your delivery credentials in Settings -> Secrets.`;
-      res.status(502).json({ error: reason });
+              : `Email delivery failed (${codeHint || 'SMTP'}): ${redact(errMsg) || 'Please verify SMTP credentials in Settings -> Secrets.'}`;
+      res.status(422).json({ error: reason });
     }
   });
 
@@ -2712,6 +2845,43 @@ async function startServer() {
     res.send(JSON.stringify(store, null, 2));
   });
 
+  app.get('/api/backup/export-sql', (_req: Request, res: Response) => {
+    const store = getStore();
+    const sqlDump = generateMysqlDumpSql(store);
+    res.setHeader('Content-Type', 'application/sql; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="youthit-pos-database-${new Date().toISOString().slice(0, 10)}.sql"`);
+    res.send(sqlDump);
+  });
+
+  app.get('/api/backup/download-full-project-zip', async (_req: Request, res: Response) => {
+    const projectRoot = process.cwd();
+    const store = getStore();
+    const sqlDump = generateMysqlDumpSql(store);
+    const zip = new JSZip();
+    const files = collectFiles(projectRoot, projectRoot);
+
+    for (const rel of files) {
+      if (rel === 'database/youthit_pos_database.sql' || rel === 'laravel/database/sql/youthits_pos.sql') {
+        continue;
+      }
+      const full = path.join(projectRoot, rel);
+      zip.file(`youthit-pos-full-project/${rel}`, fs.readFileSync(full));
+    }
+
+    zip.file('youthit-pos-full-project/database/youthit_pos_database.sql', sqlDump);
+    zip.file('youthit-pos-full-project/laravel/database/sql/youthits_pos.sql', sqlDump);
+    zip.file('youthit-pos-full-project/HOSTING_UPLOAD_GUIDE.md', buildHostingUploadGuide());
+
+    const buffer = await zip.generateAsync({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 },
+    });
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="youthit-pos-full-project.zip"');
+    res.send(buffer);
+  });
+
   app.post('/api/backup/restore', (req: Request, res: Response) => {
     const payload = req.body?.backup;
     if (!payload || typeof payload !== 'object' || !Array.isArray(payload.products) || !Array.isArray(payload.sales)) {
@@ -3031,7 +3201,7 @@ async function startServer() {
   app.get('/api/laravel/file', (req: Request, res: Response) => {
     const rel = String(req.query.path ?? '');
     const target = path.resolve(laravelRoot, rel);
-    if (!target.startsWith(laravelRoot) || !fs.existsSync(target) || fs.statSync(target).isDirectory()) {
+    if (!target.startsWith(laravelRoot + path.sep) || !fs.existsSync(target) || fs.statSync(target).isDirectory()) {
       res.status(404).json({ error: 'File not found.' });
       return;
     }
@@ -3046,11 +3216,37 @@ async function startServer() {
   app.get('/api/laravel/download-zip', async (_req: Request, res: Response) => {
     const zip = new JSZip();
     const files = collectFiles(laravelRoot, laravelRoot);
+    const seen = new Set<string>();
+
     for (const rel of files) {
+      if (rel === 'database/sql/youthits_pos.sql' || rel === 'database/youthit_pos_database.sql') {
+        continue;
+      }
       const full = path.join(laravelRoot, rel);
       zip.file(`youthit-pos-laravel/${rel}`, fs.readFileSync(full));
+      seen.add(rel);
     }
-    const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+
+    // Mirror any uploaded/public assets from root /public into laravel/public
+    const rootPublic = path.resolve(process.cwd(), 'public');
+    for (const publicRel of collectFiles(rootPublic, rootPublic)) {
+      const targetRel = `public/${publicRel}`;
+      if (!seen.has(targetRel)) {
+        zip.file(`youthit-pos-laravel/${targetRel}`, fs.readFileSync(path.join(rootPublic, publicRel)));
+        seen.add(targetRel);
+      }
+    }
+
+    const sqlDump = generateMysqlDumpSql(getStore());
+    zip.file('youthit-pos-laravel/database/sql/youthits_pos.sql', sqlDump);
+    zip.file('youthit-pos-laravel/database/youthit_pos_database.sql', sqlDump);
+    zip.file('youthit-pos-laravel/HOSTING_UPLOAD_GUIDE.md', buildHostingUploadGuide());
+
+    const buffer = await zip.generateAsync({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 },
+    });
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename="youthit-pos-laravel-13.zip"');
     res.send(buffer);

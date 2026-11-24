@@ -123,13 +123,21 @@ export async function apiDownload(url: string, fallbackFilename: string): Promis
   if (apiAuthToken) {
     headers.Authorization = `Bearer ${apiAuthToken}`;
   }
-  const res = await fetch(url, { headers });
+  const res = await fetch(url, {
+    headers,
+    credentials: 'same-origin',
+    cache: 'no-store',
+  });
   if (!res.ok) {
     if (res.status === 401) {
       unauthorizedHandler?.();
     }
     const err = await res.json().catch(() => ({ error: 'Download failed' }));
     throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  const contentType = (res.headers.get('content-type') || '').toLowerCase();
+  if (contentType.includes('text/html')) {
+    throw new Error('Server is restarting or returned an HTML page instead of the download file. Please try again.');
   }
   const blob = await res.blob();
   const disposition = res.headers.get('Content-Disposition') || '';

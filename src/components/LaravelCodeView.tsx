@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, FileCode2 } from 'lucide-react';
+import { Archive, Database, Download, FileCode2 } from 'lucide-react';
 import { apiDownload, apiFetch } from '../lib/api.ts';
 
 type FileScope = 'blade' | 'migrations' | 'backend' | 'all';
@@ -10,6 +10,20 @@ export function LaravelCodeView() {
   const [selected, setSelected] = useState('resources/views/layouts/app.blade');
   const [content, setContent] = useState('');
   const [filter, setFilter] = useState('');
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  async function handleDownload(key: string, url: string, filename: string) {
+    setErrorMsg(null);
+    setDownloading(key);
+    try {
+      await apiDownload(url, filename);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Download failed.');
+    } finally {
+      setDownloading(null);
+    }
+  }
 
   useEffect(() => {
     apiFetch<{ files: string[] }>('/api/laravel/tree').then((res) => {
@@ -35,23 +49,67 @@ export function LaravelCodeView() {
 
   return (
     <div className="space-y-4">
+      {errorMsg && (
+        <div className="px-4 py-2.5 rounded-lg bg-red-50 border border-red-200 text-xs font-semibold text-red-700">
+          {errorMsg}
+        </div>
+      )}
       <div className="bg-white border border-slate-200 rounded-lg p-4 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="font-display text-base font-semibold text-slate-900">
             Pure Laravel 13 Codebase ({files.filter((f) => f.endsWith('.blade')).length} .blade Views · {files.length} Total Files)
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            All views in <span className="font-mono">resources/views/**/*.blade</span> (registered via <span className="font-mono">View::addExtension(&apos;blade&apos;, &apos;blade&apos;)</span>) · Clean URLs with zero <span className="font-mono">index.php</span>
+            ZIP downloads automatically bundle <span className="font-mono">database/youthit_pos_database.sql</span>, shop assets, and <span className="font-mono">HOSTING_UPLOAD_GUIDE.md</span>.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void apiDownload('/api/laravel/download-zip', 'youthit-pos-laravel-13.zip')}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium shrink-0 cursor-pointer"
-        >
-          <Download className="w-4 h-4 shrink-0" />
-          Download Laravel 13 Project (.zip)
-        </button>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            disabled={downloading !== null}
+            onClick={() =>
+              void handleDownload(
+                'sql',
+                '/api/backup/export-sql',
+                `youthit-pos-database-${new Date().toISOString().slice(0, 10)}.sql`
+              )
+            }
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium cursor-pointer disabled:opacity-60"
+          >
+            <Database className="w-4 h-4 shrink-0" />
+            {downloading === 'sql' ? 'Exporting...' : 'Database (.sql)'}
+          </button>
+          <button
+            type="button"
+            disabled={downloading !== null}
+            onClick={() =>
+              void handleDownload(
+                'full',
+                '/api/backup/download-full-project-zip',
+                'youthit-pos-full-project.zip'
+              )
+            }
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium cursor-pointer disabled:opacity-60"
+          >
+            <Archive className="w-4 h-4 shrink-0" />
+            {downloading === 'full' ? 'Zipping...' : 'Full Project (.zip)'}
+          </button>
+          <button
+            type="button"
+            disabled={downloading !== null}
+            onClick={() =>
+              void handleDownload(
+                'laravel',
+                '/api/laravel/download-zip',
+                'youthit-pos-laravel-13.zip'
+              )
+            }
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium cursor-pointer disabled:opacity-60"
+          >
+            <Download className="w-4 h-4 shrink-0" />
+            {downloading === 'laravel' ? 'Zipping...' : 'Laravel 13 + DB (.zip)'}
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 text-xs">
