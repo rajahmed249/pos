@@ -65,13 +65,14 @@ const DEFAULT_MENUS: DynamicMenu[] = [
 
   { id: 5, parent_id: null, title: 'POS', group_label: 'Main', route_key: 'pos', url: '/pos', icon: 'shopping-cart', sort_order: 5, roles: ['admin', 'manager', 'staff'], is_active: true },
   { id: 6, parent_id: null, title: 'Sales', group_label: 'Main', route_key: 'sales', url: '/sales', icon: 'receipt', sort_order: 6, roles: ['admin', 'manager', 'staff'], is_active: true },
-  { id: 7, parent_id: null, title: 'Returns', group_label: 'Sales & Purchase', route_key: 'returns', url: '/returns', icon: 'rotate-ccw', sort_order: 7, roles: ['admin', 'manager'], is_active: true },
-  { id: 8, parent_id: null, title: 'Estimate', group_label: 'Sales & Purchase', route_key: 'estimates', url: '/estimates', icon: 'file-text', sort_order: 8, roles: ['admin', 'manager', 'staff'], is_active: true },
-  { id: 9, parent_id: null, title: 'Purchase', group_label: 'Sales & Purchase', route_key: 'purchases', url: '/purchases', icon: 'truck', sort_order: 9, roles: ['admin', 'manager'], is_active: true },
-  { id: 10, parent_id: null, title: 'Stock', group_label: 'Sales & Purchase', route_key: 'stock', url: '/stock', icon: 'boxes', sort_order: 10, roles: ['admin', 'manager', 'staff'], is_active: true },
-  { id: 11, parent_id: null, title: 'Damages', group_label: 'Sales & Purchase', route_key: 'damages', url: '/damages', icon: 'alert-triangle', sort_order: 11, roles: ['admin', 'manager'], is_active: true },
+  { id: 12, parent_id: null, title: 'Products', group_label: 'Main', route_key: 'products', url: '/products', icon: 'package', sort_order: 7, roles: ['admin', 'manager', 'staff'], is_active: true },
 
-  { id: 12, parent_id: null, title: 'Products', group_label: 'Product Information', route_key: 'products', url: '/products', icon: 'package', sort_order: 12, roles: ['admin', 'manager', 'staff'], is_active: true },
+  { id: 7, parent_id: null, title: 'Returns', group_label: 'Sales & Purchase', route_key: 'returns', url: '/returns', icon: 'rotate-ccw', sort_order: 8, roles: ['admin', 'manager'], is_active: true },
+  { id: 8, parent_id: null, title: 'Estimate', group_label: 'Sales & Purchase', route_key: 'estimates', url: '/estimates', icon: 'file-text', sort_order: 9, roles: ['admin', 'manager', 'staff'], is_active: true },
+  { id: 9, parent_id: null, title: 'Purchase', group_label: 'Sales & Purchase', route_key: 'purchases', url: '/purchases', icon: 'truck', sort_order: 10, roles: ['admin', 'manager'], is_active: true },
+  { id: 10, parent_id: null, title: 'Stock', group_label: 'Sales & Purchase', route_key: 'stock', url: '/stock', icon: 'boxes', sort_order: 11, roles: ['admin', 'manager', 'staff'], is_active: true },
+  { id: 11, parent_id: null, title: 'Damages', group_label: 'Sales & Purchase', route_key: 'damages', url: '/damages', icon: 'alert-triangle', sort_order: 12, roles: ['admin', 'manager'], is_active: true },
+
   { id: 13, parent_id: null, title: 'Add Product', group_label: 'Product Information', route_key: 'add-product', url: '/add-product', icon: 'plus-circle', sort_order: 13, roles: ['admin', 'manager', 'staff'], is_active: true },
   { id: 14, parent_id: null, title: 'Categories', group_label: 'Product Information', route_key: 'categories', url: '/categories', icon: 'folder-tree', sort_order: 14, roles: ['admin', 'manager'], is_active: true },
   { id: 15, parent_id: null, title: 'Brand', group_label: 'Product Information', route_key: 'brands', url: '/brands', icon: 'tag', sort_order: 15, roles: ['admin', 'manager'], is_active: true },
@@ -125,6 +126,7 @@ function buildInitialStore(): PosStoreData {
         phone: '+8801674297522',
         address: 'Dhaka, Bangladesh',
         is_active: true,
+        profile_image: '/assets/aistudio/Raj_Ahmed_02078811.jpg',
         created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
       },
     ],
@@ -175,13 +177,16 @@ export function getStore(): PosStoreData {
       menusChanged = true;
     } else {
       const hasAddProduct = loaded.menus.some((m) => m.route_key === 'add-product');
+      const productsMenu = loaded.menus.find((m) => m.route_key === 'products');
       const prodGroup = loaded.menus
         .filter((m) => m.group_label === 'Product Information')
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((m) => m.route_key);
-      const expectedStart = ['products', 'add-product', 'categories', 'brands', 'units'];
+      const expectedStart = ['add-product', 'categories', 'brands', 'units'];
       const needsProductReorder =
         !hasAddProduct ||
+        !productsMenu ||
+        productsMenu.group_label !== 'Main' ||
         expectedStart.some((key, idx) => prodGroup[idx] !== key);
 
       if (needsProductReorder) {

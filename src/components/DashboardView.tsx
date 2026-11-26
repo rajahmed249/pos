@@ -14,96 +14,100 @@ export function DashboardView({ data, onNavigate, onOpenInvoice }: DashboardView
   const maxMonthRev = Math.max(1, ...data.monthlyTrend.map((t) => t.revenue));
 
   return (
-    <div className="space-y-6">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <div className="min-w-0 bg-white border border-slate-100 rounded-[20px] p-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Total Revenue ({m.saleCount.toLocaleString()})
-              </div>
-              <div className="mt-2 text-2xl font-display font-bold tabular-nums text-slate-900 truncate">
-                {formatMoney(m.totalRevenue, cur)}
-              </div>
-              <div className="mt-1.5 text-xs font-semibold text-emerald-600 tabular-nums">
-                Gross Profit: {formatMoney(m.totalProfit, cur)}
-              </div>
-            </div>
-            <div
-              className="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-[0_6px_16px_rgba(79,70,229,0.28)]"
-              style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}
-            >
-              <TrendingUp className="w-5 h-5" />
-            </div>
+    <div className="space-y-5">
+      {/* KPI Summary Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+        <button
+          type="button"
+          onClick={() => onNavigate('sales')}
+          className="group relative min-w-0 text-left overflow-hidden bg-gradient-to-br from-white via-white to-indigo-50/55 border border-indigo-100/90 hover:border-indigo-300 rounded-2xl px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40"
+        >
+          <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-indigo-500 via-violet-500/70 to-transparent" />
+          <div className="flex items-center justify-between gap-2.5">
+            <span className="text-[12px] font-medium text-slate-600 truncate">
+              Total Revenue ({m.saleCount.toLocaleString()})
+            </span>
+            <span className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100 flex items-center justify-center shrink-0 group-hover:bg-indigo-600 group-hover:text-white group-hover:ring-indigo-600 transition-colors">
+              <TrendingUp className="w-4 h-4" />
+            </span>
           </div>
-        </div>
+          <div className="mt-1.5 text-lg sm:text-[19px] font-display font-bold tabular-nums tracking-tight text-slate-900 leading-snug truncate">
+            {formatMoney(m.totalRevenue, cur)}
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] font-medium text-emerald-700 tabular-nums">
+            <span className="truncate">Gross Profit: {formatMoney(m.totalProfit, cur)}</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+          </div>
+        </button>
 
-        <div className="min-w-0 bg-white border border-slate-100 rounded-[20px] p-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Today&apos;s Sales
-              </div>
-              <div className="mt-2 text-2xl font-display font-bold tabular-nums text-slate-900 truncate">
-                {formatMoney(m.todaySales, cur)}
-              </div>
-              <div className="mt-1.5 text-xs font-medium text-slate-500 tabular-nums">
-                Today&apos;s Profit: {formatMoney(m.todayProfit, cur)}
-              </div>
-            </div>
-            <div
-              className="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-[0_6px_16px_rgba(16,185,129,0.28)]"
-              style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
-            >
-              <ArrowUpRight className="w-5 h-5" />
-            </div>
+        <button
+          type="button"
+          onClick={() => onNavigate('sales')}
+          className="group relative min-w-0 text-left overflow-hidden bg-gradient-to-br from-white via-white to-emerald-50/55 border border-emerald-100/90 hover:border-emerald-300 rounded-2xl px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+        >
+          <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-emerald-500 via-teal-500/70 to-transparent" />
+          <div className="flex items-center justify-between gap-2.5">
+            <span className="text-[12px] font-medium text-slate-600 truncate">
+              Today&apos;s Sales
+            </span>
+            <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white group-hover:ring-emerald-600 transition-colors">
+              <ArrowUpRight className="w-4 h-4" />
+            </span>
           </div>
-        </div>
+          <div className="mt-1.5 text-lg sm:text-[19px] font-display font-bold tabular-nums tracking-tight text-slate-900 leading-snug truncate">
+            {formatMoney(m.todaySales, cur)}
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] font-medium text-slate-600 tabular-nums">
+            <span className="truncate">Today&apos;s Profit: {formatMoney(m.todayProfit, cur)}</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+          </div>
+        </button>
 
-        <div className="min-w-0 bg-white border border-slate-100 rounded-[20px] p-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Customer Receivable Due
-              </div>
-              <div className="mt-2 text-2xl font-display font-bold tabular-nums text-amber-600 truncate">
-                {formatMoney(m.customerDue, cur)}
-              </div>
-              <div className="mt-1.5 text-xs font-medium text-slate-500 tabular-nums">
-                Supplier Payable: {formatMoney(m.supplierDue, cur)}
-              </div>
-            </div>
-            <div
-              className="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-[0_6px_16px_rgba(245,158,11,0.28)]"
-              style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}
-            >
-              <Users className="w-5 h-5" />
-            </div>
+        <button
+          type="button"
+          onClick={() => onNavigate('customers')}
+          className="group relative min-w-0 text-left overflow-hidden bg-gradient-to-br from-white via-white to-amber-50/55 border border-amber-100/90 hover:border-amber-300 rounded-2xl px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
+        >
+          <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-amber-500 via-orange-400/70 to-transparent" />
+          <div className="flex items-center justify-between gap-2.5">
+            <span className="text-[12px] font-medium text-slate-600 truncate">
+              Customer Receivable Due
+            </span>
+            <span className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 ring-1 ring-amber-100 flex items-center justify-center shrink-0 group-hover:bg-amber-500 group-hover:text-white group-hover:ring-amber-500 transition-colors">
+              <Users className="w-4 h-4" />
+            </span>
           </div>
-        </div>
+          <div className="mt-1.5 text-lg sm:text-[19px] font-display font-bold tabular-nums tracking-tight text-amber-700 leading-snug truncate">
+            {formatMoney(m.customerDue, cur)}
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] font-medium text-slate-600 tabular-nums">
+            <span className="truncate">Supplier Payable: {formatMoney(m.supplierDue, cur)}</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+          </div>
+        </button>
 
-        <div className="min-w-0 bg-white border border-slate-100 rounded-[20px] p-5 shadow-[0_2px_10px_rgba(0,0,0,0.03)] hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Stock Valuation ({m.productCount} SKUs)
-              </div>
-              <div className="mt-2 text-2xl font-display font-bold tabular-nums text-slate-900 truncate">
-                {formatMoney(m.stockCostValue, cur)}
-              </div>
-              <div className="mt-1.5 text-xs font-medium text-indigo-600 tabular-nums">
-                Retail Value: {formatMoney(m.stockRetailValue, cur)}
-              </div>
-            </div>
-            <div
-              className="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-[0_6px_16px_rgba(102,126,234,0.28)]"
-              style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)' }}
-            >
-              <PackageCheck className="w-5 h-5" />
-            </div>
+        <button
+          type="button"
+          onClick={() => onNavigate('stock')}
+          className="group relative min-w-0 text-left overflow-hidden bg-gradient-to-br from-white via-white to-sky-50/55 border border-sky-100/90 hover:border-sky-300 rounded-2xl px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
+        >
+          <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-sky-500 via-cyan-500/70 to-transparent" />
+          <div className="flex items-center justify-between gap-2.5">
+            <span className="text-[12px] font-medium text-slate-600 truncate">
+              Stock Valuation ({m.productCount} SKUs)
+            </span>
+            <span className="w-8 h-8 rounded-lg bg-sky-50 text-sky-600 ring-1 ring-sky-100 flex items-center justify-center shrink-0 group-hover:bg-sky-600 group-hover:text-white group-hover:ring-sky-600 transition-colors">
+              <PackageCheck className="w-4 h-4" />
+            </span>
           </div>
-        </div>
+          <div className="mt-1.5 text-lg sm:text-[19px] font-display font-bold tabular-nums tracking-tight text-slate-900 leading-snug truncate">
+            {formatMoney(m.stockCostValue, cur)}
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] font-medium text-sky-700 tabular-nums">
+            <span className="truncate">Retail Value: {formatMoney(m.stockRetailValue, cur)}</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-sky-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+          </div>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -139,6 +143,9 @@ export function DashboardView({ data, onNavigate, onOpenInvoice }: DashboardView
                   </div>
                 );
               })}
+              {data.monthlyTrend.length === 0 && (
+                <div className="py-4 text-xs text-slate-500">No monthly sales recorded yet.</div>
+              )}
             </div>
           </div>
 
@@ -188,6 +195,13 @@ export function DashboardView({ data, onNavigate, onOpenInvoice }: DashboardView
                       </td>
                     </tr>
                   ))}
+                  {data.recentSales.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-5 py-6 text-center text-xs text-slate-500">
+                        No recent invoices found.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -218,6 +232,9 @@ export function DashboardView({ data, onNavigate, onOpenInvoice }: DashboardView
                   </span>
                 </div>
               ))}
+              {data.bankAccounts.length === 0 && (
+                <div className="px-4 sm:px-5 py-4 text-xs text-slate-500">No cash or bank accounts configured yet.</div>
+              )}
             </div>
           </div>
 

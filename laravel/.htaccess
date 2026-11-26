@@ -4,7 +4,7 @@
     # Block direct access to sensitive directories and files
     RewriteRule ^(\.env|composer\.(json|lock)|artisan|app|bootstrap|config|database|resources|routes|storage|tests|vendor)(/|$) - [F,L,NC]
 
-    # Route all requests cleanly into public/ without exposing index.php
-    RewriteCond %{REQUEST_URI} !^/public/
+    # Route requests cleanly into public/ (works at root domain and subfolders)
+    RewriteCond %{REQUEST_URI} !public/ [NC]
     RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>

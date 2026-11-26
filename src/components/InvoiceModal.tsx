@@ -195,6 +195,7 @@ export function InvoiceModal({ sale, items, settings, autoPrint = false, onClose
                 <img
                   src={logoSrc}
                   alt="Youth IT Logo"
+                  referrerPolicy="no-referrer"
                   className="max-h-[70px] max-w-[90px] w-auto h-auto object-contain"
                 />
               </div>
@@ -205,6 +206,7 @@ export function InvoiceModal({ sale, items, settings, autoPrint = false, onClose
                   <img
                     src={qrSrc}
                     alt="Shop QR Code"
+                    referrerPolicy="no-referrer"
                     className="w-full h-full object-contain"
                   />
                 </div>
@@ -414,7 +416,7 @@ export function InvoiceModal({ sale, items, settings, autoPrint = false, onClose
           {/* Warranty Note Footer */}
           <div className="px-[25px] pt-[8px] pb-[12px] bg-white text-center border-t border-[#eef2f6]">
             <p className="m-0 text-[11px] text-[#94a3b8] italic">
-              No warranty will valid upon burn or physical damage cases.
+              {settings.invoice_footer || 'No warranty will valid upon burn or physical damage cases.'}
             </p>
           </div>
         </div>

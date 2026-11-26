@@ -26,16 +26,25 @@ export function LaravelCodeView() {
   }
 
   useEffect(() => {
-    apiFetch<{ files: string[] }>('/api/laravel/tree').then((res) => {
-      setFiles(res.files);
-    });
+    apiFetch<{ files: string[] }>('/api/laravel/tree')
+      .then((res) => {
+        setFiles(res.files);
+      })
+      .catch((err) => {
+        setErrorMsg(err instanceof Error ? err.message : 'Failed to load Laravel file tree.');
+      });
   }, []);
 
   useEffect(() => {
     if (!selected) return;
-    apiFetch<{ path: string; content: string }>(`/api/laravel/file?path=${encodeURIComponent(selected)}`).then((res) => {
-      setContent(res.content);
-    });
+    apiFetch<{ path: string; content: string }>(`/api/laravel/file?path=${encodeURIComponent(selected)}`)
+      .then((res) => {
+        setErrorMsg(null);
+        setContent(res.content);
+      })
+      .catch((err) => {
+        setErrorMsg(err instanceof Error ? err.message : 'Failed to load Laravel file.');
+      });
   }, [selected]);
 
   const scopedFiles = files.filter((f) => {

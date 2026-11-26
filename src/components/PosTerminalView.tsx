@@ -81,6 +81,9 @@ export function PosTerminalView({ bootstrap, onSaleComplete }: PosTerminalViewPr
         setProducts(prodRes.items);
         setCustomers(custRes.items);
       })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to load products or customers.');
+      })
       .finally(() => {
         if (!silent) setLoading(false);
       });
@@ -97,6 +100,10 @@ export function PosTerminalView({ bootstrap, onSaleComplete }: PosTerminalViewPr
         if (!active) return;
         setProducts(prodRes.items);
         setCustomers(custRes.items);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : 'Failed to load products or customers.');
       })
       .finally(() => active && setLoading(false));
     return () => {

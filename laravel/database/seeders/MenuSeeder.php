@@ -22,16 +22,16 @@ class MenuSeeder extends Seeder
 
             ['title' => 'POS', 'group_label' => 'Main', 'route_name' => 'pos.index', 'url' => '/pos', 'icon' => 'shopping-cart', 'sort_order' => 5, 'roles' => ['admin', 'manager', 'staff']],
             ['title' => 'Sales', 'group_label' => 'Main', 'route_name' => 'sales.index', 'url' => '/sales', 'icon' => 'receipt', 'sort_order' => 6, 'roles' => ['admin', 'manager', 'staff']],
+            ['title' => 'Products', 'group_label' => 'Main', 'route_name' => 'products.index', 'url' => '/products', 'icon' => 'package', 'sort_order' => 7, 'roles' => ['admin', 'manager', 'staff']],
 
             // Sales & Purchase
-            ['title' => 'Returns', 'group_label' => 'Sales & Purchase', 'route_name' => 'returns.index', 'url' => '/returns', 'icon' => 'rotate-ccw', 'sort_order' => 7, 'roles' => ['admin', 'manager']],
-            ['title' => 'Estimate', 'group_label' => 'Sales & Purchase', 'route_name' => 'estimates.index', 'url' => '/estimates', 'icon' => 'file-text', 'sort_order' => 8, 'roles' => ['admin', 'manager', 'staff']],
-            ['title' => 'Purchase', 'group_label' => 'Sales & Purchase', 'route_name' => 'purchases.index', 'url' => '/purchases', 'icon' => 'truck', 'sort_order' => 9, 'roles' => ['admin', 'manager']],
-            ['title' => 'Stock', 'group_label' => 'Sales & Purchase', 'route_name' => 'stock.index', 'url' => '/stock', 'icon' => 'boxes', 'sort_order' => 10, 'roles' => ['admin', 'manager', 'staff']],
-            ['title' => 'Damages', 'group_label' => 'Sales & Purchase', 'route_name' => 'damages.index', 'url' => '/damages', 'icon' => 'alert-triangle', 'sort_order' => 11, 'roles' => ['admin', 'manager']],
+            ['title' => 'Returns', 'group_label' => 'Sales & Purchase', 'route_name' => 'returns.index', 'url' => '/returns', 'icon' => 'rotate-ccw', 'sort_order' => 8, 'roles' => ['admin', 'manager']],
+            ['title' => 'Estimate', 'group_label' => 'Sales & Purchase', 'route_name' => 'estimates.index', 'url' => '/estimates', 'icon' => 'file-text', 'sort_order' => 9, 'roles' => ['admin', 'manager', 'staff']],
+            ['title' => 'Purchase', 'group_label' => 'Sales & Purchase', 'route_name' => 'purchases.index', 'url' => '/purchases', 'icon' => 'truck', 'sort_order' => 10, 'roles' => ['admin', 'manager']],
+            ['title' => 'Stock', 'group_label' => 'Sales & Purchase', 'route_name' => 'stock.index', 'url' => '/stock', 'icon' => 'boxes', 'sort_order' => 11, 'roles' => ['admin', 'manager', 'staff']],
+            ['title' => 'Damages', 'group_label' => 'Sales & Purchase', 'route_name' => 'damages.index', 'url' => '/damages', 'icon' => 'alert-triangle', 'sort_order' => 12, 'roles' => ['admin', 'manager']],
 
             // Product Information
-            ['title' => 'Products', 'group_label' => 'Product Information', 'route_name' => 'products.index', 'url' => '/products', 'icon' => 'package', 'sort_order' => 12, 'roles' => ['admin', 'manager', 'staff']],
             ['title' => 'Add Product', 'group_label' => 'Product Information', 'route_name' => 'products.create', 'url' => '/products/create', 'icon' => 'plus-circle', 'sort_order' => 13, 'roles' => ['admin', 'manager', 'staff']],
             ['title' => 'Categories', 'group_label' => 'Product Information', 'route_name' => 'categories.index', 'url' => '/categories', 'icon' => 'folder-tree', 'sort_order' => 14, 'roles' => ['admin', 'manager']],
             ['title' => 'Brand', 'group_label' => 'Product Information', 'route_name' => 'brands.index', 'url' => '/brands', 'icon' => 'tag', 'sort_order' => 15, 'roles' => ['admin', 'manager']],

@@ -11,7 +11,20 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Public+Sans:wght@400;500;600&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @php
+        $viteManifestPath = public_path('build/manifest.json');
+        $viteManifest = file_exists($viteManifestPath) ? json_decode((string) file_get_contents($viteManifestPath), true) : null;
+        $cssFile = is_array($viteManifest) ? ($viteManifest['resources/css/app.css']['file'] ?? null) : null;
+        $jsFile = is_array($viteManifest) ? ($viteManifest['resources/js/app.js']['file'] ?? null) : null;
+    @endphp
+    @if($cssFile)
+        <link rel="stylesheet" href="{{ asset('build/' . ltrim($cssFile, '/')) }}">
+    @else
+        <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    @endif
+    @if($jsFile)
+        <script type="module" src="{{ asset('build/' . ltrim($jsFile, '/')) }}"></script>
+    @endif
     <style>
         .font-brand-wordmark {
             font-family: 'Sora', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
@@ -121,7 +134,7 @@
                         $targetUrl = $menu->resolvedUrl();
                         $isActive = request()->url() === $targetUrl || ($menu->route_name && request()->routeIs($menu->route_name));
                     @endphp
-                    @if($menu->route_key === 'pos')
+                    @if($menu->route_name === 'pos.index')
                         <li class="my-2 px-2" aria-hidden="true">
                             <div class="border-t border-dashed border-white/25"></div>
                         </li>
@@ -182,7 +195,7 @@
     <div class="px-3 pb-5 pt-3 border-t border-white/10 space-y-2 text-xs">
         <a href="{{ route('users.index') }}" class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors">
             @if(auth()->user()?->profile_image)
-                <img src="{{ asset(auth()->user()->profile_image) }}" alt="{{ auth()->user()?->name }}" class="w-9 h-9 rounded-full object-cover border border-[#ffd166]/60 shrink-0">
+                <img src="{{ asset(ltrim(auth()->user()->profile_image, '/')) }}" alt="{{ auth()->user()?->name }}" class="w-9 h-9 rounded-full object-cover object-top border border-[#ffd166]/60 shrink-0">
             @else
                 <div class="w-9 h-9 rounded-full bg-white/15 border border-white/20 text-[#ffd166] flex items-center justify-center shrink-0">
                     <i class="fas fa-user text-xs"></i>
@@ -248,7 +261,7 @@
                 <button type="button" onclick="toggleUserDropdown(event)" aria-label="{{ auth()->user()?->name ?? 'User Profile' }}"
                         class="flex items-center gap-2 p-0.5 sm:pl-1.5 sm:pr-2 sm:py-1 rounded-full border border-slate-200 bg-slate-50/70 hover:bg-indigo-50/70 hover:border-indigo-200 transition-all cursor-pointer shrink-0">
                     @if(auth()->user()?->profile_image)
-                        <img src="{{ asset(auth()->user()->profile_image) }}" alt="{{ auth()->user()?->name ?? 'User' }}" class="w-8 h-8 rounded-full object-cover shrink-0 ring-2 ring-white shadow-xs">
+                        <img src="{{ asset(ltrim(auth()->user()->profile_image, '/')) }}" alt="{{ auth()->user()?->name ?? 'User' }}" class="w-8 h-8 rounded-full object-cover object-top shrink-0 ring-2 ring-white shadow-xs">
                     @else
                         <span class="w-8 h-8 rounded-full flex items-center justify-center text-white shadow-xs shrink-0 ring-2 ring-white"
                               style="background: linear-gradient(135deg, #065AA4, #4f46e5);">
@@ -266,7 +279,7 @@
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-[0_18px_45px_rgba(15,23,42,0.14)] overflow-hidden">
                         <div class="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
                             @if(auth()->user()?->profile_image)
-                                <img src="{{ asset(auth()->user()->profile_image) }}" alt="{{ auth()->user()?->name ?? 'User' }}" class="w-10 h-10 rounded-full object-cover shrink-0 border-2 border-indigo-200">
+                                <img src="{{ asset(ltrim(auth()->user()->profile_image, '/')) }}" alt="{{ auth()->user()?->name ?? 'User' }}" class="w-10 h-10 rounded-full object-cover object-top shrink-0 border-2 border-indigo-200">
                             @else
                                 <div class="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0"
                                      style="background: linear-gradient(135deg, #065AA4, #4f46e5);">

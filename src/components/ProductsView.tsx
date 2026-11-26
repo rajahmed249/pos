@@ -148,6 +148,9 @@ export function ProductsView({
         setTotal(res.total);
         setGotoInput(String(page));
       })
+      .catch((err) => {
+        setToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to load products.' });
+      })
       .finally(() => setLoading(false));
   }
 
@@ -278,7 +281,7 @@ export function ProductsView({
           quantity: qty,
           alert_quantity: form.alert_quantity === '' ? 5 : Math.max(0, Number(form.alert_quantity)),
           description: form.description,
-          warranty: matchedWarranty ? matchedWarranty.duration || matchedWarranty.name : 'No Warranty',
+          warranty: matchedWarranty ? matchedWarranty.duration || matchedWarranty.name : form.warranty || 'No Warranty',
           image_data: imageData || undefined,
           remove_image: removeExistingImage,
         }),

@@ -31,31 +31,36 @@ class AppServiceProvider extends ServiceProvider
             $settings = [];
             $sidebarMenus = collect();
 
-            if (Schema::hasTable('settings')) {
-                $settings = Setting::allKeyed();
-            }
+            try {
+                if (Schema::hasTable('settings')) {
+                    $settings = Setting::allKeyed();
+                }
 
-            if (Schema::hasTable('menus')) {
-                $role = Auth::user()?->role ?? 'staff';
-                $allMenus = Cache::remember('app_sidebar_menus', 300, function () {
-                    return Menu::query()
-                        ->whereNull('parent_id')
-                        ->where('is_active', true)
-                        ->with(['children' => fn ($q) => $q->where('is_active', true)->orderBy('sort_order')])
-                        ->orderBy('sort_order')
-                        ->get();
-                });
+                if (Schema::hasTable('menus')) {
+                    $role = Auth::user()?->role ?? 'staff';
+                    $allMenus = Cache::remember('app_sidebar_menus', 300, function () {
+                        return Menu::query()
+                            ->whereNull('parent_id')
+                            ->where('is_active', true)
+                            ->with(['children' => fn ($q) => $q->where('is_active', true)->orderBy('sort_order')])
+                            ->orderBy('sort_order')
+                            ->get();
+                    });
 
-                $sidebarMenus = $allMenus
-                    ->filter(fn (Menu $menu) => $menu->isVisibleTo($role))
-                    ->map(function (Menu $menu) use ($role) {
-                        $menu->setRelation(
-                            'children',
-                            $menu->children->filter(fn (Menu $child) => $child->isVisibleTo($role))->values()
-                        );
-                        return $menu;
-                    })
-                    ->values();
+                    $sidebarMenus = $allMenus
+                        ->filter(fn (Menu $menu) => $menu->isVisibleTo($role))
+                        ->map(function (Menu $menu) use ($role) {
+                            $menu->setRelation(
+                                'children',
+                                $menu->children->filter(fn (Menu $child) => $child->isVisibleTo($role))->values()
+                            );
+                            return $menu;
+                        })
+                        ->values();
+                }
+            } catch (\Throwable) {
+                $settings = [];
+                $sidebarMenus = collect();
             }
 
             $view->with('appSettings', array_merge([

@@ -12,7 +12,16 @@ import {
   User as UserIcon,
   UserCircle2,
 } from 'lucide-react';
-import { apiFetch, setApiAuthToken, setOnUnauthorized } from './lib/api.ts';
+import {
+  apiFetch,
+  clearStoredAuthToken,
+  getStoredAuthToken,
+  saveStoredAuthToken,
+  setApiAuthToken,
+  setOnTokenRefreshed,
+  setOnUnauthorized,
+} from './lib/api.ts';
+import { showCenterPopup } from './lib/popup.ts';
 import type { BootstrapPayload, Sale, SaleItem, UserAccount } from './types/pos.ts';
 import { Sidebar } from './components/Sidebar.tsx';
 import { LoginView } from './components/LoginView.tsx';
@@ -75,29 +84,52 @@ const ROUTE_TITLES: Record<string, string> = {
 
 const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000; // 1 continuous hour of inactivity
 
+const ADMIN_ONLY_ROUTES = new Set(['settings', 'backup', 'menus', 'laravel']);
+const MANAGER_ROUTES = new Set([
+  'owners',
+  'accounts',
+  'cashbook',
+  'expenses',
+  'purchases',
+  'suppliers',
+  'employees',
+  'returns',
+  'damages',
+  'reports',
+]);
+
+function canAccessRoute(role: string, route: string): boolean {
+  if (role === 'super_admin' || role === 'admin') return true;
+  if (ADMIN_ONLY_ROUTES.has(route)) return false;
+  if (MANAGER_ROUTES.has(route) && role !== 'manager') return false;
+  return true;
+}
+
 export default function App() {
+  const initialStoredToken = useRef<string | null>(getStoredAuthToken());
   const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
   const [publicSettings, setPublicSettings] = useState<Record<string, string>>({
     shop_name: 'YOUTH IT POS',
     shop_logo: '/assets/images/logo.jpg',
     shop_favicon: '/assets/images/favicon.png',
   });
-  const [authReady, setAuthReady] = useState<boolean>(false);
+  const [authReady, setAuthReady] = useState<boolean>(() => !initialStoredToken.current);
   const [setupRequired, setSetupRequired] = useState<boolean>(false);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const [activeRoute, setActiveRoute] = useState<string>(getInitialRoute);
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
-  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(initialStoredToken.current);
   const [activeRole, setActiveRole] = useState<string>('super_admin');
-  const [showLogin, setShowLogin] = useState<boolean>(true);
+  const [showLogin, setShowLogin] = useState<boolean>(() => !initialStoredToken.current);
   // Desktop view keeps sidebar ALWAYS active by default; toggles smoothly open/closed with push layout
   const [desktopOpen, setDesktopOpen] = useState<boolean>(true);
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
   const [usersTab, setUsersTab] = useState<'directory' | 'roles' | 'account'>('directory');
   const [userMenuOpen, setUserMenuOpen] = useState<boolean>(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const authTokenRef = useRef<string | null>(null);
+  const authTokenRef = useRef<string | null>(initialStoredToken.current);
   const lastActivityRef = useRef<number>(Date.now());
+  const lastKeepaliveRef = useRef<number>(Date.now());
   const isLoggingOutRef = useRef<boolean>(false);
   const handleLogoutRef = useRef<(reason?: string) => Promise<void>>(async () => {});
   const [invoiceModal, setInvoiceModal] = useState<{
@@ -118,8 +150,13 @@ export default function App() {
           return data.users?.find((u) => u.is_active) ?? data.users?.[0] ?? null;
         });
       })
-      .catch(() => {
-        // 401 handled globally by unauthorizedHandler
+      .catch((err) => {
+        if (!isLoggingOutRef.current && authTokenRef.current) {
+          const msg = err instanceof Error ? err.message : 'Unable to refresh dashboard data.';
+          if (!/authentication required/i.test(msg)) {
+            showCenterPopup({ type: 'error', title: 'Sync Warning', message: msg });
+          }
+        }
       });
   }
 
@@ -127,7 +164,7 @@ export default function App() {
     if (isLoggingOutRef.current) return;
     isLoggingOutRef.current = true;
     const tokenToRevoke = authTokenRef.current;
-    setApiAuthToken(null);
+    clearStoredAuthToken();
     authTokenRef.current = null;
     setAuthToken(null);
     setCurrentUser(null);
@@ -139,12 +176,11 @@ export default function App() {
       window.history.pushState({}, '', '/login');
     }
     try {
-      if (tokenToRevoke) {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${tokenToRevoke}` },
-        });
-      }
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: tokenToRevoke ? { Authorization: `Bearer ${tokenToRevoke}` } : undefined,
+      });
     } catch {
       // continue sign out cleanly
     } finally {
@@ -154,27 +190,66 @@ export default function App() {
   handleLogoutRef.current = handleLogout;
 
   useEffect(() => {
+    if (initialStoredToken.current) {
+      setApiAuthToken(initialStoredToken.current);
+    }
+
     setOnUnauthorized(() => {
       if (authTokenRef.current && !isLoggingOutRef.current) {
-        void handleLogoutRef.current('Session expired after 1 hour of inactivity. Please sign in again.');
+        void handleLogoutRef.current('Session expired after 60 minutes of inactivity. Please sign in again.');
       }
+    });
+    setOnTokenRefreshed((nextToken) => {
+      authTokenRef.current = nextToken;
+      setAuthToken(nextToken);
     });
 
     apiFetch<{
       authenticated: boolean;
       setupRequired: boolean;
+      token?: string;
       settings?: Record<string, string>;
       user?: UserAccount;
+      bootstrap?: BootstrapPayload;
     }>('/api/auth/session')
       .then((sess) => {
         if (sess.settings) setPublicSettings(sess.settings);
         setSetupRequired(Boolean(sess.setupRequired));
-        if (!sess.authenticated) {
+        if (sess.authenticated && sess.user && sess.token) {
+          saveStoredAuthToken(sess.token, !window.sessionStorage.getItem('youthit_pos_token'));
+          authTokenRef.current = sess.token;
+          const now = Date.now();
+          lastActivityRef.current = now;
+          lastKeepaliveRef.current = now;
+          try {
+            window.localStorage.setItem('youthit_pos_last_activity', String(now));
+          } catch {
+            // ignore
+          }
+          setAuthToken(sess.token);
+          setCurrentUser(sess.user);
+          setActiveRole(sess.user.role);
+          setUsersTab(['super_admin', 'admin'].includes(sess.user.role) ? 'directory' : 'account');
+          if (sess.bootstrap) {
+            setBootstrap(sess.bootstrap);
+          } else {
+            loadBootstrap();
+          }
+          setShowLogin(false);
+          if (window.location.pathname === '/login') {
+            window.history.replaceState({}, '', '/');
+          }
+        } else {
+          clearStoredAuthToken();
+          authTokenRef.current = null;
+          setAuthToken(null);
           setShowLogin(true);
         }
       })
       .catch(() => {
-        setShowLogin(true);
+        if (!initialStoredToken.current) {
+          setShowLogin(true);
+        }
       })
       .finally(() => {
         setAuthReady(true);
@@ -202,35 +277,65 @@ export default function App() {
     document.addEventListener('keydown', onKeyDown);
     return () => {
       setOnUnauthorized(null);
+      setOnTokenRefreshed(null);
       window.removeEventListener('popstate', onPop);
       document.removeEventListener('mousedown', onOutsideClick);
       document.removeEventListener('keydown', onKeyDown);
     };
   }, []);
 
-  // 1-Hour Continuous Inactivity Auto-Logout
+  // 60-Minute Continuous Inactivity Auto-Logout + Active Session Keepalive
   useEffect(() => {
     if (showLogin || !authToken) return;
 
-    lastActivityRef.current = Date.now();
+    const nowInit = Date.now();
+    lastActivityRef.current = nowInit;
+    lastKeepaliveRef.current = nowInit;
     let lastThrottle = 0;
+
+    const persistActivity = (ts: number) => {
+      try {
+        window.localStorage.setItem('youthit_pos_last_activity', String(ts));
+      } catch {
+        // ignore storage errors
+      }
+    };
+    persistActivity(nowInit);
 
     const recordActivity = () => {
       const now = Date.now();
-      if (now - lastThrottle < 1000) return;
+      if (now - lastThrottle < 3000) return;
       lastThrottle = now;
       lastActivityRef.current = now;
+      persistActivity(now);
     };
 
-    const checkIdle = () => {
-      if (Date.now() - lastActivityRef.current >= INACTIVITY_TIMEOUT_MS) {
-        void handleLogoutRef.current('Automatically logged out after 1 hour of inactivity. Please sign in again.');
+    const pingServerIfActive = () => {
+      const now = Date.now();
+      const idleMs = now - lastActivityRef.current;
+      if (idleMs >= INACTIVITY_TIMEOUT_MS) {
+        void handleLogoutRef.current('Automatically logged out after 60 minutes of inactivity. Please sign in again.');
+        return;
+      }
+      if (idleMs < 5 * 60 * 1000 && now - lastKeepaliveRef.current >= 3 * 60 * 1000) {
+        lastKeepaliveRef.current = now;
+        void apiFetch<{ ok: boolean; token?: string }>('/api/auth/keepalive', { method: 'POST' }).catch(() => {
+          // ignore transient network errors; real 401 triggers unauthorizedHandler
+        });
       }
     };
 
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        checkIdle();
+        try {
+          const saved = Number(window.localStorage.getItem('youthit_pos_last_activity') || 0);
+          if (saved > lastActivityRef.current) {
+            lastActivityRef.current = saved;
+          }
+        } catch {
+          // ignore
+        }
+        pingServerIfActive();
       }
     };
 
@@ -241,12 +346,13 @@ export default function App() {
       'scroll',
       'touchstart',
       'pointerdown',
+      'click',
     ];
     for (const ev of activityEvents) {
       window.addEventListener(ev, recordActivity, { passive: true });
     }
     document.addEventListener('visibilitychange', onVisibility);
-    const intervalId = window.setInterval(checkIdle, 15000);
+    const intervalId = window.setInterval(pingServerIfActive, 30000);
 
     return () => {
       for (const ev of activityEvents) {
@@ -256,6 +362,24 @@ export default function App() {
       window.clearInterval(intervalId);
     };
   }, [showLogin, authToken]);
+
+  // Sync document title & favicon dynamically
+  useEffect(() => {
+    const activeShop = (bootstrap?.settings?.shop_name || publicSettings.shop_name || 'YOUTH IT POS').trim();
+    if (showLogin || !authToken) {
+      document.title = `Sign In — ${activeShop}`;
+    } else {
+      const pageLabel = ROUTE_TITLES[activeRoute] ?? activeRoute;
+      document.title = `${pageLabel} — ${activeShop}`;
+    }
+    const rawFav = bootstrap?.settings?.shop_favicon || publicSettings.shop_favicon;
+    if (rawFav) {
+      const href = rawFav.startsWith('http') || rawFav.startsWith('/') ? rawFav : `/${rawFav}`;
+      document.querySelectorAll<HTMLLinkElement>("link[rel*='icon']").forEach((el) => {
+        el.href = href;
+      });
+    }
+  }, [activeRoute, showLogin, authToken, bootstrap?.settings?.shop_name, bootstrap?.settings?.shop_favicon, publicSettings.shop_name, publicSettings.shop_favicon]);
 
   function navigate(routeKey: string) {
     if (!authTokenRef.current) {
@@ -269,8 +393,16 @@ export default function App() {
   }
 
   async function openInvoice(saleId: number, autoPrint = false) {
-    const res = await apiFetch<{ sale: Sale; items: SaleItem[] }>(`/api/sales/${saleId}`);
-    setInvoiceModal({ ...res, autoPrint });
+    try {
+      const res = await apiFetch<{ sale: Sale; items: SaleItem[] }>(`/api/sales/${saleId}`);
+      setInvoiceModal({ ...res, autoPrint });
+    } catch (err) {
+      showCenterPopup({
+        type: 'error',
+        title: 'Invoice Unavailable',
+        message: err instanceof Error ? err.message : 'Unable to load invoice details.',
+      });
+    }
   }
 
   if (!authReady) {
@@ -287,20 +419,26 @@ export default function App() {
         settings={bootstrap?.settings ?? publicSettings}
         setupRequired={setupRequired}
         sessionNotice={sessionNotice}
-        onSuccess={({ token, user }) => {
-          setApiAuthToken(token);
+        onSuccess={({ token, user, bootstrap: nextBootstrap, remember = true }) => {
+          saveStoredAuthToken(token, remember);
           authTokenRef.current = token;
           lastActivityRef.current = Date.now();
           setAuthToken(token);
           setCurrentUser(user);
           setActiveRole(user.role);
+          setUsersTab(['super_admin', 'admin'].includes(user.role) ? 'directory' : 'account');
           setSessionNotice(null);
           setSetupRequired(false);
+          if (nextBootstrap) {
+            setBootstrap(nextBootstrap);
+          } else {
+            loadBootstrap();
+          }
           setShowLogin(false);
-          loadBootstrap();
           const initialRoute = getInitialRoute();
-          setActiveRoute(initialRoute);
-          const targetPath = initialRoute === 'laravel' ? '/laravel-code' : initialRoute === 'dashboard' ? '/' : `/${initialRoute}`;
+          const safeRoute = canAccessRoute(user.role, initialRoute) ? initialRoute : 'dashboard';
+          setActiveRoute(safeRoute);
+          const targetPath = safeRoute === 'laravel' ? '/laravel-code' : safeRoute === 'dashboard' ? '/' : `/${safeRoute}`;
           window.history.pushState({}, '', targetPath);
         }}
       />
@@ -323,6 +461,8 @@ export default function App() {
   const compact = settings.layout_mode === 'compact';
   const shopName = (settings.shop_name || 'YOUTH IT POS').trim();
   const isYouthItPos = shopName.toUpperCase().includes('YOUTH IT');
+  const isAdminRole = activeRole === 'super_admin' || activeRole === 'admin';
+  const routeAllowed = canAccessRoute(activeRole, activeRoute);
 
   return (
     <div className="min-h-screen overflow-x-clip bg-[#f8fafc] text-slate-900">
@@ -402,15 +542,17 @@ export default function App() {
           </div>
 
           <div className="flex items-center justify-end gap-1.5 sm:gap-2.5 min-w-0">
-            <button
-              type="button"
-              onClick={() => navigate('backup')}
-              title="Backup & Laravel Blade"
-              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-2 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-indigo-200 hover:text-indigo-600 transition-all whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <Code2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-              <span className="hidden xl:inline">Laravel &amp; Backup</span>
-            </button>
+            {isAdminRole && (
+              <button
+                type="button"
+                onClick={() => navigate('backup')}
+                title="Backup & Laravel Blade"
+                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-2 rounded-[10px] border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-indigo-200 hover:text-indigo-600 transition-all whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Code2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                <span className="hidden xl:inline">Laravel &amp; Backup</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => navigate('pos')}
@@ -440,7 +582,8 @@ export default function App() {
                     <img
                       src={currentUser.profile_image}
                       alt={currentUser.name}
-                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover object-top"
                     />
                   ) : (
                     <UserCircle2 className="w-5 h-5 shrink-0" />
@@ -473,7 +616,8 @@ export default function App() {
                         <img
                           src={currentUser.profile_image}
                           alt={currentUser.name}
-                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover object-top"
                         />
                       ) : (
                         <UserCircle2 className="w-6 h-6 shrink-0" />
@@ -505,29 +649,33 @@ export default function App() {
                       <UserIcon className="w-4 h-4 text-indigo-500 shrink-0" />
                       <span>Profile &amp; Password</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUsersTab('directory');
-                        setUserMenuOpen(false);
-                        navigate('users');
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-indigo-50 hover:text-indigo-700 transition-colors cursor-pointer"
-                    >
-                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>User &amp; Role Management</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUserMenuOpen(false);
-                        navigate('settings');
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-indigo-50 hover:text-indigo-700 transition-colors cursor-pointer"
-                    >
-                      <Settings className="w-4 h-4 text-slate-500 shrink-0" />
-                      <span>Shop Settings</span>
-                    </button>
+                    {isAdminRole && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUsersTab('directory');
+                            setUserMenuOpen(false);
+                            navigate('users');
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-indigo-50 hover:text-indigo-700 transition-colors cursor-pointer"
+                        >
+                          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>User &amp; Role Management</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUserMenuOpen(false);
+                            navigate('settings');
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-indigo-50 hover:text-indigo-700 transition-colors cursor-pointer"
+                        >
+                          <Settings className="w-4 h-4 text-slate-500 shrink-0" />
+                          <span>Shop Settings</span>
+                        </button>
+                      </>
+                    )}
                   </div>
 
                   <div className="p-1.5 border-t border-slate-100">
@@ -550,87 +698,110 @@ export default function App() {
         </header>
 
         <main className={`flex-1 min-w-0 w-full px-3 sm:px-6 lg:px-7 ${compact ? 'py-4' : 'py-4 sm:py-6 lg:py-7'}`}>
-          {activeRoute === 'dashboard' && (
-            <DashboardView data={bootstrap} onNavigate={navigate} onOpenInvoice={openInvoice} />
+          {!routeAllowed ? (
+            <div className="max-w-lg mx-auto mt-10 bg-white border border-slate-200 rounded-2xl p-6 text-center shadow-xs space-y-3">
+              <div className="w-12 h-12 mx-auto rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <h2 className="font-display text-lg font-bold text-slate-900">Access Restricted</h2>
+              <p className="text-xs text-slate-600">
+                Your active role (<span className="font-semibold capitalize">{activeRole.replace('_', ' ')}</span>) does not have permission to open{' '}
+                <span className="font-semibold">{ROUTE_TITLES[activeRoute] ?? activeRoute}</span>.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('dashboard')}
+                style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white cursor-pointer"
+              >
+                Back to Dashboard
+              </button>
+            </div>
+          ) : (
+            <>
+              {activeRoute === 'dashboard' && (
+                <DashboardView data={bootstrap} onNavigate={navigate} onOpenInvoice={openInvoice} />
+              )}
+              {activeRoute === 'pos' && (
+                <PosTerminalView
+                  bootstrap={bootstrap}
+                  onSaleComplete={(sale, items) => {
+                    setInvoiceModal({ sale, items });
+                    loadBootstrap();
+                  }}
+                />
+              )}
+              {activeRoute === 'sales' && (
+                <SalesView
+                  currency={currency}
+                  accounts={bootstrap.bankAccounts}
+                  onOpenInvoice={openInvoice}
+                  onNewSale={() => navigate('pos')}
+                  onRefreshBootstrap={loadBootstrap}
+                />
+              )}
+              {(activeRoute === 'products' ||
+                activeRoute === 'add-product' ||
+                activeRoute === 'catalog' ||
+                activeRoute === 'units' ||
+                activeRoute === 'categories' ||
+                activeRoute === 'brands') && (
+                <ProductsView
+                  bootstrap={bootstrap}
+                  initialTab={activeRoute === 'add-product' ? 'add' : (activeRoute as 'products' | 'units' | 'categories' | 'brands' | 'catalog')}
+                  onTabNavigate={navigate}
+                  onRefreshBootstrap={loadBootstrap}
+                />
+              )}
+              {activeRoute === 'purchases' && (
+                <PurchasesView currency={currency} onRefreshBootstrap={loadBootstrap} />
+              )}
+              {(activeRoute === 'customers' || activeRoute === 'suppliers') && (
+                <PartiesView mode={activeRoute} currency={currency} />
+              )}
+              {(activeRoute === 'estimates' ||
+                activeRoute === 'accounts' ||
+                activeRoute === 'expenses' ||
+                activeRoute === 'returns' ||
+                activeRoute === 'damages') && (
+                <FinanceView section={activeRoute} bootstrap={bootstrap} onRefreshBootstrap={loadBootstrap} />
+              )}
+              {(activeRoute === 'owners' ||
+                activeRoute === 'cashbook' ||
+                activeRoute === 'stock' ||
+                activeRoute === 'payments' ||
+                activeRoute === 'employees') && (
+                <OperationsView section={activeRoute} bootstrap={bootstrap} onRefreshBootstrap={loadBootstrap} />
+              )}
+              {activeRoute === 'reports' && <ReportsView currency={currency} />}
+              {activeRoute === 'menus' && (
+                <MenuManagerView menus={bootstrap.menus} onRefreshBootstrap={loadBootstrap} />
+              )}
+              {activeRoute === 'settings' && (
+                <SettingsView
+                  settings={settings}
+                  onRefreshBootstrap={loadBootstrap}
+                  onOpenMenuManager={() => navigate('menus')}
+                />
+              )}
+              {activeRoute === 'users' && (
+                <UsersView
+                  currentUser={currentUser}
+                  initialTab={isAdminRole ? usersTab : 'account'}
+                  onCurrentUserUpdated={(u) => {
+                    setCurrentUser(u);
+                    setActiveRole(u.role);
+                    loadBootstrap();
+                  }}
+                  onOpenLoginPage={() => {
+                    void handleLogout();
+                  }}
+                />
+              )}
+              {activeRoute === 'backup' && <BackupRestoreView onRefreshBootstrap={loadBootstrap} />}
+              {activeRoute === 'laravel' && <LaravelCodeView />}
+            </>
           )}
-          {activeRoute === 'pos' && (
-            <PosTerminalView
-              bootstrap={bootstrap}
-              onSaleComplete={(sale, items) => {
-                setInvoiceModal({ sale, items });
-                loadBootstrap();
-              }}
-            />
-          )}
-          {activeRoute === 'sales' && (
-            <SalesView
-              currency={currency}
-              accounts={bootstrap.bankAccounts}
-              onOpenInvoice={openInvoice}
-              onNewSale={() => navigate('pos')}
-              onRefreshBootstrap={loadBootstrap}
-            />
-          )}
-          {(activeRoute === 'products' ||
-            activeRoute === 'add-product' ||
-            activeRoute === 'catalog' ||
-            activeRoute === 'units' ||
-            activeRoute === 'categories' ||
-            activeRoute === 'brands') && (
-            <ProductsView
-              bootstrap={bootstrap}
-              initialTab={activeRoute === 'add-product' ? 'add' : (activeRoute as 'products' | 'units' | 'categories' | 'brands' | 'catalog')}
-              onTabNavigate={navigate}
-              onRefreshBootstrap={loadBootstrap}
-            />
-          )}
-          {activeRoute === 'purchases' && (
-            <PurchasesView currency={currency} onRefreshBootstrap={loadBootstrap} />
-          )}
-          {(activeRoute === 'customers' || activeRoute === 'suppliers') && (
-            <PartiesView mode={activeRoute} currency={currency} />
-          )}
-          {(activeRoute === 'estimates' ||
-            activeRoute === 'accounts' ||
-            activeRoute === 'expenses' ||
-            activeRoute === 'returns' ||
-            activeRoute === 'damages') && (
-            <FinanceView section={activeRoute} bootstrap={bootstrap} onRefreshBootstrap={loadBootstrap} />
-          )}
-          {(activeRoute === 'owners' ||
-            activeRoute === 'cashbook' ||
-            activeRoute === 'stock' ||
-            activeRoute === 'payments' ||
-            activeRoute === 'employees') && (
-            <OperationsView section={activeRoute} bootstrap={bootstrap} onRefreshBootstrap={loadBootstrap} />
-          )}
-          {activeRoute === 'reports' && <ReportsView currency={currency} />}
-          {activeRoute === 'menus' && (
-            <MenuManagerView menus={bootstrap.menus} onRefreshBootstrap={loadBootstrap} />
-          )}
-          {activeRoute === 'settings' && (
-            <SettingsView
-              settings={settings}
-              onRefreshBootstrap={loadBootstrap}
-              onOpenMenuManager={() => navigate('menus')}
-            />
-          )}
-          {activeRoute === 'users' && (
-            <UsersView
-              currentUser={currentUser}
-              initialTab={usersTab}
-              onCurrentUserUpdated={(u) => {
-                setCurrentUser(u);
-                setActiveRole(u.role);
-                loadBootstrap();
-              }}
-              onOpenLoginPage={() => {
-                void handleLogout();
-              }}
-            />
-          )}
-          {activeRoute === 'backup' && <BackupRestoreView onRefreshBootstrap={loadBootstrap} />}
-          {activeRoute === 'laravel' && <LaravelCodeView />}
         </main>
 
         {/* Fixed Sticky Software Footer */}

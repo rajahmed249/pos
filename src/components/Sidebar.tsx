@@ -106,6 +106,7 @@ export function Sidebar({
 }: SidebarProps) {
   // All dropdown sections start CLOSED by default; open only when user clicks heading/arrow
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [logoFailed, setLogoFailed] = useState(false);
 
   const visibleMenus = menus
     .filter(
@@ -139,6 +140,7 @@ export function Sidebar({
   const rawLogo = settings.shop_logo || '/assets/images/logo.jpg';
   const logoSrc = rawLogo.startsWith('http') || rawLogo.startsWith('/') ? rawLogo : `/${rawLogo}`;
   const shopPhone = settings.shop_phone || '01674297522';
+  const isLight = settings.sidebar_theme === 'light';
 
   const isYouthItPos = shopTitle.toUpperCase().includes('YOUTH IT');
 
@@ -154,16 +156,22 @@ export function Sidebar({
 
       <aside
         style={{
-          background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+          background: isLight
+            ? 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)'
+            : 'linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
         }}
-        className={`no-print tech-sidebar-scroll fixed inset-y-0 left-0 z-50 w-[260px] flex flex-col shrink-0 overflow-y-auto overflow-x-hidden border-r border-white/10 shadow-[4px_0_30px_rgba(0,0,0,0.3)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          mobileOpen ? 'translate-x-0' : '-translate-x-full'
-        } ${desktopOpen ? 'lg:translate-x-0' : 'lg:-translate-x-full'}`}
+        className={`no-print tech-sidebar-scroll fixed inset-y-0 left-0 z-50 w-[260px] flex flex-col shrink-0 overflow-y-auto overflow-x-hidden border-r transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          isLight
+            ? 'border-slate-200 shadow-[4px_0_24px_rgba(15,23,42,0.08)]'
+            : 'border-white/10 shadow-[4px_0_30px_rgba(0,0,0,0.3)]'
+        } ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} ${desktopOpen ? 'lg:translate-x-0' : 'lg:-translate-x-full'}`}
       >
         {/* Fixed Sticky Sidebar Header with Colorful Clickable Home Brand */}
         <div
-          className="sticky top-0 z-20 flex items-center justify-between px-4 py-4 border-b border-white/10"
-          style={{ background: '#14172b' }}
+          className={`sticky top-0 z-20 flex items-center justify-between px-4 py-4 border-b ${
+            isLight ? 'border-slate-200 bg-white' : 'border-white/10'
+          }`}
+          style={isLight ? undefined : { background: '#14172b' }}
         >
           <button
             type="button"
@@ -174,23 +182,41 @@ export function Sidebar({
             className="flex items-center gap-3 text-left min-w-0 group cursor-pointer"
             title="Go to Dashboard Home"
           >
-            <div className="w-10 h-10 rounded-[10px] bg-white border-2 border-[#ffd166] p-0.5 flex items-center justify-center shrink-0 shadow-sm overflow-hidden group-hover:scale-105 transition-transform">
-              <img src={logoSrc} alt={shopTitle} className="w-full h-full object-contain" />
+            <div
+              className={`w-10 h-10 rounded-[10px] bg-white border-2 p-0.5 flex items-center justify-center shrink-0 shadow-sm overflow-hidden group-hover:scale-105 transition-transform ${
+                isLight ? 'border-indigo-500' : 'border-[#ffd166]'
+              }`}
+            >
+              {!logoFailed ? (
+                <img
+                  src={logoSrc}
+                  alt={shopTitle}
+                  referrerPolicy="no-referrer"
+                  onError={() => setLogoFailed(true)}
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <span className="text-xs font-black text-indigo-700">{shopTitle.slice(0, 2).toUpperCase()}</span>
+              )}
             </div>
             <div className="min-w-0">
               <h3 className="font-brand text-[18px] font-black tracking-tight leading-tight truncate">
                 {isYouthItPos ? (
                   <>
-                    <span className="text-[#60a5fa]">YOUTH</span>{' '}
-                    <span className="text-[#fbbf24]">IT</span>{' '}
-                    <span className="text-[#34d399]">POS</span>
+                    <span className={isLight ? 'text-[#065AA4]' : 'text-[#60a5fa]'}>YOUTH</span>{' '}
+                    <span className={isLight ? 'text-[#ea580c]' : 'text-[#fbbf24]'}>IT</span>{' '}
+                    <span className={isLight ? 'text-[#059669]' : 'text-[#34d399]'}>POS</span>
                   </>
                 ) : (
-                  <span className="text-white">{shopTitle}</span>
+                  <span className={isLight ? 'text-slate-900' : 'text-white'}>{shopTitle}</span>
                 )}
               </h3>
-              <p className="text-[10px] text-white/65 tracking-wide truncate flex items-center gap-1 mt-0.5">
-                <Phone className="w-2.5 h-2.5 text-[#ffd166] shrink-0" />
+              <p
+                className={`text-[10px] tracking-wide truncate flex items-center gap-1 mt-0.5 ${
+                  isLight ? 'text-slate-500' : 'text-white/65'
+                }`}
+              >
+                <Phone className={`w-2.5 h-2.5 shrink-0 ${isLight ? 'text-indigo-500' : 'text-[#ffd166]'}`} />
                 <span>{shopPhone}</span>
               </p>
             </div>
@@ -199,7 +225,9 @@ export function Sidebar({
           <button
             type="button"
             onClick={onCloseMobile}
-            className="lg:hidden p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 shrink-0 cursor-pointer"
+            className={`lg:hidden p-1.5 rounded-lg shrink-0 cursor-pointer ${
+              isLight ? 'text-slate-500 hover:text-slate-900 hover:bg-slate-100' : 'text-white/70 hover:text-white hover:bg-white/10'
+            }`}
             aria-label="Close sidebar"
           >
             <X className="w-4 h-4 shrink-0" />
@@ -208,16 +236,16 @@ export function Sidebar({
 
         {/* Navigation Menu */}
         <nav className="flex-1 px-3 pt-3 pb-5 space-y-1">
-          {/* Standalone Direct Links (Dashboard, Owners, Bank Accounts, Cash Book, then dashed divider, then POS, Sales) */}
-          <ul className="space-y-0.5 pb-2 border-b border-white/10">
+          {/* Standalone Direct Links */}
+          <ul className={`space-y-0.5 pb-2 border-b ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
             {mainItems.map((menu) => {
               const Icon = ICON_MAP[menu.icon] ?? Circle;
               const active = activeRoute === menu.route_key;
               return (
                 <li key={menu.id}>
-                  {menu.route_key === 'pos' && (
+                  {(menu.route_key === 'pos' || menu.route_key === 'products') && (
                     <div aria-hidden="true" className="my-2 px-2">
-                      <div className="border-t border-dashed border-white/25" />
+                      <div className={`border-t border-dashed ${isLight ? 'border-slate-300' : 'border-white/25'}`} />
                     </div>
                   )}
                   <button
@@ -228,13 +256,23 @@ export function Sidebar({
                     }}
                     className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] text-[13px] transition-all cursor-pointer ${
                       active
-                        ? 'bg-[#ffd166] text-[#1a1a2e] font-semibold shadow-[0_4px_15px_rgba(255,215,0,0.3)]'
-                        : 'text-white/85 font-medium hover:bg-[#ffd166]/10 hover:text-white'
+                        ? isLight
+                          ? 'bg-indigo-600 text-white font-semibold shadow-sm'
+                          : 'bg-[#ffd166] text-[#1a1a2e] font-semibold shadow-[0_4px_15px_rgba(255,215,0,0.3)]'
+                        : isLight
+                          ? 'text-slate-700 font-medium hover:bg-indigo-50 hover:text-indigo-700'
+                          : 'text-white/85 font-medium hover:bg-[#ffd166]/10 hover:text-white'
                     }`}
                   >
                     <Icon
                       className={`w-[18px] h-[18px] shrink-0 ${
-                        active ? 'text-[#1a1a2e]' : 'text-[#ffd166]'
+                        active
+                          ? isLight
+                            ? 'text-white'
+                            : 'text-[#1a1a2e]'
+                          : isLight
+                            ? 'text-indigo-600'
+                            : 'text-[#ffd166]'
                       }`}
                     />
                     <span className="truncate text-left">{menu.title}</span>
@@ -244,7 +282,7 @@ export function Sidebar({
             })}
           </ul>
 
-          {/* Collapsible Dropdown Sections (Closed by Default) */}
+          {/* Collapsible Dropdown Sections */}
           <div className="space-y-1 pt-1">
             {dropdownGroups.map((grp) => {
               const GroupIcon = GROUP_ICONS[grp.label] ?? FolderTree;
@@ -258,21 +296,31 @@ export function Sidebar({
                     onClick={() => toggleGroup(grp.label)}
                     className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] text-[13px] font-medium transition-all cursor-pointer ${
                       hasActiveChild
-                        ? 'bg-white/10 text-white'
-                        : 'text-white/85 hover:bg-[#ffd166]/10 hover:text-white'
+                        ? isLight
+                          ? 'bg-indigo-50 text-indigo-700'
+                          : 'bg-white/10 text-white'
+                        : isLight
+                          ? 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                          : 'text-white/85 hover:bg-[#ffd166]/10 hover:text-white'
                     }`}
                   >
-                    <GroupIcon className="w-[18px] h-[18px] shrink-0 text-[#ffd166]" />
+                    <GroupIcon className={`w-[18px] h-[18px] shrink-0 ${isLight ? 'text-indigo-600' : 'text-[#ffd166]'}`} />
                     <span className="truncate flex-1 text-left">{grp.label}</span>
                     <ChevronRight
-                      className={`w-4 h-4 text-white/50 shrink-0 transition-transform duration-200 ${
-                        isOpen ? 'rotate-90 text-[#ffd166]' : ''
+                      className={`w-4 h-4 shrink-0 transition-transform duration-200 ${
+                        isOpen
+                          ? isLight
+                            ? 'rotate-90 text-indigo-600'
+                            : 'rotate-90 text-[#ffd166]'
+                          : isLight
+                            ? 'text-slate-400'
+                            : 'text-white/50'
                       }`}
                     />
                   </button>
 
                   {isOpen && (
-                    <ul className="mt-1 rounded-xl bg-black/25 py-1 space-y-0.5">
+                    <ul className={`mt-1 rounded-xl py-1 space-y-0.5 ${isLight ? 'bg-slate-100/80' : 'bg-black/25'}`}>
                       {grp.items.map((menu) => {
                         const Icon = ICON_MAP[menu.icon] ?? Circle;
                         const active = activeRoute === menu.route_key;
@@ -286,13 +334,23 @@ export function Sidebar({
                               }}
                               className={`relative w-full text-left pl-9 pr-3.5 py-2 text-[12px] transition-all cursor-pointer flex items-center gap-2.5 rounded-lg ${
                                 active
-                                  ? 'bg-[#ffd166] text-[#1a1a2e] font-semibold shadow-[0_3px_12px_rgba(255,215,0,0.28)]'
-                                  : 'text-white/75 hover:bg-[#ffd166]/10 hover:text-white'
+                                  ? isLight
+                                    ? 'bg-indigo-600 text-white font-semibold shadow-xs'
+                                    : 'bg-[#ffd166] text-[#1a1a2e] font-semibold shadow-[0_3px_12px_rgba(255,215,0,0.28)]'
+                                  : isLight
+                                    ? 'text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'
+                                    : 'text-white/75 hover:bg-[#ffd166]/10 hover:text-white'
                               }`}
                             >
                               <Icon
                                 className={`w-3.5 h-3.5 shrink-0 ${
-                                  active ? 'text-[#1a1a2e]' : 'text-[#ffd166]/75'
+                                  active
+                                    ? isLight
+                                      ? 'text-white'
+                                      : 'text-[#1a1a2e]'
+                                    : isLight
+                                      ? 'text-indigo-500'
+                                      : 'text-[#ffd166]/75'
                                 }`}
                               />
                               <span className="truncate">{menu.title}</span>
@@ -309,7 +367,7 @@ export function Sidebar({
         </nav>
 
         {/* Bottom Active User, Role, Logout & View Website */}
-        <div className="px-3 pb-5 pt-3 border-t border-white/10 space-y-2">
+        <div className={`px-3 pb-5 pt-3 border-t space-y-2 ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
           {currentUser && (
             <button
               type="button"
@@ -317,38 +375,44 @@ export function Sidebar({
                 onNavigate('users');
                 onCloseMobile();
               }}
-              className="w-full flex items-center gap-2.5 text-left px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+              className={`w-full flex items-center gap-2.5 text-left px-3 py-2 rounded-xl transition-colors cursor-pointer ${
+                isLight ? 'bg-slate-100 hover:bg-slate-200/70' : 'bg-white/5 hover:bg-white/10'
+              }`}
             >
               <div className="w-8 h-8 rounded-full bg-indigo-500/80 text-white text-xs font-bold flex items-center justify-center shrink-0 overflow-hidden border border-white/20">
                 {currentUser.profile_image ? (
-                  <img src={currentUser.profile_image} alt={currentUser.name} className="w-full h-full object-cover" />
+                  <img src={currentUser.profile_image} alt={currentUser.name} referrerPolicy="no-referrer" className="w-full h-full object-cover object-top" />
                 ) : (
                   <span>{currentUser.name.slice(0, 1).toUpperCase()}</span>
                 )}
               </div>
               <div className="min-w-0">
-                <div className="text-xs font-semibold text-white truncate">{currentUser.name}</div>
-                <div className="text-[11px] text-white/60 truncate mt-0.5">{currentUser.email}</div>
+                <div className={`text-xs font-semibold truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>{currentUser.name}</div>
+                <div className={`text-[11px] truncate mt-0.5 ${isLight ? 'text-slate-500' : 'text-white/60'}`}>{currentUser.email}</div>
               </div>
             </button>
           )}
 
           {(currentUser?.role === 'super_admin' || currentUser?.role === 'admin') && (
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-[#ffd166]/70 mb-1 px-1">
+              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1 px-1 ${isLight ? 'text-indigo-600' : 'text-[#ffd166]/70'}`}>
                 Active Role
               </label>
               <select
                 value={activeRole}
                 onChange={(e) => onRoleChange(e.target.value)}
-                className="w-full px-2.5 py-1.5 rounded-lg bg-black/30 border border-white/10 text-xs text-white/90 focus:outline-none focus:border-[#ffd166]"
+                className={`w-full px-2.5 py-1.5 rounded-lg border text-xs focus:outline-none ${
+                  isLight
+                    ? 'bg-white border-slate-300 text-slate-800 focus:border-indigo-500'
+                    : 'bg-black/30 border-white/10 text-white/90 focus:border-[#ffd166]'
+                }`}
               >
                 {currentUser?.role === 'super_admin' && (
-                  <option value="super_admin" className="bg-[#1a1a2e]">Super Admin (Full Access)</option>
+                  <option value="super_admin" className={isLight ? 'bg-white' : 'bg-[#1a1a2e]'}>Super Admin (Full Access)</option>
                 )}
-                <option value="admin" className="bg-[#1a1a2e]">Admin (Full Access)</option>
-                <option value="manager" className="bg-[#1a1a2e]">Manager</option>
-                <option value="staff" className="bg-[#1a1a2e]">Staff</option>
+                <option value="admin" className={isLight ? 'bg-white' : 'bg-[#1a1a2e]'}>Admin (Full Access)</option>
+                <option value="manager" className={isLight ? 'bg-white' : 'bg-[#1a1a2e]'}>Manager</option>
+                <option value="staff" className={isLight ? 'bg-white' : 'bg-[#1a1a2e]'}>Staff</option>
               </select>
             </div>
           )}
@@ -360,9 +424,13 @@ export function Sidebar({
               onLogout();
             }}
             title="Logout"
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] border border-red-400/20 text-[13px] font-medium text-red-200 hover:bg-red-500/15 hover:text-white transition-all cursor-pointer"
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] border text-[13px] font-medium transition-all cursor-pointer ${
+              isLight
+                ? 'border-red-200 text-red-600 hover:bg-red-50'
+                : 'border-red-400/20 text-red-200 hover:bg-red-500/15 hover:text-white'
+            }`}
           >
-            <LogOut className="w-[18px] h-[18px] shrink-0 text-red-400" />
+            <LogOut className={`w-[18px] h-[18px] shrink-0 ${isLight ? 'text-red-500' : 'text-red-400'}`} />
             <span className="truncate">Logout</span>
           </button>
 
@@ -371,9 +439,13 @@ export function Sidebar({
             target="_blank"
             rel="noreferrer"
             title="View Website"
-            className="flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] border border-white/10 text-[13px] font-medium text-white/75 hover:bg-white/5 hover:text-white hover:border-[#34d399] transition-all"
+            className={`flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] border text-[13px] font-medium transition-all ${
+              isLight
+                ? 'border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 hover:border-emerald-400'
+                : 'border-white/10 text-white/75 hover:bg-white/5 hover:text-white hover:border-[#34d399]'
+            }`}
           >
-            <Globe className="w-[18px] h-[18px] shrink-0 text-[#34d399]" />
+            <Globe className={`w-[18px] h-[18px] shrink-0 ${isLight ? 'text-emerald-600' : 'text-[#34d399]'}`} />
             <span className="truncate">View Website</span>
           </a>
         </div>

@@ -90,6 +90,9 @@ export function SalesView({
         setTotal(res.total);
         setGotoInput(String(page));
       })
+      .catch((err) => {
+        setToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to load sales.' });
+      })
       .finally(() => setLoading(false));
   }
 

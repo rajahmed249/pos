@@ -10,7 +10,16 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Public+Sans:wght@400;500;600&family=Sora:wght@600;700;800&family=Urbanist:wght@500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    @vite(['resources/css/app.css'])
+    @php
+        $viteManifestPath = public_path('build/manifest.json');
+        $viteManifest = file_exists($viteManifestPath) ? json_decode((string) file_get_contents($viteManifestPath), true) : null;
+        $cssFile = is_array($viteManifest) ? ($viteManifest['resources/css/app.css']['file'] ?? null) : null;
+    @endphp
+    @if($cssFile)
+        <link rel="stylesheet" href="{{ asset('build/' . ltrim($cssFile, '/')) }}">
+    @else
+        <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    @endif
     <style>
         .font-brand { font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; font-weight: 900; }
         .font-brand-wordmark { font-family: 'Sora', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; font-weight: 800; letter-spacing: -0.02em; }

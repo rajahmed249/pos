@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api.ts';
 
 interface SettingsViewProps {
@@ -7,8 +7,8 @@ interface SettingsViewProps {
   onOpenMenuManager?: () => void;
 }
 
-export function SettingsView({ settings, onRefreshBootstrap, onOpenMenuManager }: SettingsViewProps) {
-  const [form, setForm] = useState({
+function buildSettingsForm(settings: Record<string, string>) {
+  return {
     shop_name: settings.shop_name || 'YOUTH IT POS',
     shop_address:
       settings.shop_address ||
@@ -28,9 +28,17 @@ export function SettingsView({ settings, onRefreshBootstrap, onOpenMenuManager }
     sidebar_theme: settings.sidebar_theme || 'slate',
     primary_color: settings.primary_color || 'emerald',
     layout_mode: settings.layout_mode || 'comfortable',
-  });
+  };
+}
+
+export function SettingsView({ settings, onRefreshBootstrap, onOpenMenuManager }: SettingsViewProps) {
+  const [form, setForm] = useState(() => buildSettingsForm(settings));
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setForm(buildSettingsForm(settings));
+  }, [settings]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();

@@ -1,5 +1,45 @@
-let apiAuthToken: string | null = null;
+const AUTH_STORAGE_KEY = 'youthit_pos_token';
+
+export function getStoredAuthToken(): string | null {
+  try {
+    return (
+      window.localStorage.getItem(AUTH_STORAGE_KEY) ||
+      window.sessionStorage.getItem(AUTH_STORAGE_KEY) ||
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
+export function saveStoredAuthToken(token: string, remember = true): void {
+  apiAuthToken = token;
+  try {
+    if (remember) {
+      window.localStorage.setItem(AUTH_STORAGE_KEY, token);
+      window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    } else {
+      window.sessionStorage.setItem(AUTH_STORAGE_KEY, token);
+      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+  } catch {
+    // ignore storage restrictions
+  }
+}
+
+export function clearStoredAuthToken(): void {
+  apiAuthToken = null;
+  try {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {
+    // ignore storage restrictions
+  }
+}
+
+let apiAuthToken: string | null = typeof window !== 'undefined' ? getStoredAuthToken() : null;
 let unauthorizedHandler: (() => void) | null = null;
+let tokenRefreshedHandler: ((token: string) => void) | null = null;
 
 export function setApiAuthToken(token: string | null): void {
   apiAuthToken = token;
@@ -11,6 +51,23 @@ export function getApiAuthToken(): string | null {
 
 export function setOnUnauthorized(handler: (() => void) | null): void {
   unauthorizedHandler = handler;
+}
+
+export function setOnTokenRefreshed(handler: ((token: string) => void) | null): void {
+  tokenRefreshedHandler = handler;
+}
+
+function applyRefreshedToken(res: Response): void {
+  const nextToken = res.headers.get('x-refreshed-token')?.trim();
+  if (!nextToken || nextToken === apiAuthToken) return;
+  let remember = true;
+  try {
+    remember = !window.sessionStorage.getItem(AUTH_STORAGE_KEY);
+  } catch {
+    remember = true;
+  }
+  saveStoredAuthToken(nextToken, remember);
+  tokenRefreshedHandler?.(nextToken);
 }
 
 function buildHeaders(extra?: HeadersInit): Record<string, string> {
@@ -39,6 +96,7 @@ function buildHeaders(extra?: HeadersInit): Record<string, string> {
 const PUBLIC_AUTH_URLS = new Set([
   '/api/auth/login',
   '/api/auth/request-recovery-code',
+  '/api/auth/verify-recovery-code',
   '/api/auth/recover-password',
   '/api/auth/session',
   '/api/auth/logout',
@@ -95,6 +153,8 @@ export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T
     }
   }
 
+  applyRefreshedToken(res);
+
   if (!res.ok) {
     if (res.status === 401 && !PUBLIC_AUTH_URLS.has(url.split('?')[0])) {
       unauthorizedHandler?.();
@@ -128,6 +188,7 @@ export async function apiDownload(url: string, fallbackFilename: string): Promis
     credentials: 'same-origin',
     cache: 'no-store',
   });
+  applyRefreshedToken(res);
   if (!res.ok) {
     if (res.status === 401) {
       unauthorizedHandler?.();

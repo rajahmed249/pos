@@ -32,7 +32,27 @@ class AuthController extends Controller
             ->orWhereRaw('LOWER(name) = ?', [strtolower($identifier)])
             ->first();
 
-        if (!$user || empty($user->password) || !Hash::check($credentials['password'], (string) $user->password)) {
+        if (!$user || empty($user->password)) {
+            return back()->withErrors([
+                'email' => 'Invalid email/username or password.',
+            ])->onlyInput('email');
+        }
+
+        $storedHash = (string) $user->password;
+        if (!str_starts_with($storedHash, '$')) {
+            return back()->withErrors([
+                'email' => 'This migrated account password must be set for Laravel. Use Forgot Password or complete /setup first.',
+            ])->onlyInput('email');
+        }
+
+        $passwordMatches = false;
+        try {
+            $passwordMatches = Hash::check($credentials['password'], $storedHash);
+        } catch (\Throwable) {
+            $passwordMatches = false;
+        }
+
+        if (!$passwordMatches) {
             return back()->withErrors([
                 'email' => 'Invalid email/username or password.',
             ])->onlyInput('email');
@@ -102,38 +122,73 @@ class AuthController extends Controller
                 return back()->withErrors(['identifier' => 'No mobile number is registered for this account.'])->withInput();
             }
             $senderId = trim((string) env('SMS_SENDER_ID', ''));
+            $clientId = trim((string) env('SMS_CLIENT_ID', ''));
+            $smsUsername = trim((string) env('SMS_USERNAME', ''));
+            $smsSecretKey = trim((string) env('SMS_SECRET_KEY', ''));
             $payload = [
                 'to' => $targetPhone,
                 'number' => ltrim($targetPhone, '+'),
+                'MobileNumbers' => ltrim($targetPhone, '+'),
+                'MobileNumber' => ltrim($targetPhone, '+'),
                 'api_key' => (string) env('SMS_API_KEY', ''),
+                'ApiKey' => (string) env('SMS_API_KEY', ''),
+                'Apikey' => (string) env('SMS_API_KEY', ''),
                 'type' => 'text',
+                'TransactionType' => 'T',
                 'message' => "{$shopName} recovery code: {$code} (valid 10 min).",
+                'Message' => "{$shopName} recovery code: {$code} (valid 10 min).",
             ];
+            if ($clientId !== '') {
+                $payload['ClientId'] = $clientId;
+                $payload['client_id'] = $clientId;
+                if ($smsUsername === '') {
+                    $payload['UserName'] = $clientId;
+                }
+            }
+            if ($smsUsername !== '') {
+                $payload['UserName'] = $smsUsername;
+                $payload['username'] = $smsUsername;
+            }
+            if ($smsSecretKey !== '') {
+                $payload['secretkey'] = $smsSecretKey;
+                $payload['api_secret'] = $smsSecretKey;
+            }
             if ($senderId !== '') {
                 $payload['senderid'] = $senderId;
                 $payload['sender_id'] = $senderId;
                 $payload['SenderId'] = $senderId;
+                $payload['SenderName'] = $senderId;
             }
-            $smsResp = Http::withToken((string) env('SMS_API_KEY', ''))->post($smsGateway, $payload);
+            $smsResp = Http::asForm()->post($smsGateway, $payload);
+            if ($smsResp->status() === 415 || $smsResp->status() === 405) {
+                $smsResp = Http::get($smsGateway, $payload);
+            }
+            if ($smsResp->status() === 415 || $smsResp->status() === 405) {
+                $smsResp = Http::withToken((string) env('SMS_API_KEY', ''))->post($smsGateway, $payload);
+            }
             $smsJson = $smsResp->json();
             if (!$smsResp->successful() || (is_array($smsJson) && (!empty($smsJson['error_message']) || !empty($smsJson['error']) || ($smsJson['ok'] ?? true) === false))) {
-                $reason = is_array($smsJson) ? ($smsJson['error_message'] ?? $smsJson['error'] ?? 'SMS gateway error.') : 'SMS gateway error.';
+                $reason = is_array($smsJson) ? ($smsJson['error_message'] ?? $smsJson['error'] ?? 'SMS gateway error.') : ('HTTP ' . $smsResp->status());
                 return back()->withErrors(['identifier' => "SMS delivery failed: {$reason}"])->withInput();
             }
         }
 
+        $request->session()->put([
+            'recovery_step' => 'verify',
+            'recovery_identifier' => $data['identifier'],
+        ]);
+        $request->session()->forget(['recovery_proof', 'recovery_user_id', 'recovery_proof_expires']);
+
         return back()
-            ->with('code_sent', true)
             ->with('status', "A 6-digit verification code has been sent via {$data['channel']}.")
             ->withInput();
     }
 
-    public function recoverPassword(Request $request): RedirectResponse
+    public function verifyRecoveryCode(Request $request): RedirectResponse
     {
         $data = $request->validate([
             'identifier' => ['required', 'string', 'max:150'],
             'code' => ['required', 'digits:6'],
-            'password' => ['required', 'string', 'min:6', 'confirmed'],
         ]);
 
         $user = $this->findByEmailOrPhone($data['identifier']);
@@ -145,7 +200,51 @@ class AuthController extends Controller
             now()->greaterThan($user->reset_expires) ||
             !Hash::check($data['code'], (string) $user->reset_token)
         ) {
-            return back()->withErrors(['code' => 'Invalid or expired verification code.'])->with('code_sent', true)->withInput();
+            return back()
+                ->withErrors(['code' => 'Invalid or expired verification code. Please check and try again.'])
+                ->withInput();
+        }
+
+        $proof = bin2hex(random_bytes(32));
+        $request->session()->put([
+            'recovery_step' => 'reset',
+            'recovery_identifier' => $data['identifier'],
+            'recovery_proof' => hash('sha256', $proof),
+            'recovery_user_id' => $user->id,
+            'recovery_proof_expires' => time() + 600,
+        ]);
+
+        return back()
+            ->with('status', 'Verification code matched! Please enter your new password.')
+            ->withInput();
+    }
+
+    public function recoverPassword(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'identifier' => ['required', 'string', 'max:150'],
+            'code' => ['nullable', 'digits:6'],
+            'password' => ['required', 'string', 'min:6', 'confirmed'],
+        ]);
+
+        $user = $this->findByEmailOrPhone($data['identifier']);
+        $sessionProof = $request->session()->get('recovery_proof');
+        $sessionUserId = (int) $request->session()->get('recovery_user_id', 0);
+        $sessionExpires = (int) $request->session()->get('recovery_proof_expires', 0);
+        $hasValidProof = $user && $sessionProof && $sessionUserId === (int) $user->id && time() <= $sessionExpires;
+
+        $hasValidCode =
+            $user &&
+            !empty($data['code']) &&
+            !empty($user->reset_token) &&
+            $user->reset_expires &&
+            !now()->greaterThan($user->reset_expires) &&
+            Hash::check((string) $data['code'], (string) $user->reset_token);
+
+        if (!$user || !$user->is_active || (!$hasValidProof && !$hasValidCode)) {
+            return back()
+                ->withErrors(['code' => 'Verification required before setting a new password.'])
+                ->withInput();
         }
 
         $user->forceFill([
@@ -153,6 +252,8 @@ class AuthController extends Controller
             'reset_token' => null,
             'reset_expires' => null,
         ])->save();
+
+        $request->session()->forget(['recovery_step', 'recovery_identifier', 'recovery_proof', 'recovery_user_id', 'recovery_proof_expires']);
 
         return redirect()->route('login')->with('status', 'Verification code confirmed and password updated. Please sign in.');
     }

@@ -27,18 +27,50 @@ export function ReportsView({ currency }: ReportsViewProps) {
   const [from, setFrom] = useState(`${currentYear}-01-01`);
   const [to, setTo] = useState(`${currentYear}-12-31`);
   const [data, setData] = useState<ReportPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   function load() {
-    apiFetch<ReportPayload>(`/api/reports?from=${from}&to=${to}`).then(setData);
+    setLoading(true);
+    setError('');
+    const effectiveFrom = from && to && from > to ? to : from;
+    const effectiveTo = from && to && from > to ? from : to;
+    apiFetch<ReportPayload>(`/api/reports?from=${effectiveFrom}&to=${effectiveTo}`)
+      .then((res) => {
+        setData(res);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to load financial reports.');
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }
 
   useEffect(() => {
     load();
   }, [from, to]);
 
-  if (!data) {
+  if (error && !data) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-xl p-5 flex items-center justify-between gap-4 text-sm text-red-700">
+        <span>{error}</span>
+        <button
+          type="button"
+          onClick={load}
+          className="px-3.5 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 cursor-pointer shrink-0"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (loading && !data) {
     return <div className="h-48 bg-white border border-slate-200 rounded-lg animate-pulse" />;
   }
+
+  if (!data) return null;
 
   return (
     <div className="space-y-6">
@@ -103,6 +135,13 @@ export function ReportsView({ currency }: ReportsViewProps) {
                     <td className="px-4 py-2 text-right tabular-nums text-red-600 font-medium whitespace-nowrap">{formatMoney(c.due, currency)}</td>
                   </tr>
                 ))}
+                {data.customerDues.length === 0 && (
+                  <tr>
+                    <td colSpan={2} className="px-4 py-6 text-center text-xs text-slate-500">
+                      No outstanding customer receivables.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -122,6 +161,13 @@ export function ReportsView({ currency }: ReportsViewProps) {
                     <td className="px-4 py-2 text-right tabular-nums text-amber-700 font-medium whitespace-nowrap">{formatMoney(s.due, currency)}</td>
                   </tr>
                 ))}
+                {data.supplierDues.length === 0 && (
+                  <tr>
+                    <td colSpan={2} className="px-4 py-6 text-center text-xs text-slate-500">
+                      No outstanding supplier payables.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

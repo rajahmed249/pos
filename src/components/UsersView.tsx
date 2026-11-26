@@ -174,8 +174,9 @@ export function UsersView({
   onCurrentUserUpdated,
   onOpenLoginPage,
 }: UsersViewProps) {
+  const isAdminRole = !currentUser || ['super_admin', 'admin'].includes(currentUser.role);
   const [users, setUsers] = useState<UserAccount[]>([]);
-  const [tab, setTab] = useState<'directory' | 'roles' | 'account'>(initialTab);
+  const [tab, setTab] = useState<'directory' | 'roles' | 'account'>(isAdminRole ? initialTab : 'account');
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'manager' | 'staff'>('all');
 
@@ -214,27 +215,54 @@ export function UsersView({
   const editAvatarInputRef = useRef<HTMLInputElement | null>(null);
 
   function load() {
-    apiFetch<UserAccount[]>('/api/users').then((list) => {
-      setUsers(list);
-      const target = currentUser ? list.find((u) => u.id === currentUser.id) : list[0];
-      if (target) {
+    if (!isAdminRole) {
+      if (currentUser) {
+        setUsers([currentUser]);
         setAccountProfile({
-          name: target.name,
-          email: target.email,
-          phone: target.phone || '',
-          address: target.address || '',
+          name: currentUser.name,
+          email: currentUser.email,
+          phone: currentUser.phone || '',
+          address: currentUser.address || '',
         });
       }
-    });
+      return;
+    }
+    apiFetch<UserAccount[]>('/api/users')
+      .then((list) => {
+        setUsers(list);
+        const target = currentUser ? list.find((u) => u.id === currentUser.id) : list[0];
+        if (target) {
+          setAccountProfile({
+            name: target.name,
+            email: target.email,
+            phone: target.phone || '',
+            address: target.address || '',
+          });
+        }
+      })
+      .catch((err) => {
+        setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load user accounts.' });
+      });
   }
 
   useEffect(() => {
-    setTab(initialTab);
-  }, [initialTab]);
+    setTab(isAdminRole ? initialTab : 'account');
+  }, [initialTab, isAdminRole]);
+
+  useEffect(() => {
+    if (currentUser) {
+      setAccountProfile({
+        name: currentUser.name,
+        email: currentUser.email,
+        phone: currentUser.phone || '',
+        address: currentUser.address || '',
+      });
+    }
+  }, [currentUser?.id, currentUser?.name, currentUser?.email, currentUser?.phone, currentUser?.address]);
 
   useEffect(() => {
     load();
-  }, [currentUser?.id]);
+  }, [currentUser?.id, isAdminRole]);
 
   async function handleAvatarUpload(userId: number, file: File | null) {
     if (!file) return;
@@ -463,30 +491,34 @@ export function UsersView({
 
         <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
           <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-950/25 border border-white/15 rounded-xl text-xs font-semibold w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={() => setTab('directory')}
-              className={`px-3.5 py-2 rounded-lg transition-all whitespace-nowrap cursor-pointer inline-flex items-center gap-1.5 ${
-                tab === 'directory'
-                  ? 'bg-white text-indigo-700 shadow-sm'
-                  : 'text-white/85 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>User Management</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab('roles')}
-              className={`px-3.5 py-2 rounded-lg transition-all whitespace-nowrap cursor-pointer inline-flex items-center gap-1.5 ${
-                tab === 'roles'
-                  ? 'bg-white text-indigo-700 shadow-sm'
-                  : 'text-white/85 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              <Shield className="w-3.5 h-3.5" />
-              <span>User Roles</span>
-            </button>
+            {isAdminRole && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setTab('directory')}
+                  className={`px-3.5 py-2 rounded-lg transition-all whitespace-nowrap cursor-pointer inline-flex items-center gap-1.5 ${
+                    tab === 'directory'
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-white/85 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>User Management</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab('roles')}
+                  className={`px-3.5 py-2 rounded-lg transition-all whitespace-nowrap cursor-pointer inline-flex items-center gap-1.5 ${
+                    tab === 'roles'
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-white/85 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>User Roles</span>
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={() => setTab('account')}
@@ -515,47 +547,49 @@ export function UsersView({
       </div>
 
       {/* Colorful KPI Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="min-w-0 bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <Users className="w-5 h-5" />
+      {isAdminRole && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="min-w-0 bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <Users className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-slate-500">Total Accounts</div>
+              <div className="mt-0.5 text-2xl font-bold text-slate-900 tabular-nums">{users.length}</div>
+            </div>
           </div>
-          <div className="min-w-0">
-            <div className="text-xs font-semibold text-slate-500">Total Accounts</div>
-            <div className="mt-0.5 text-2xl font-bold text-slate-900 tabular-nums">{users.length}</div>
-          </div>
-        </div>
 
-        <div className="min-w-0 bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <UserCheck className="w-5 h-5" />
+          <div className="min-w-0 bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <UserCheck className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-slate-500">Active Operators</div>
+              <div className="mt-0.5 text-2xl font-bold text-emerald-600 tabular-nums">{activeCount}</div>
+            </div>
           </div>
-          <div className="min-w-0">
-            <div className="text-xs font-semibold text-slate-500">Active Operators</div>
-            <div className="mt-0.5 text-2xl font-bold text-emerald-600 tabular-nums">{activeCount}</div>
-          </div>
-        </div>
 
-        <div className="min-w-0 bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
-            <ShieldCheck className="w-5 h-5" />
+          <div className="min-w-0 bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-slate-500">Admins &amp; Managers</div>
+              <div className="mt-0.5 text-2xl font-bold text-violet-600 tabular-nums">{adminMgrCount}</div>
+            </div>
           </div>
-          <div className="min-w-0">
-            <div className="text-xs font-semibold text-slate-500">Admins &amp; Managers</div>
-            <div className="mt-0.5 text-2xl font-bold text-violet-600 tabular-nums">{adminMgrCount}</div>
-          </div>
-        </div>
 
-        <div className="min-w-0 bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-xs font-semibold text-slate-500">Cashier / Staff</div>
-            <div className="mt-0.5 text-2xl font-bold text-amber-600 tabular-nums">{staffCount}</div>
+          <div className="min-w-0 bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-slate-500">Cashier / Staff</div>
+              <div className="mt-0.5 text-2xl font-bold text-amber-600 tabular-nums">{staffCount}</div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {notice && (
         <div
@@ -729,7 +763,8 @@ export function UsersView({
                               <img
                                 src={u.profile_image}
                                 alt={u.name}
-                                className="w-10 h-10 rounded-full object-cover border-2 border-indigo-100 shrink-0"
+                                referrerPolicy="no-referrer"
+                                className="w-10 h-10 rounded-full object-cover object-top border-2 border-indigo-100 shrink-0"
                               />
                             ) : (
                               <div
@@ -917,7 +952,8 @@ export function UsersView({
                     <img
                       src={activeAccount.profile_image}
                       alt={activeAccount.name}
-                      className="w-20 h-20 rounded-full object-cover border-4 border-indigo-100 shadow-sm"
+                      referrerPolicy="no-referrer"
+                      className="w-20 h-20 rounded-full object-cover object-top border-4 border-indigo-100 shadow-sm"
                     />
                   ) : (
                     <div
@@ -1124,7 +1160,8 @@ export function UsersView({
                   <img
                     src={editTarget.profile_image}
                     alt={editTarget.name}
-                    className="w-12 h-12 rounded-full object-cover border-2 border-indigo-200 shrink-0"
+                    referrerPolicy="no-referrer"
+                    className="w-12 h-12 rounded-full object-cover object-top border-2 border-indigo-200 shrink-0"
                   />
                 ) : (
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-600 to-violet-600 text-white text-sm font-bold flex items-center justify-center shrink-0">

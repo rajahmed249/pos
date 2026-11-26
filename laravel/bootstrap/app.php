@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnforceIdleTimeout;
 use App\Http\Middleware\EnsureUserHasRole;
+use App\Http\Middleware\RedirectIfSetupRequired;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -15,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Full CSRF protection enabled on all web forms (use @csrf in Blade)
         $middleware->web(append: [
+            RedirectIfSetupRequired::class,
             EnforceIdleTimeout::class,
         ]);
         $middleware->alias([

@@ -15,14 +15,19 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ReturnDamageController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\SettingController;
+use App\Http\Controllers\SetupController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/setup', [SetupController::class, 'show'])->name('setup.index');
+Route::post('/setup', [SetupController::class, 'install'])->name('setup.install');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AuthController::class, 'login'])->name('login.attempt');
     Route::get('/forgot-password', [AuthController::class, 'showForgotPassword'])->name('password.forgot');
     Route::post('/forgot-password/send-code', [AuthController::class, 'sendRecoveryCode'])->name('password.send_code');
+    Route::post('/forgot-password/verify-code', [AuthController::class, 'verifyRecoveryCode'])->name('password.verify_code');
     Route::post('/forgot-password', [AuthController::class, 'recoverPassword'])->name('password.recover');
 });
 

@@ -1,10 +1,10 @@
+import 'dotenv/config';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import JSZip from 'jszip';
 import nodemailer from 'nodemailer';
-import { createServer as createViteServer } from 'vite';
 import { getStore, nextId, saveStore, type PosStoreData } from './server/posStore.ts';
 import { generateMysqlDumpSql } from './server/sqlExporter.ts';
 import { parseMysqlDumpText, type SqlRow } from './server/sqlParser.ts';
@@ -14,10 +14,144 @@ const IDLE_TIMEOUT_MS = 60 * 60 * 1000; // 1 continuous hour of inactivity
 const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 const OTP_COOLDOWN_MS = 45 * 1000;
 const OTP_HMAC_KEY = process.env.OTP_SECRET || crypto.randomBytes(32).toString('hex');
-const activeSessions = new Map<string, { userId: number; expiresAt: number }>();
+const SESSION_COOKIE_NAME = 'youthit_pos_session';
+const SESSIONS_FILE = path.resolve(process.cwd(), 'data/.sessions.json');
+const REVOKED_SESSIONS_FILE = path.resolve(process.cwd(), 'data/.revoked-sessions.json');
+const activeSessions = new Map<string, { userId: number; expiresAt: number; lastSavedAt?: number }>();
+const revokedSessionJtis = new Map<string, number>();
+
+function loadPersistedSessions(): void {
+  try {
+    if (fs.existsSync(SESSIONS_FILE)) {
+      const raw = fs.readFileSync(SESSIONS_FILE, 'utf8');
+      const parsed = JSON.parse(raw) as Record<string, { userId: number; expiresAt: number }>;
+      const now = Date.now();
+      for (const [tok, sess] of Object.entries(parsed)) {
+        if (tok && sess && Number.isFinite(sess.userId) && Number.isFinite(sess.expiresAt) && sess.expiresAt > now) {
+          activeSessions.set(tok, { userId: sess.userId, expiresAt: sess.expiresAt, lastSavedAt: now });
+        }
+      }
+    }
+  } catch {
+    // ignore corrupt/missing session cache
+  }
+  try {
+    if (fs.existsSync(REVOKED_SESSIONS_FILE)) {
+      const raw = fs.readFileSync(REVOKED_SESSIONS_FILE, 'utf8');
+      const parsed = JSON.parse(raw) as Record<string, number>;
+      const now = Date.now();
+      for (const [jti, exp] of Object.entries(parsed)) {
+        if (jti && Number.isFinite(exp) && exp > now) {
+          revokedSessionJtis.set(jti, exp);
+        }
+      }
+    }
+  } catch {
+    // ignore corrupt/missing revoked cache
+  }
+}
+
+function savePersistedSessions(): void {
+  try {
+    const dir = path.dirname(SESSIONS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const now = Date.now();
+    const out: Record<string, { userId: number; expiresAt: number }> = {};
+    for (const [tok, sess] of activeSessions.entries()) {
+      if (sess.expiresAt > now) {
+        out[tok] = { userId: sess.userId, expiresAt: sess.expiresAt };
+        sess.lastSavedAt = now;
+      } else {
+        activeSessions.delete(tok);
+      }
+    }
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(out), 'utf8');
+  } catch {
+    // non-fatal if disk write fails
+  }
+}
+
+function saveRevokedSessions(): void {
+  try {
+    const dir = path.dirname(REVOKED_SESSIONS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const now = Date.now();
+    const out: Record<string, number> = {};
+    for (const [jti, exp] of revokedSessionJtis.entries()) {
+      if (exp > now) {
+        out[jti] = exp;
+      } else {
+        revokedSessionJtis.delete(jti);
+      }
+    }
+    fs.writeFileSync(REVOKED_SESSIONS_FILE, JSON.stringify(out), 'utf8');
+  } catch {
+    // non-fatal
+  }
+}
+
+loadPersistedSessions();
+
+function parseCookies(cookieHeader: string | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!cookieHeader) return out;
+  for (const part of cookieHeader.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx <= 0) continue;
+    const k = part.slice(0, idx).trim();
+    const v = part.slice(idx + 1).trim();
+    try {
+      out[k] = decodeURIComponent(v);
+    } catch {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+function isSecureCookieRequest(req: Request): boolean {
+  const proto = String(req.headers['x-forwarded-proto'] ?? '').toLowerCase();
+  return req.secure || proto.includes('https');
+}
+
+function setSessionCookie(req: Request, res: Response, token: string, expiresAt: number): void {
+  const maxAgeSec = Math.max(60, Math.floor((expiresAt - Date.now()) / 1000));
+  const attrs = [
+    `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    `Max-Age=${maxAgeSec}`,
+    isSecureCookieRequest(req) ? 'SameSite=None; Secure' : 'SameSite=Lax',
+  ];
+  res.setHeader('Set-Cookie', attrs.join('; '));
+}
+
+function clearSessionCookie(req: Request, res: Response): void {
+  const attrs = [
+    `${SESSION_COOKIE_NAME}=`,
+    'Path=/',
+    'HttpOnly',
+    'Max-Age=0',
+    isSecureCookieRequest(req) ? 'SameSite=None; Secure' : 'SameSite=Lax',
+  ];
+  res.setHeader('Set-Cookie', attrs.join('; '));
+}
+
 const recoveryCodes = new Map<
   number,
-  { codeHash: string; channel: 'email' | 'sms'; expiresAt: number; sentAt: number; attempts: number }
+  {
+    codeHash: string;
+    channel: 'email' | 'sms';
+    expiresAt: number;
+    sentAt: number;
+    attempts: number;
+    verifiedProofHash?: string;
+    verifiedUntil?: number;
+  }
 >();
 
 type StoreUser = PosStoreData['users'][number];
@@ -32,26 +166,133 @@ function getPublicSettings(store: PosStoreData) {
   };
 }
 
-function getValidSession(req: Request): { token: string; user: StoreUser; expiresAt: number } | null {
-  const authHeader = String(req.headers.authorization ?? '');
-  if (!authHeader.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7).trim();
-  if (!token) return null;
-  const sess = activeSessions.get(token);
-  if (!sess) return null;
-  if (Date.now() > sess.expiresAt) {
-    activeSessions.delete(token);
+function deriveUserSessionKey(user: StoreUser): Buffer {
+  const baseSecret = process.env.SESSION_SECRET || 'youthit-pos-stable-session-secret-v2';
+  return crypto
+    .createHash('sha256')
+    .update(`${baseSecret}:${user.id}:${user.email.toLowerCase()}:${user.password_hash ?? ''}`)
+    .digest();
+}
+
+function createSignedSessionToken(
+  user: StoreUser,
+  jti = crypto.randomBytes(12).toString('hex'),
+  now = Date.now()
+): { token: string; expiresAt: number; jti: string } {
+  const expiresAt = now + IDLE_TIMEOUT_MS;
+  const payload = { uid: user.id, iat: now, exp: expiresAt, jti };
+  const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const sig = crypto.createHmac('sha256', deriveUserSessionKey(user)).update(encoded).digest('hex');
+  return { token: `yt1.${encoded}.${sig}`, expiresAt, jti };
+}
+
+function parseSignedTokenJti(token: string): { jti: string; exp: number } | null {
+  if (!token.startsWith('yt1.')) return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const decoded = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as {
+      jti?: unknown;
+      exp?: unknown;
+    };
+    if (typeof decoded.jti === 'string' && Number.isFinite(Number(decoded.exp))) {
+      return { jti: decoded.jti, exp: Number(decoded.exp) };
+    }
+  } catch {
     return null;
   }
+  return null;
+}
+
+function getValidSession(
+  req: Request,
+  res?: Response
+): { token: string; user: StoreUser; expiresAt: number } | null {
+  const authHeader = String(req.headers.authorization ?? '');
+  let token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  if (!token) {
+    const cookies = parseCookies(req.headers.cookie);
+    token = String(cookies[SESSION_COOKIE_NAME] ?? '').trim();
+  }
+  if (!token) return null;
+
   const store = getStore();
+  const now = Date.now();
+
+  if (token.startsWith('yt1.')) {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [, encoded, sigHex] = parts;
+    try {
+      const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as {
+        uid?: unknown;
+        iat?: unknown;
+        exp?: unknown;
+        jti?: unknown;
+      };
+      const uid = Number(payload.uid);
+      const iat = Number(payload.iat);
+      const exp = Number(payload.exp);
+      const jti = String(payload.jti ?? '');
+      if (!Number.isFinite(uid) || !Number.isFinite(iat) || !Number.isFinite(exp) || !jti) {
+        return null;
+      }
+      if (now > exp) return null;
+      const revokedExp = revokedSessionJtis.get(jti);
+      if (revokedExp && revokedExp > now) return null;
+
+      const user = store.users.find((u) => u.id === uid);
+      if (!user || !user.is_active) return null;
+
+      const expectedSig = crypto
+        .createHmac('sha256', deriveUserSessionKey(user))
+        .update(encoded)
+        .digest();
+      const providedSig = Buffer.from(sigHex, 'hex');
+      if (expectedSig.length !== providedSig.length || !crypto.timingSafeEqual(expectedSig, providedSig)) {
+        return null;
+      }
+
+      // Slide 60-minute continuous inactivity window forward cleanly
+      let activeToken = token;
+      let activeExpiresAt = exp;
+      if (now - iat >= 60_000) {
+        const refreshed = createSignedSessionToken(user, jti, now);
+        activeToken = refreshed.token;
+        activeExpiresAt = refreshed.expiresAt;
+        if (res) {
+          res.setHeader('X-Refreshed-Token', activeToken);
+          setSessionCookie(req, res, activeToken, activeExpiresAt);
+        }
+      }
+      return { token: activeToken, user, expiresAt: activeExpiresAt };
+    } catch {
+      return null;
+    }
+  }
+
+  const sess = activeSessions.get(token);
+  if (!sess) return null;
+  if (now > sess.expiresAt) {
+    activeSessions.delete(token);
+    savePersistedSessions();
+    return null;
+  }
   const user = store.users.find((u) => u.id === sess.userId);
   if (!user || !user.is_active) {
     activeSessions.delete(token);
+    savePersistedSessions();
     return null;
   }
-  // Sliding 1-hour idle timeout
-  sess.expiresAt = Date.now() + IDLE_TIMEOUT_MS;
-  return { token, user, expiresAt: sess.expiresAt };
+  // Sliding 1-hour idle timeout + seamless upgrade to signed token
+  const upgraded = createSignedSessionToken(user, undefined, now);
+  activeSessions.delete(token);
+  savePersistedSessions();
+  if (res) {
+    res.setHeader('X-Refreshed-Token', upgraded.token);
+    setSessionCookie(req, res, upgraded.token, upgraded.expiresAt);
+  }
+  return { token: upgraded.token, user, expiresAt: upgraded.expiresAt };
 }
 
 function hasAnyRole(user: StoreUser | undefined, roles: string[]): boolean {
@@ -135,7 +376,7 @@ const EXCLUDED_DIRS = new Set([
 ]);
 
 function isExcludedFileName(name: string): boolean {
-  if (name === '.DS_Store' || name === 'server.js') return true;
+  if (name === '.DS_Store' || name === '.sessions.json' || name === '.revoked-sessions.json') return true;
   if (/^\.env($|\.)/i.test(name) && name !== '.env.example') return true;
   if (/\.log$/i.test(name)) return true;
   return false;
@@ -158,45 +399,41 @@ function collectFiles(dir: string, baseDir: string): string[] {
 }
 
 function buildHostingUploadGuide(): string {
-  return `# Youth IT POS — Hosting Deployment Guide
+  return `# Youth IT POS — Easy Hosting & Local Setup Guide
 
 ## Included Files & Database
-- \`database/youthit_pos_database.sql\` (and \`laravel/database/sql/youthits_pos.sql\`): Full MySQL 8 / MariaDB schema + all live data from your store.
-- \`data/pos-store.json\`: Live JSON store used by the Node.js + React server.
-- \`public/\`: Shop logos, favicon, QR code, and uploaded avatars/product images.
-- \`.env.example\`: Environment variable template (rename to \`.env\` on hosting and fill in your credentials — secret keys are never bundled in ZIP downloads).
+- \`database/youthit_pos_database.sql\` (and \`laravel/database/sql/youthits_pos.sql\`): Complete MySQL 8 / MariaDB schema + all live POS data.
+- \`data/pos-store.json\`: Live JSON database used by the Node.js + React server.
+- \`public/\`: Shop logos, favicon, QR code, and all uploaded product & avatar images.
+- \`.env.example\`: Safe environment template (\`.env\` with fresh \`APP_KEY\` is auto-created on first run for Laravel).
 
 ---
 
-## Option 1: cPanel Shared Hosting / PHP 8.3 + Laravel 13 (\`youthit-pos-laravel-13.zip\`)
-1. **Create MySQL Database** in cPanel -> **MySQL Databases** (database, username, password).
-2. **Import Database**: Open cPanel -> **phpMyAdmin**, select your database, go to **Import**, and upload \`database/youthit_pos_database.sql\`.
-3. **Upload Files**: Upload and extract \`youthit-pos-laravel-13.zip\` into your domain folder. Set your domain's **Document Root** to \`.../public\`.
-4. **Configure \`.env\`**: Copy \`.env.example\` to \`.env\` and update:
-   - \`APP_URL\`, \`DB_DATABASE\`, \`DB_USERNAME\`, \`DB_PASSWORD\`
-   - \`MAIL_HOST=mail.youthit.com.bd\`, \`MAIL_PORT=465\`, \`MAIL_ENCRYPTION=ssl\`, \`MAIL_USERNAME\`, \`MAIL_PASSWORD\`
-   - \`SMS_GATEWAY_URL\`, \`SMS_API_KEY\`, \`SMS_SENDER_ID\`
-5. **Install PHP dependencies & generate key** (via Terminal or SSH):
+## Option 1: cPanel Shared Hosting or Local XAMPP / Laragon (\`youthit-pos-laravel-13.zip\`)
+1. **Create an empty MySQL Database** (in cPanel -> *MySQL Databases* or locally in *phpMyAdmin*).
+2. **Upload & Extract** \`youthit-pos-laravel-13.zip\` into your domain folder (or \`C:\\xampp\\htdocs\\youthit-pos\` / \`C:\\laragon\\www\\youthit-pos\` locally).
+3. **Install PHP Vendor Packages** (only if \`vendor/\` folder is not already present):
    \`\`\`bash
    composer install --no-dev --optimize-autoloader
-   php artisan key:generate
    \`\`\`
-6. **Admin Password Note for Laravel**: If migrating from the Node.js preview store, use **Forgot Password** (Email/SMS OTP) or run:
-   \`\`\`bash
-   php artisan tinker --execute="App\\Models\\User::where('email','rajahmed249@gmail.com')->update(['password'=>bcrypt('YOUR_PASSWORD')]);"
-   \`\`\`
+4. **Open Your Site in Browser** (e.g. \`https://yourdomain.com\` or \`http://localhost/youthit-pos\`):
+   - No manual \`.env\`, \`APP_KEY\`, or SQL import needed!
+   - The built-in **1-Click Setup Wizard (\`/setup\`)** opens automatically, creates \`.env\` + \`APP_KEY\`, connects your MySQL database, imports \`youthits_pos.sql\`, sets your admin login password, and redirects to \`/login\`.
+5. **Email & SMS Recovery (Optional)**: Update \`MAIL_*\` and \`SMS_*\` inside \`.env\`.
 
 ---
 
-## Option 2: Node.js Hosting / VPS / cPanel Setup Node.js App (\`youthit-pos-full-project.zip\`)
-1. Upload & extract \`youthit-pos-full-project.zip\` on your server.
-2. Copy \`.env.example\` to \`.env\` and configure \`SMTP_*\` / \`SMS_*\` settings.
-3. Install dependencies and start in production mode (prebuilt \`dist/\` is already included):
+## Option 2: Node.js Hosting (VPS / cPanel Setup Node.js App) or Local PC (\`youthit-pos-full-project.zip\`)
+Prebuilt \`dist/\` frontend and compiled \`server.js\` are already bundled inside the ZIP!
+1. Extract \`youthit-pos-full-project.zip\`.
+2. Copy \`.env.example\` to \`.env\` (optional: add \`SMTP_*\` / \`SMS_*\` settings).
+3. Install runtime packages and start immediately (Node 18 / 20 / 22+):
    \`\`\`bash
    npm install --omit=dev
-   NODE_ENV=production PORT=3000 npm start
+   npm start
    \`\`\`
-   *(If your Node version is older than Node 22.6 or doesn't strip TypeScript directly, run \`npx tsx server.ts\` or install \`tsx\`.)*
+   *(For cPanel Setup Node.js App, set **Application startup file** to \`server.js\`.)*
+4. Open \`http://localhost:3000\` (or your domain) in the browser and sign in.
 `;
 }
 
@@ -214,6 +451,88 @@ async function startServer() {
   }
   app.use('/uploads', express.static(path.resolve(process.cwd(), 'public/uploads')));
 
+  const publicRootDir = path.resolve(process.cwd(), 'public');
+  const PRODUCT_NAME_IMAGE_RULES: Array<[RegExp, string]> = [
+    [/ds-2ce70df0t|colorvu.*dome|hikvision.*dome/i, '/uploads/products/1778931608_ds-2ce70df0t-lpfss-01-500x500.webp'],
+    [/ds-2ce12df0t|colorvu.*bullet|hikvision.*bullet/i, '/uploads/products/1778931750_Hikvision-DS-2CE12DF0T-FS.jpg'],
+    [/ds-7108|hikvision.*(dvr|nvr|xvr)/i, '/uploads/products/1778932443_ds-7108hghi-m1-t-01-500x500.webp'],
+    [/ptn-c6|protech.*(cat\s*6|cable|utp)/i, '/uploads/products/1778932161_ptn-c6-cca-in-wh-500x500.webp'],
+    [/protech.*balun|black.*balun/i, '/uploads/products/1778932922_ProtechVideoBalun.jpg'],
+    [/video\s*balu?n|split\s*joint.*balun/i, '/uploads/products/1774523205_VideoBaloon2.png'],
+    [/dtech|fiber\s*optic.*hdmi|10\s*m.*hdmi|hdmi.*10\s*m/i, '/uploads/products/1775656388_DTECH10MeterFiberOpticHDMICable4K3DV2.0.jpeg'],
+    [/deco|mesh\s*(wi-?fi|router)/i, '/uploads/products/1786888213_6a81c015a1644.jpg'],
+    [/tp-?link|wr840|wr841|wi-?fi\s*router|wireless\s*router/i, '/uploads/products/1775156479_TPLinkRouter-YouthIT.jpg'],
+    [/a4\s*tech|optical\s*mouse|wired\s*mouse|\bmouse\b/i, '/uploads/products/1774450128_Mouse-YouthIT.jpg'],
+    [/projector.*(lamp|bulb)|lamp.*bulb/i, '/uploads/products/1784115645_6a5771bd2b1f6.jpg'],
+    [/\bhp\b.*laptop|\blaptop\b/i, '/uploads/products/1786643697_6a7e04f104f8b.webp'],
+    [/toten|rack.*(shelf|tray)|\bshelf\b|\btray\b/i, '/uploads/products/1786712765_6a7f12bd514d4.jpg'],
+    [/(compact|small|4u|6u).*(rack|cabinet)|(rack|cabinet).*(4u|6u)/i, '/uploads/products/1786886944_6a81bb205ab7d.webp'],
+    [/server\s*rack|network\s*(rack|cabinet)|wall\s*cabinet/i, '/uploads/products/1786712775_6a7f12c7eefe0.jpg'],
+    [/onv.*(24|26).*poe|(24|26).*port.*poe/i, '/uploads/products/1786712866_6a7f13221e3cd.jpg'],
+    [/onv.*gigabit.*poe|onv.*10.*1000/i, '/uploads/products/1786712826_6a7f12fa7a61f.jpg'],
+    [/onv.*poe|10.*port.*poe/i, '/uploads/products/1786888040_6a81bf68722e3.jpg'],
+    [/hrui.*poe|managed.*poe/i, '/uploads/products/1786887457_6a81bd213922c.jpg'],
+    [/jovision.*(dvr|nvr|xvr)/i, '/uploads/products/1786712921_6a7f1359effd9.jpg'],
+    [/jovision.*bullet/i, '/uploads/products/1786712947_6a7f1373e6f91.webp'],
+    [/jovision.*(turret|two-?way|audio|mic)/i, '/uploads/products/1787689048_6a8df8588e59b.webp'],
+    [/jovision.*dome|jovision.*camera/i, '/uploads/products/1786886564_6a81b9a493b8e.jpg'],
+    [/\bmi\b.*(cat-?6|cable|305)/i, '/uploads/products/1786887301_6a81bc8550a80.jpg'],
+    [/pixel|pxc-2501|1000ft.*cat/i, '/uploads/products/1786888782_6a81c24e35a8b.png'],
+    [/toshiba|s300|6\s*tb|surveillance.*(hdd|hard\s*drive|disk)/i, '/uploads/products/1786887784_6a81be684747c.jpg'],
+    [/zkteco|attendance|biometric|fingerprint/i, '/uploads/products/1786888313_6a81c079ebb06.webp'],
+    [/keystone/i, '/uploads/products/1787336191_6a8895ffc4340.jpg'],
+    [/rj-?45.*connector|modular\s*connector|rj-?45/i, '/uploads/products/1786888496_6a81c1309853e.webp'],
+    [/logitech|webcam|web\s*cam/i, '/uploads/products/1787333051_6a8889bba4425.webp'],
+    [/d-?link.*(faceplate|face\s*plate|wall|box)|faceplate/i, '/uploads/products/1787333152_6a888a2051d14.webp'],
+    [/micro\s*sd|64\s*gb.*card|memory\s*card/i, '/uploads/products/1787335859_6a8894b34c414.jpg'],
+    [/ezviz|pan.*tilt.*cam|smart.*wi-?fi.*cam/i, '/uploads/products/1787336060_6a88957c7a07e.webp'],
+    [/vico|v-?15|trolley\s*speaker|portable.*speaker/i, '/uploads/products/1787676708_6a8dc824339ef.jpg'],
+    [/ahuja.*(ssb|amplifier|amp)/i, '/uploads/products/1787683417_6a8de259d5253.webp'],
+    [/ahuja.*(awm|wireless.*mic|microphone)/i, '/uploads/products/1787683865_6a8de419ec586.webp'],
+    [/ahuja|column\s*speaker/i, '/uploads/products/1787683069_6a8de0fddd320.webp'],
+    [/speaker\s*cable|audio\s*cable/i, '/uploads/products/1787683649_6a8de341673de.jpg'],
+  ];
+
+  function resolveProductImage(rawImage: unknown, productName?: unknown): string | null {
+    const raw = String(rawImage ?? '').trim();
+    if (raw && raw.toLowerCase() !== 'null' && raw.toLowerCase() !== 'undefined') {
+      if (raw.startsWith('data:image/') || /^https?:\/\//i.test(raw)) {
+        return raw;
+      }
+      const normalized = raw.replace(/\\/g, '/').replace(/^\/+/, '');
+      const directCandidate = normalized.startsWith('public/') ? normalized.slice(7) : normalized;
+      if (fs.existsSync(path.join(publicRootDir, directCandidate))) {
+        return `/${directCandidate}`;
+      }
+      const base = path.posix.basename(directCandidate);
+      const strippedBase = base.replace(/_[0-9a-f]{8}(\.[^.]+)$/i, '$1');
+      if (fs.existsSync(path.join(productUploadsDir, base))) {
+        return `/uploads/products/${base}`;
+      }
+      if (strippedBase !== base && fs.existsSync(path.join(productUploadsDir, strippedBase))) {
+        return `/uploads/products/${strippedBase}`;
+      }
+      if (fs.existsSync(path.join(publicRootDir, 'assets/aistudio', base))) {
+        return `/assets/aistudio/${base}`;
+      }
+    }
+
+    const name = String(productName ?? '').trim();
+    if (name) {
+      for (const [pattern, imgPath] of PRODUCT_NAME_IMAGE_RULES) {
+        if (pattern.test(name)) {
+          return imgPath;
+        }
+      }
+    }
+
+    if (raw && raw.toLowerCase() !== 'null' && raw.toLowerCase() !== 'undefined') {
+      const normalized = raw.replace(/\\/g, '/').replace(/^\/+/, '');
+      return normalized.includes('/') ? `/${normalized}` : `/uploads/products/${normalized}`;
+    }
+    return null;
+  }
+
   // Initialize store on boot so real SQL data is ready immediately
   getStore();
 
@@ -222,6 +541,7 @@ async function startServer() {
     '/auth/session',
     '/auth/login',
     '/auth/request-recovery-code',
+    '/auth/verify-recovery-code',
     '/auth/recover-password',
     '/auth/logout',
   ]);
@@ -233,8 +553,9 @@ async function startServer() {
       return;
     }
 
-    const session = getValidSession(req);
+    const session = getValidSession(req, res);
     if (!session) {
+      clearSessionCookie(req, res);
       res.status(401).json({
         error: 'Authentication required. Please sign in or re-authenticate after inactivity.',
       });
@@ -278,10 +599,7 @@ async function startServer() {
     next();
   });
 
-  // ---- Bootstrap & Dashboard ----
-  app.get('/api/bootstrap', (req: AuthedRequest, res: Response) => {
-    const store = getStore();
-    const authUser = req.authUser;
+  function buildBootstrapPayload(store: PosStoreData, authUser?: StoreUser) {
     const todayStr = new Date().toISOString().slice(0, 10);
 
     let todaySales = 0;
@@ -326,7 +644,11 @@ async function startServer() {
     const lowStock = activeProducts
       .filter((p) => Number(p.quantity ?? 0) <= Number(p.alert_quantity ?? 5))
       .sort((a, b) => Number(a.quantity ?? 0) - Number(b.quantity ?? 0))
-      .slice(0, 10);
+      .slice(0, 10)
+      .map((p) => ({
+        ...p,
+        image: resolveProductImage(p.image, p.name),
+      }));
 
     const recentSales = [...store.sales]
       .sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0))
@@ -349,7 +671,7 @@ async function startServer() {
       .sort((a, b) => a.month.localeCompare(b.month))
       .slice(-6);
 
-    res.json({
+    return {
       settings: store.settings,
       menus: [...store.menus].sort((a, b) => a.sort_order - b.sort_order),
       users: hasAnyRole(authUser, ['admin'])
@@ -382,7 +704,13 @@ async function startServer() {
       lowStock,
       recentSales,
       monthlyTrend,
-    });
+    };
+  }
+
+  // ---- Bootstrap & Dashboard ----
+  app.get('/api/bootstrap', (req: AuthedRequest, res: Response) => {
+    const store = getStore();
+    res.json(buildBootstrapPayload(store, req.authUser));
   });
 
   // ---- Products ----
@@ -427,6 +755,7 @@ async function startServer() {
     const total = items.length;
     const sliced = (fetchAll ? items : items.slice((page - 1) * limit, page * limit)).map((p) => ({
       ...p,
+      image: resolveProductImage(p.image, p.name),
       warranty: String(p.warranty || warrantyMap.get(Number(p.warranty_id)) || 'No Warranty'),
       category_name: catMap.get(Number(p.category_id)) ?? 'Uncategorized',
       brand_name: brandMap.get(Number(p.brand_id)) ?? 'No Brand',
@@ -476,6 +805,8 @@ async function startServer() {
       String(body.warranty ?? '').trim() ||
       String(matchedWarranty?.duration ?? matchedWarranty?.name ?? 'No Warranty');
     const savedImagePath = saveProductImageFromDataUrl(body.image_data);
+    const rawWarrantyMonths = Number(body.warranty_months ?? 0);
+    const rawAlertQty = Number(body.alert_quantity ?? 5);
     const newProduct = {
       id: nextId(store.products),
       name: String(body.name).trim(),
@@ -486,10 +817,10 @@ async function startServer() {
       unit_id: body.unit_id ? Number(body.unit_id) : (Number(store.units[0]?.id ?? 4)),
       purchase_price: purchasePrice,
       selling_price: sellingPrice,
-      warranty_months: Number(body.warranty_months ?? 0),
+      warranty_months: Number.isFinite(rawWarrantyMonths) && rawWarrantyMonths >= 0 ? Math.round(rawWarrantyMonths) : 0,
       quantity: qty,
       stock_quantity: qty,
-      alert_quantity: Math.max(0, Number(body.alert_quantity ?? 5)),
+      alert_quantity: Number.isFinite(rawAlertQty) && rawAlertQty >= 0 ? Math.round(rawAlertQty) : 5,
       description: String(body.description ?? ''),
       barcode: String(body.barcode ?? ''),
       image: savedImagePath,
@@ -535,7 +866,12 @@ async function startServer() {
       product.selling_price = sp;
     }
     if (body.quantity !== undefined) {
-      const q = Math.max(0, Math.round(Number(body.quantity)));
+      const parsedQ = Number(body.quantity);
+      if (!Number.isFinite(parsedQ) || parsedQ < 0) {
+        res.status(400).json({ error: 'Quantity must be 0 or greater.' });
+        return;
+      }
+      const q = Math.round(parsedQ);
       product.quantity = q;
       product.stock_quantity = q;
     }
@@ -556,7 +892,14 @@ async function startServer() {
       }
     }
     if (body.warranty !== undefined) product.warranty = String(body.warranty || 'No Warranty');
-    if (body.alert_quantity !== undefined) product.alert_quantity = Math.max(0, Number(body.alert_quantity));
+    if (body.alert_quantity !== undefined) {
+      const parsedAlert = Number(body.alert_quantity);
+      if (!Number.isFinite(parsedAlert) || parsedAlert < 0) {
+        res.status(400).json({ error: 'Alert quantity must be 0 or greater.' });
+        return;
+      }
+      product.alert_quantity = Math.round(parsedAlert);
+    }
     if (body.image_data) {
       const savedPath = saveProductImageFromDataUrl(body.image_data);
       if (savedPath) product.image = savedPath;
@@ -567,7 +910,7 @@ async function startServer() {
     res.json(product);
   });
 
-  app.post('/api/products/:id/adjust', (req: Request, res: Response) => {
+  app.post('/api/products/:id/adjust', (req: AuthedRequest, res: Response) => {
     const store = getStore();
     const id = Number(req.params.id);
     const product = store.products.find((p) => Number(p.id) === id);
@@ -591,7 +934,7 @@ async function startServer() {
       new_quantity: newQty,
       difference: newQty - oldQty,
       reason: String(req.body?.reason ?? '').trim() || 'Manual Stock Adjustment',
-      created_by: 1,
+      created_by: req.authUser?.id ?? 1,
       created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
     });
     saveStore(store);
@@ -809,7 +1152,7 @@ async function startServer() {
     });
   });
 
-  app.post('/api/sales', (req: Request, res: Response) => {
+  app.post('/api/sales', (req: AuthedRequest, res: Response) => {
     const store = getStore();
     const body = req.body ?? {};
     const itemsInput = Array.isArray(body.items) ? body.items : [];
@@ -819,8 +1162,9 @@ async function startServer() {
     }
 
     const catMap = new Map(store.categories.map((c) => [Number(c.id), String(c.name ?? '')]));
-    const accountId = Number(body.account_id ?? store.bank_accounts[0]?.id ?? 21);
-    const account = store.bank_accounts.find((a) => Number(a.id) === accountId) ?? store.bank_accounts[0];
+    const rawAccId = Number(body.account_id);
+    const accountId = Number.isFinite(rawAccId) && rawAccId > 0 ? rawAccId : Number(store.bank_accounts[0]?.id ?? 0);
+    const account = (accountId ? store.bank_accounts.find((a) => Number(a.id) === accountId) : undefined) ?? store.bank_accounts[0];
     const customerId = body.customer_id ? Number(body.customer_id) : null;
     const customer = customerId ? store.customers.find((c) => Number(c.id) === customerId) : null;
 
@@ -942,6 +1286,7 @@ async function startServer() {
       payment_method: paymentMethod,
       note: saleNote,
       payment_status: due <= 0 ? 'paid' : (paid > 0 ? 'partial' : 'due'),
+      created_by: req.authUser?.id ?? 1,
     };
     store.sales.unshift(sale);
 
@@ -978,7 +1323,7 @@ async function startServer() {
         new_quantity: newQty,
         difference: -p.qty,
         reason: `POS Sale ${invoiceNo}`,
-        created_by: 1,
+        created_by: req.authUser?.id ?? 1,
         created_at: dateTimeStr,
       });
     }
@@ -993,7 +1338,7 @@ async function startServer() {
         payment_method: account ? String(account.account_name).toLowerCase() : 'cash',
         reference_no: null,
         note: 'POS Checkout',
-        created_by: 1,
+        created_by: req.authUser?.id ?? 1,
         created_at: dateTimeStr,
       });
       if (account) {
@@ -1005,7 +1350,7 @@ async function startServer() {
     res.status(201).json({ sale, items: createdItems });
   });
 
-  app.post('/api/sales/:id/payments', (req: Request, res: Response) => {
+  app.post('/api/sales/:id/payments', (req: AuthedRequest, res: Response) => {
     const store = getStore();
     const id = Number(req.params.id);
     const sale = store.sales.find((s) => Number(s.id) === id);
@@ -1028,8 +1373,14 @@ async function startServer() {
       return;
     }
     const collect = Math.min(currentDue, rawAmount);
-    const accountId = Number(req.body?.account_id ?? sale.account_id ?? store.bank_accounts[0]?.id);
-    const account = store.bank_accounts.find((a) => Number(a.id) === accountId);
+    const rawAccId = Number(req.body?.account_id);
+    const accountId =
+      Number.isFinite(rawAccId) && rawAccId > 0
+        ? rawAccId
+        : Number(sale.account_id ?? store.bank_accounts[0]?.id ?? 0);
+    const account =
+      (accountId ? store.bank_accounts.find((a) => Number(a.id) === accountId) : undefined) ??
+      store.bank_accounts[0];
 
     sale.paid = Number(sale.paid ?? 0) + collect;
     sale.due = Math.max(0, Number(sale.receivable ?? 0) - Number(sale.paid));
@@ -1047,7 +1398,7 @@ async function startServer() {
       payment_method: payMethod,
       reference_no: req.body?.reference_no ? String(req.body.reference_no) : null,
       note: String(req.body?.note ?? 'Due collection'),
-      created_by: 1,
+      created_by: req.authUser?.id ?? 1,
       created_at: now,
     });
     if (account) {
@@ -1057,7 +1408,7 @@ async function startServer() {
     res.json(sale);
   });
 
-  app.delete('/api/sales/:id', (req: Request, res: Response) => {
+  app.delete('/api/sales/:id', (req: AuthedRequest, res: Response) => {
     const store = getStore();
     const id = Number(req.params.id);
     const idx = store.sales.findIndex((s) => Number(s.id) === id);
@@ -1083,7 +1434,7 @@ async function startServer() {
             new_quantity: newQty,
             difference: Number(item.quantity ?? 0),
             reason: `Restored from deleted sale #${id}`,
-            created_by: 1,
+            created_by: req.authUser?.id ?? 1,
             created_at: now,
           });
         }
@@ -1117,15 +1468,14 @@ async function startServer() {
     }));
     if (q) {
       items = items.filter((p) =>
-        String(p.invoice_no ?? '').toLowerCase().includes(q) ||
-        String(p.supplier_name ?? '').toLowerCase().includes(q)
+        matchesSearchTokens([p.invoice_no, p.supplier_name, p.payment_method], q)
       );
     }
     items.sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0));
     res.json({ items: items.slice((page - 1) * limit, page * limit), total: items.length, page, limit });
   });
 
-  app.post('/api/purchases', (req: Request, res: Response) => {
+  app.post('/api/purchases', (req: AuthedRequest, res: Response) => {
     const store = getStore();
     const body = req.body ?? {};
     const product = store.products.find((p) => Number(p.id) === Number(body.product_id));
@@ -1158,6 +1508,7 @@ async function startServer() {
     const purchaseId = nextId(store.purchases);
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const invoiceNo = `PUR-${now.slice(0, 10).replace(/-/g, '')}-${String(purchaseId).padStart(4, '0')}`;
+    const actorId = req.authUser?.id ?? 1;
 
     const purchase = {
       id: purchaseId,
@@ -1171,7 +1522,7 @@ async function startServer() {
       payment_method: String(body.payment_method ?? 'cash'),
       note: String(body.note ?? ''),
       status: 1,
-      user_id: 1,
+      user_id: actorId,
       subtotal,
       total,
       paid,
@@ -1201,7 +1552,7 @@ async function startServer() {
       new_quantity: newQty,
       difference: qty,
       reason: `Purchase ${invoiceNo}`,
-      created_by: 1,
+      created_by: actorId,
       created_at: now,
     });
 
@@ -1215,7 +1566,7 @@ async function startServer() {
         payment_method: String(body.payment_method ?? 'cash'),
         reference_no: null,
         note: 'Initial purchase payment',
-        created_by: 1,
+        created_by: actorId,
         created_at: now,
       });
     }
@@ -1223,7 +1574,7 @@ async function startServer() {
     res.status(201).json(purchase);
   });
 
-  app.post('/api/purchases/:id/payments', (req: Request, res: Response) => {
+  app.post('/api/purchases/:id/payments', (req: AuthedRequest, res: Response) => {
     const store = getStore();
     const id = Number(req.params.id);
     const purchase = store.purchases.find((p) => Number(p.id) === id);
@@ -1261,7 +1612,7 @@ async function startServer() {
       payment_method: String(req.body?.payment_method ?? 'cash'),
       reference_no: null,
       note: 'Supplier due settlement',
-      created_by: 1,
+      created_by: req.authUser?.id ?? 1,
       created_at: now,
     });
     saveStore(store);
@@ -1316,6 +1667,11 @@ async function startServer() {
       res.status(400).json({ error: 'Customer name is required.' });
       return;
     }
+    const openingBalance = Number(req.body?.opening_balance ?? 0);
+    if (!Number.isFinite(openingBalance) || openingBalance < 0) {
+      res.status(400).json({ error: 'Opening balance must be 0 or greater.' });
+      return;
+    }
     const row = {
       id: nextId(store.customers),
       name,
@@ -1325,7 +1681,7 @@ async function startServer() {
       city: String(req.body?.city ?? ''),
       state: '',
       zip_code: '',
-      opening_balance: Number(req.body?.opening_balance ?? 0),
+      opening_balance: openingBalance,
       status: 1,
       points: 0,
       created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
@@ -1382,6 +1738,11 @@ async function startServer() {
       res.status(400).json({ error: 'Supplier name is required.' });
       return;
     }
+    const openingBalance = Number(req.body?.opening_balance ?? 0);
+    if (!Number.isFinite(openingBalance) || openingBalance < 0) {
+      res.status(400).json({ error: 'Opening balance must be 0 or greater.' });
+      return;
+    }
     const row = {
       id: nextId(store.suppliers),
       name,
@@ -1391,7 +1752,7 @@ async function startServer() {
       city: '',
       state: '',
       zip_code: '',
-      opening_balance: Number(req.body?.opening_balance ?? 0),
+      opening_balance: openingBalance,
       status: 1,
       created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
     };
@@ -1456,7 +1817,12 @@ async function startServer() {
       res.status(404).json({ error: 'Estimate not found.' });
       return;
     }
-    est.status = String(req.body?.status ?? 'approved');
+    const nextStatus = String(req.body?.status ?? 'approved').trim().toLowerCase();
+    if (!['pending', 'approved', 'rejected', 'converted'].includes(nextStatus)) {
+      res.status(400).json({ error: 'Invalid estimate status. Allowed: pending, approved, rejected, converted.' });
+      return;
+    }
+    est.status = nextStatus;
     saveStore(store);
     res.json(est);
   });
@@ -1514,7 +1880,7 @@ async function startServer() {
     });
   });
 
-  app.post('/api/expenses', (req: Request, res: Response) => {
+  app.post('/api/expenses', (req: AuthedRequest, res: Response) => {
     const store = getStore();
     const rawAmount = Number(req.body?.amount ?? 0);
     if (!Number.isFinite(rawAmount) || rawAmount <= 0) {
@@ -1529,7 +1895,7 @@ async function startServer() {
       description: String(req.body?.description ?? ''),
       amount,
       expense_date: String(req.body?.expense_date ?? new Date().toISOString().slice(0, 10)),
-      created_by: 1,
+      created_by: req.authUser?.id ?? 1,
       created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
     };
     store.expenses.unshift(exp);
@@ -1547,7 +1913,7 @@ async function startServer() {
     });
   });
 
-  app.post('/api/returns', (req: Request, res: Response) => {
+  app.post('/api/returns', (req: AuthedRequest, res: Response) => {
     const store = getStore();
     const sale = store.sales.find((s) => Number(s.id) === Number(req.body?.sale_id));
     const product = store.products.find((p) => Number(p.id) === Number(req.body?.product_id));
@@ -1564,6 +1930,7 @@ async function startServer() {
     const qty = Math.round(rawQty);
     const price = rawPrice;
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const actorId = req.authUser?.id ?? 1;
     const row = {
       id: nextId(store.returns),
       sale_id: Number(sale.id),
@@ -1575,7 +1942,7 @@ async function startServer() {
       total_amount: qty * price,
       reason: String(req.body?.reason ?? '').trim() || 'Customer Return',
       return_date: now.slice(0, 10),
-      created_by: 1,
+      created_by: actorId,
       created_at: now,
     };
     store.returns.unshift(row);
@@ -1590,14 +1957,14 @@ async function startServer() {
       new_quantity: newQty,
       difference: qty,
       reason: `Sales Return (${sale.invoice_no})`,
-      created_by: 1,
+      created_by: actorId,
       created_at: now,
     });
     saveStore(store);
     res.status(201).json(row);
   });
 
-  app.post('/api/damages', (req: Request, res: Response) => {
+  app.post('/api/damages', (req: AuthedRequest, res: Response) => {
     const store = getStore();
     const product = store.products.find((p) => Number(p.id) === Number(req.body?.product_id));
     if (!product) {
@@ -1617,6 +1984,7 @@ async function startServer() {
       return;
     }
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const actorId = req.authUser?.id ?? 1;
     const row = {
       id: nextId(store.damages),
       product_id: Number(product.id),
@@ -1624,7 +1992,7 @@ async function startServer() {
       reason: String(req.body?.reason ?? '').trim() || 'Damaged item',
       loss_amount: reqQty * Number(product.purchase_price ?? 0),
       damage_date: now.slice(0, 10),
-      created_by: 1,
+      created_by: actorId,
       created_at: now,
     };
     store.damages.unshift(row);
@@ -1638,7 +2006,7 @@ async function startServer() {
       new_quantity: newQty,
       difference: -reqQty,
       reason: `Damage: ${row.reason}`,
-      created_by: 1,
+      created_by: actorId,
       created_at: now,
     });
     saveStore(store);
@@ -1648,8 +2016,11 @@ async function startServer() {
   // ---- Reports ----
   app.get('/api/reports', (req: Request, res: Response) => {
     const store = getStore();
-    const from = String(req.query.from ?? '2026-01-01');
-    const to = String(req.query.to ?? '2099-12-31');
+    let from = String(req.query.from ?? '2026-01-01').slice(0, 10);
+    let to = String(req.query.to ?? '2099-12-31').slice(0, 10);
+    if (from && to && from > to) {
+      [from, to] = [to, from];
+    }
 
     const periodSales = store.sales.filter((s) => {
       const d = String(s.date ?? '');
@@ -1723,8 +2094,13 @@ async function startServer() {
   app.post('/api/menus', (req: Request, res: Response) => {
     const store = getStore();
     const body = req.body ?? {};
-    if (!body.title) {
+    if (!body.title || !String(body.title).trim()) {
       res.status(400).json({ error: 'Menu title is required.' });
+      return;
+    }
+    const rawOrder = Number(body.sort_order ?? store.menus.length + 1);
+    if (!Number.isFinite(rawOrder) || rawOrder < 0) {
+      res.status(400).json({ error: 'Sort order must be a valid non-negative number.' });
       return;
     }
     const menu = {
@@ -1735,7 +2111,7 @@ async function startServer() {
       route_key: String(body.route_key ?? 'dashboard').trim(),
       url: String(body.url ?? '/dashboard').trim(),
       icon: String(body.icon ?? 'circle').trim(),
-      sort_order: Number(body.sort_order ?? store.menus.length + 1),
+      sort_order: Math.round(rawOrder),
       roles: Array.isArray(body.roles) && body.roles.length ? body.roles.map(String) : ['admin', 'manager', 'staff'],
       is_active: body.is_active !== false,
     };
@@ -1752,11 +2128,24 @@ async function startServer() {
       return;
     }
     const body = req.body ?? {};
-    if (body.title !== undefined) menu.title = String(body.title).trim();
+    if (body.title !== undefined) {
+      if (!String(body.title).trim()) {
+        res.status(400).json({ error: 'Menu title cannot be empty.' });
+        return;
+      }
+      menu.title = String(body.title).trim();
+    }
     if (body.group_label !== undefined) menu.group_label = String(body.group_label).trim();
     if (body.route_key !== undefined) menu.route_key = String(body.route_key).trim();
     if (body.icon !== undefined) menu.icon = String(body.icon).trim();
-    if (body.sort_order !== undefined) menu.sort_order = Number(body.sort_order);
+    if (body.sort_order !== undefined) {
+      const parsedOrder = Number(body.sort_order);
+      if (!Number.isFinite(parsedOrder) || parsedOrder < 0) {
+        res.status(400).json({ error: 'Sort order must be a valid non-negative number.' });
+        return;
+      }
+      menu.sort_order = Math.round(parsedOrder);
+    }
     if (body.is_active !== undefined) menu.is_active = Boolean(body.is_active);
     if (Array.isArray(body.roles)) menu.roles = body.roles.map(String);
     saveStore(store);
@@ -1776,13 +2165,29 @@ async function startServer() {
 
   app.delete('/api/menus/:id', (req: Request, res: Response) => {
     const store = getStore();
-    store.menus = store.menus.filter((m) => m.id !== Number(req.params.id));
+    const target = store.menus.find((m) => m.id === Number(req.params.id));
+    if (!target) {
+      res.status(404).json({ error: 'Menu item not found.' });
+      return;
+    }
+    if (target.route_key === 'menus' || target.route_key === 'settings' || target.route_key === 'dashboard') {
+      res.status(400).json({ error: 'Core system navigation items cannot be deleted. You can disable them instead.' });
+      return;
+    }
+    store.menus = store.menus.filter((m) => m.id !== target.id);
     saveStore(store);
     res.json({ ok: true });
   });
 
   app.put('/api/settings', (req: Request, res: Response) => {
     const store = getStore();
+    if (req.body?.tax_rate !== undefined) {
+      const parsedTax = Number(req.body.tax_rate);
+      if (!Number.isFinite(parsedTax) || parsedTax < 0) {
+        res.status(400).json({ error: 'Tax rate must be 0 or greater.' });
+        return;
+      }
+    }
     const allowed = [
       'shop_name', 'shop_address', 'shop_phone', 'shop_email', 'shop_website',
       'shop_logo', 'shop_favicon', 'shop_qr',
@@ -1801,8 +2206,9 @@ async function startServer() {
   app.get('/api/auth/session', (req: Request, res: Response) => {
     const store = getStore();
     const publicSettings = getPublicSettings(store);
-    const session = getValidSession(req);
+    const session = getValidSession(req, res);
     if (!session) {
+      clearSessionCookie(req, res);
       res.json({
         authenticated: false,
         setupRequired: !store.users.some((u) => Boolean(u.password_hash)),
@@ -1810,12 +2216,30 @@ async function startServer() {
       });
       return;
     }
+    setSessionCookie(req, res, session.token, session.expiresAt);
     res.json({
       authenticated: true,
       setupRequired: false,
+      token: session.token,
       user: sanitizeUser(session.user),
       expiresAt: session.expiresAt,
       settings: publicSettings,
+      bootstrap: buildBootstrapPayload(store, session.user),
+    });
+  });
+
+  app.post('/api/auth/keepalive', (req: Request, res: Response) => {
+    const session = getValidSession(req, res);
+    if (!session) {
+      clearSessionCookie(req, res);
+      res.status(401).json({ error: 'Session expired after 60 minutes of inactivity.' });
+      return;
+    }
+    setSessionCookie(req, res, session.token, session.expiresAt);
+    res.json({
+      ok: true,
+      token: session.token,
+      expiresAt: session.expiresAt,
     });
   });
 
@@ -1854,17 +2278,14 @@ async function startServer() {
       return;
     }
 
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = Date.now() + IDLE_TIMEOUT_MS;
-    activeSessions.set(token, {
-      userId: user.id,
-      expiresAt,
-    });
+    const { token, expiresAt } = createSignedSessionToken(user);
+    setSessionCookie(req, res, token, expiresAt);
 
     res.json({
       token,
       expiresAt,
       user: sanitizeUser(user),
+      bootstrap: buildBootstrapPayload(store, user),
     });
   });
 
@@ -1930,28 +2351,50 @@ async function startServer() {
           ? 'email'
           : 'sms';
 
-    const rawSmtpHost = (process.env.SMTP_HOST || 'mail.youthit.com.bd').trim();
+    const cleanEnvVal = (raw: string | undefined, fallback = '') => {
+      const trimmed = (raw ?? '').trim();
+      if (!trimmed) return fallback;
+      if (
+        (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+        (trimmed.startsWith("'") && trimmed.endsWith("'"))
+      ) {
+        return trimmed.slice(1, -1).trim();
+      }
+      return trimmed;
+    };
+
+    const rawSmtpHost = cleanEnvVal(process.env.SMTP_HOST, 'mail.youthit.com.bd');
     const smtpHost =
       rawSmtpHost
         .replace(/^https?:\/\//i, '')
         .split('/')[0]
         .split(':')[0]
         .trim() || 'mail.youthit.com.bd';
-    const smtpPort = Number(process.env.SMTP_PORT || 465);
-    const smtpUser = (process.env.SMTP_USER || 'info@youthit.com.bd').trim();
-    const smtpPass = process.env.SMTP_PASS || '';
-    const smtpFrom = (process.env.SMTP_FROM || smtpUser).trim();
+    const parsedPort = Number(cleanEnvVal(process.env.SMTP_PORT, '465'));
+    const smtpPort = Number.isFinite(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : 465;
+    const rawSmtpUser = cleanEnvVal(process.env.SMTP_USER, 'info@youthit.com.bd');
+    const shopEmailFallback = (store.settings.shop_email || 'info@youthit.com.bd').trim();
+    const smtpUser =
+      rawSmtpUser.toLowerCase() === smtpHost.toLowerCase() && shopEmailFallback.includes('@')
+        ? shopEmailFallback
+        : rawSmtpUser;
+    const rawSmtpPass = process.env.SMTP_PASS || '';
+    const cleanedSmtpPass = cleanEnvVal(rawSmtpPass, '');
+    const smtpPass = rawSmtpPass || cleanedSmtpPass;
+    const rawSmtpFrom = cleanEnvVal(process.env.SMTP_FROM, smtpUser) || smtpUser;
+    const smtpFrom = rawSmtpFrom.includes('@') ? rawSmtpFrom : smtpUser;
 
     if (channel === 'email') {
       if (!smtpHost || !smtpUser || !smtpPass) {
         res.status(422).json({
-          error:
-            'Email password (SMTP_PASS) for info@youthit.com.bd (mail.youthit.com.bd:465) is not configured in Settings -> Secrets yet. Add SMTP_PASS in Secrets to send verification emails.',
+          error: `Email password (SMTP_PASS) for ${smtpUser} (${smtpHost}:${smtpPort}) is not configured in Settings -> Secrets yet. Add SMTP_PASS in Secrets to send verification emails.`,
         });
         return;
       }
     } else {
-      const safeSmsUrl = process.env.SMS_GATEWAY_URL ? isSafeExternalWebhookUrl(process.env.SMS_GATEWAY_URL) : null;
+      const safeSmsUrl = process.env.SMS_GATEWAY_URL
+        ? isSafeExternalWebhookUrl(cleanEnvVal(process.env.SMS_GATEWAY_URL))
+        : null;
       if (!safeSmsUrl) {
         res.status(422).json({
           error:
@@ -1987,24 +2430,38 @@ async function startServer() {
           res.status(400).json({ error: 'No email address is registered for this account.' });
           return;
         }
-        const transporter = nodemailer.createTransport({
-          host: smtpHost,
-          port: smtpPort,
-          secure: smtpPort === 465,
-          auth: {
-            user: smtpUser,
-            pass: smtpPass,
-          },
-          connectionTimeout: 7_000,
-          greetingTimeout: 7_000,
-          socketTimeout: 10_000,
-        });
-        await transporter.sendMail({
-          from: `${shopName} <${smtpFrom}>`,
-          to: user.email,
-          subject: `${shopName} — Password Recovery Verification Code`,
-          text: `Hello ${user.name},\n\nYour 6-digit password recovery verification code is: ${code}\n\nThis code expires in 10 minutes. If you did not request this, ignore this email.`,
-        });
+        const sendWithPass = async (passCandidate: string) => {
+          const transporter = nodemailer.createTransport({
+            host: smtpHost,
+            port: smtpPort,
+            secure: smtpPort === 465,
+            requireTLS: smtpPort === 587,
+            auth: {
+              user: smtpUser,
+              pass: passCandidate,
+            },
+            connectionTimeout: 8_000,
+            greetingTimeout: 8_000,
+            socketTimeout: 10_000,
+          });
+          await transporter.sendMail({
+            from: `${shopName} <${smtpFrom}>`,
+            to: user.email,
+            subject: `${shopName} — Password Recovery Verification Code`,
+            text: `Hello ${user.name},\n\nYour 6-digit password recovery verification code is: ${code}\n\nThis code expires in 10 minutes. If you did not request this, ignore this email.`,
+          });
+        };
+
+        try {
+          await sendWithPass(rawSmtpPass);
+        } catch (smtpErr) {
+          const errCode = (smtpErr as { code?: string } | null)?.code;
+          if (errCode === 'EAUTH' && cleanedSmtpPass && cleanedSmtpPass !== rawSmtpPass) {
+            await sendWithPass(cleanedSmtpPass);
+          } else {
+            throw smtpErr;
+          }
+        }
       } else {
         const fallbackShopPhone = ['super_admin', 'admin'].includes(user.role)
           ? store.settings.shop_phone || ''
@@ -2016,14 +2473,14 @@ async function startServer() {
           });
           return;
         }
-        const smsUrl = isSafeExternalWebhookUrl(String(process.env.SMS_GATEWAY_URL))!;
-        const smsSenderId = String(
+        const smsUrl = isSafeExternalWebhookUrl(cleanEnvVal(process.env.SMS_GATEWAY_URL))!;
+        const smsSenderId = cleanEnvVal(
           process.env.SMS_SENDER_ID ||
             smsUrl.searchParams.get('senderid') ||
             smsUrl.searchParams.get('sender_id') ||
             smsUrl.searchParams.get('SenderId') ||
             ''
-        ).trim();
+        );
         const rawDigits = normalizePhoneDigits(targetPhone);
         const bd13 = rawDigits.startsWith('8801')
           ? rawDigits
@@ -2034,7 +2491,7 @@ async function startServer() {
           ? rawDigits.slice(2)
           : bd13;
 
-        const smsApiKey = String(
+        const rawApiKeySecret = cleanEnvVal(
           process.env.SMS_API_KEY ||
             smsUrl.searchParams.get('api_key') ||
             smsUrl.searchParams.get('apikey') ||
@@ -2042,16 +2499,47 @@ async function startServer() {
             smsUrl.searchParams.get('Apikey') ||
             smsUrl.searchParams.get('token') ||
             ''
-        ).trim();
+        );
+        let smsApiKey = rawApiKeySecret;
+        let smsClientId = cleanEnvVal(
+          process.env.SMS_CLIENT_ID ||
+            smsUrl.searchParams.get('ClientId') ||
+            smsUrl.searchParams.get('client_id') ||
+            smsUrl.searchParams.get('clientId') ||
+            ''
+        );
+        const smsUsername = cleanEnvVal(
+          process.env.SMS_USERNAME ||
+            smsUrl.searchParams.get('UserName') ||
+            smsUrl.searchParams.get('username') ||
+            ''
+        );
+        const smsSecretKey = cleanEnvVal(
+          process.env.SMS_SECRET_KEY ||
+            smsUrl.searchParams.get('secretkey') ||
+            smsUrl.searchParams.get('SecretKey') ||
+            smsUrl.searchParams.get('api_secret') ||
+            ''
+        );
+        if (!smsClientId && rawApiKeySecret.includes('|')) {
+          const [cid, keyPart] = rawApiKeySecret.split('|', 2);
+          if (cid && keyPart) {
+            smsClientId = cid.trim();
+            smsApiKey = keyPart.trim();
+          }
+        }
 
         const redactSecrets = (txt: string) => {
           let safe = txt.replaceAll(code, '******');
           if (smsApiKey) safe = safe.replaceAll(smsApiKey, '***');
+          if (smsClientId) safe = safe.replaceAll(smsClientId, '***');
+          if (smsUsername) safe = safe.replaceAll(smsUsername, '***');
+          if (smsSecretKey) safe = safe.replaceAll(smsSecretKey, '***');
           if (smtpPass) safe = safe.replaceAll(smtpPass, '***');
           return safe.trim().slice(0, 160);
         };
 
-        const dispatchSms = async (phoneValue: string, asForm: boolean): Promise<void> => {
+        const dispatchSms = async (phoneValue: string, mode: 'json' | 'form' | 'get'): Promise<void> => {
           const smsMsg = `${shopName} recovery code: ${code} (valid 10 min).`;
           const baseParams: Record<string, string> = {
             to: phoneValue,
@@ -2059,17 +2547,37 @@ async function startServer() {
             numbers: phoneValue,
             MobileNumber: phoneValue,
             MobileNumbers: phoneValue,
+            msisdn: phoneValue,
             type: 'text',
             TransactionType: 'T',
             message: smsMsg,
             Message: smsMsg,
+            msg: smsMsg,
+            sms: smsMsg,
           };
           if (smsApiKey) {
             baseParams.api_key = smsApiKey;
             baseParams.apikey = smsApiKey;
             baseParams.ApiKey = smsApiKey;
             baseParams.Apikey = smsApiKey;
+            baseParams.api_token = smsApiKey;
             baseParams.token = smsApiKey;
+          }
+          if (smsClientId) {
+            baseParams.ClientId = smsClientId;
+            baseParams.client_id = smsClientId;
+            if (!smsUsername) {
+              baseParams.UserName = smsClientId;
+            }
+          }
+          if (smsUsername) {
+            baseParams.UserName = smsUsername;
+            baseParams.username = smsUsername;
+          }
+          if (smsSecretKey) {
+            baseParams.secretkey = smsSecretKey;
+            baseParams.SecretKey = smsSecretKey;
+            baseParams.api_secret = smsSecretKey;
           }
           if (smsSenderId) {
             baseParams.senderid = smsSenderId;
@@ -2077,14 +2585,33 @@ async function startServer() {
             baseParams.SenderId = smsSenderId;
             baseParams.SenderName = smsSenderId;
             baseParams.sender = smsSenderId;
+            baseParams.sid = smsSenderId;
           }
-          const smsRes = await fetch(smsUrl.toString(), {
-            method: 'POST',
-            headers: {
-              'Content-Type': asForm ? 'application/x-www-form-urlencoded' : 'application/json',
-              ...(smsApiKey ? { Authorization: `Bearer ${smsApiKey}` } : {}),
-            },
-            body: asForm ? new URLSearchParams(baseParams).toString() : JSON.stringify(baseParams),
+          const reqUrl = new URL(smsUrl.toString());
+          if (mode === 'get') {
+            for (const [k, v] of Object.entries(baseParams)) {
+              if (!reqUrl.searchParams.has(k)) {
+                reqUrl.searchParams.set(k, v);
+              }
+            }
+          }
+          const smsRes = await fetch(reqUrl.toString(), {
+            method: mode === 'get' ? 'GET' : 'POST',
+            headers:
+              mode === 'get'
+                ? {}
+                : {
+                    'Content-Type':
+                      mode === 'form'
+                        ? 'application/x-www-form-urlencoded'
+                        : 'application/json',
+                  },
+            body:
+              mode === 'get'
+                ? undefined
+                : mode === 'form'
+                  ? new URLSearchParams(baseParams).toString()
+                  : JSON.stringify(baseParams),
             signal: AbortSignal.timeout(8_000),
           });
           const rawSmsText = await smsRes.text();
@@ -2157,9 +2684,12 @@ async function startServer() {
                 const detail = String(
                   errField || parsedSms.message || parsedSms.Message || trimmedSms
                 );
+                const statusFlags = `SMS_API_KEY=${smsApiKey ? 'set' : 'missing'}, SMS_CLIENT_ID=${smsClientId ? 'set' : 'missing'}, SMS_USERNAME=${smsUsername ? 'set' : 'missing'}, SMS_SECRET_KEY=${smsSecretKey ? 'set' : 'missing'}, SMS_SENDER_ID=${smsSenderId ? 'set' : 'missing'}`;
                 const extraHint = /sender\s*id/i.test(detail)
                   ? ' — Add SMS_SENDER_ID in Settings -> Secrets.'
-                  : '';
+                  : /credential|apikey|clientid|username|secret/i.test(detail)
+                    ? ` — Secrets detected: [${statusFlags}]. Add/verify the required credential in Settings -> Secrets.`
+                    : '';
                 throw new Error(`SMS gateway error: ${redactSecrets(detail)}${extraHint}`);
               }
 
@@ -2178,29 +2708,43 @@ async function startServer() {
           }
         };
 
-        const smsAttempts: Array<[string, boolean]> = [
-          [bd13, false],
-          ...(bd11 !== bd13 ? ([[bd11, false]] as Array<[string, boolean]>) : []),
-          [bd13, true],
-          ...(bd11 !== bd13 ? ([[bd11, true]] as Array<[string, boolean]>) : []),
+        const smsAttempts: Array<[string, 'form' | 'get' | 'json']> = [
+          [bd13, 'form'],
+          [bd13, 'get'],
+          [bd13, 'json'],
+          ...(bd11 !== bd13
+            ? ([
+                [bd11, 'form'],
+                [bd11, 'get'],
+                [bd11, 'json'],
+              ] as Array<[string, 'form' | 'get' | 'json']>)
+            : []),
         ];
         let lastSmsErr: unknown = null;
+        let specificApiErr: unknown = null;
         let smsDelivered = false;
-        for (const [phoneCandidate, asForm] of smsAttempts) {
+        for (const [phoneCandidate, mode] of smsAttempts) {
           try {
-            await dispatchSms(phoneCandidate, asForm);
+            await dispatchSms(phoneCandidate, mode);
             smsDelivered = true;
             break;
           } catch (attemptErr) {
             lastSmsErr = attemptErr;
             const m = attemptErr instanceof Error ? attemptErr.message : '';
-            if (!/invalid mobile|invalid number|missing|required|blank/i.test(m)) {
+            if (m.startsWith('SMS gateway error:')) {
+              specificApiErr = attemptErr;
+            }
+            if (
+              !/invalid|missing|required|blank|credential|method|unsupported|media\s*type|http 400|http 401|http 403|http 404|http 405|http 406|http 415|http 422|did not confirm/i.test(
+                m
+              )
+            ) {
               throw attemptErr;
             }
           }
         }
-        if (!smsDelivered && lastSmsErr) {
-          throw lastSmsErr;
+        if (!smsDelivered) {
+          throw specificApiErr ?? lastSmsErr;
         }
       }
 
@@ -2223,12 +2767,16 @@ async function startServer() {
       const redact = (txt: string) => {
         let s = txt.replaceAll(code, '******');
         if (smtpPass) s = s.replaceAll(smtpPass, '***');
+        if (cleanedSmtpPass) s = s.replaceAll(cleanedSmtpPass, '***');
         if (process.env.SMS_API_KEY) s = s.replaceAll(process.env.SMS_API_KEY, '***');
-        return s.trim().slice(0, 140);
+        if (process.env.SMS_CLIENT_ID) s = s.replaceAll(process.env.SMS_CLIENT_ID, '***');
+        if (process.env.SMS_USERNAME) s = s.replaceAll(process.env.SMS_USERNAME, '***');
+        if (process.env.SMS_SECRET_KEY) s = s.replaceAll(process.env.SMS_SECRET_KEY, '***');
+        return s.trim().slice(0, 220);
       };
       const reason =
         codeHint === 'EAUTH'
-          ? 'SMTP authentication failed. Please double-check SMTP_PASS for info@youthit.com.bd in Settings -> Secrets.'
+          ? `SMTP authentication failed for ${smtpUser} on ${smtpHost}:${smtpPort}. Please verify SMTP_USER and SMTP_PASS in Settings -> Secrets (enter plain values without surrounding quotes).`
           : codeHint === 'ETIMEDOUT' || codeHint === 'ECONNREFUSED' || codeHint === 'ESOCKET'
             ? `Could not connect to mail server (${smtpHost}:${smtpPort}). Please verify SMTP_HOST and SMTP_PORT in Settings -> Secrets.`
             : errMsg.startsWith('SMS')
@@ -2238,18 +2786,13 @@ async function startServer() {
     }
   });
 
-  app.post('/api/auth/recover-password', (req: Request, res: Response) => {
+  app.post('/api/auth/verify-recovery-code', (req: Request, res: Response) => {
     const store = getStore();
     const rawIdentifier = String(req.body?.identifier ?? req.body?.email ?? '').trim();
     const code = String(req.body?.code ?? '').trim();
-    const newPassword = String(req.body?.new_password ?? '');
 
-    if (!rawIdentifier || !/^\d{6}$/.test(code) || !newPassword) {
-      res.status(400).json({ error: 'Account email/mobile, 6-digit verification code, and new password are required.' });
-      return;
-    }
-    if (newPassword.length < 6) {
-      res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+    if (!rawIdentifier || !/^\d{6}$/.test(code)) {
+      res.status(400).json({ error: 'Account email/mobile and 6-digit verification code are required.' });
       return;
     }
 
@@ -2279,6 +2822,69 @@ async function startServer() {
       return;
     }
 
+    const resetProof = crypto.randomBytes(32).toString('hex');
+    entry.verifiedProofHash = crypto.createHash('sha256').update(resetProof).digest('hex');
+    entry.verifiedUntil = Date.now() + OTP_EXPIRY_MS;
+    entry.attempts = 0;
+
+    res.json({
+      ok: true,
+      reset_proof: resetProof,
+      message: 'Verification code matched! Please enter your new password.',
+    });
+  });
+
+  app.post('/api/auth/recover-password', (req: Request, res: Response) => {
+    const store = getStore();
+    const rawIdentifier = String(req.body?.identifier ?? req.body?.email ?? '').trim();
+    const code = String(req.body?.code ?? '').trim();
+    const resetProof = String(req.body?.reset_proof ?? '').trim();
+    const newPassword = String(req.body?.new_password ?? '');
+
+    if (!rawIdentifier || (!/^\d{6}$/.test(code) && !resetProof) || !newPassword) {
+      res.status(400).json({ error: 'Verification is required before setting a new password.' });
+      return;
+    }
+    if (newPassword.length < 6) {
+      res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+      return;
+    }
+
+    const user = findUserByEmailOrPhone(store, rawIdentifier);
+    if (!user || !user.is_active) {
+      res.status(401).json({ error: 'Invalid or expired verification session.' });
+      return;
+    }
+
+    const entry = recoveryCodes.get(user.id);
+    if (!entry || Date.now() > entry.expiresAt || entry.attempts >= 5) {
+      recoveryCodes.delete(user.id);
+      res.status(401).json({ error: 'Verification code is invalid or expired. Please request a new code.' });
+      return;
+    }
+
+    let verified = false;
+    if (resetProof && entry.verifiedProofHash && entry.verifiedUntil && Date.now() <= entry.verifiedUntil) {
+      const candidateProofHash = crypto.createHash('sha256').update(resetProof).digest('hex');
+      verified = crypto.timingSafeEqual(
+        Buffer.from(candidateProofHash, 'hex'),
+        Buffer.from(entry.verifiedProofHash, 'hex')
+      );
+    } else if (/^\d{6}$/.test(code)) {
+      const candidateHash = hashRecoveryCode(user.id, code);
+      verified = crypto.timingSafeEqual(
+        Buffer.from(candidateHash, 'hex'),
+        Buffer.from(entry.codeHash, 'hex')
+      );
+    }
+
+    if (!verified) {
+      entry.attempts += 1;
+      if (entry.attempts >= 5) recoveryCodes.delete(user.id);
+      res.status(401).json({ error: 'Verification code did not match. Please verify your code first.' });
+      return;
+    }
+
     recoveryCodes.delete(user.id);
     user.password_hash = hashPassword(newPassword);
     saveStore(store);
@@ -2286,6 +2892,7 @@ async function startServer() {
     for (const [tok, sess] of activeSessions.entries()) {
       if (sess.userId === user.id) activeSessions.delete(tok);
     }
+    savePersistedSessions();
 
     res.json({
       ok: true,
@@ -2328,10 +2935,28 @@ async function startServer() {
   });
 
   app.post('/api/auth/logout', (req: Request, res: Response) => {
+    const tokens: string[] = [];
     const authHeader = String(req.headers.authorization ?? '');
     if (authHeader.startsWith('Bearer ')) {
-      activeSessions.delete(authHeader.slice(7).trim());
+      tokens.push(authHeader.slice(7).trim());
     }
+    const cookies = parseCookies(req.headers.cookie);
+    if (cookies[SESSION_COOKIE_NAME]) {
+      tokens.push(cookies[SESSION_COOKIE_NAME]);
+    }
+    let revokedAny = false;
+    for (const tok of tokens) {
+      if (!tok) continue;
+      activeSessions.delete(tok);
+      const parsed = parseSignedTokenJti(tok);
+      if (parsed) {
+        revokedSessionJtis.set(parsed.jti, parsed.exp);
+        revokedAny = true;
+      }
+    }
+    savePersistedSessions();
+    if (revokedAny) saveRevokedSessions();
+    clearSessionCookie(req, res);
     res.json({ ok: true });
   });
 
@@ -2424,7 +3049,10 @@ async function startServer() {
     if (body.address !== undefined) user.address = String(body.address).trim();
     if (body.profile_image === null || body.profile_image === '') {
       user.profile_image = null;
-    } else if (typeof body.profile_image === 'string' && body.profile_image.startsWith('/uploads/')) {
+    } else if (
+      typeof body.profile_image === 'string' &&
+      (body.profile_image.startsWith('/uploads/') || body.profile_image.startsWith('/assets/'))
+    ) {
       user.profile_image = body.profile_image;
     }
     if (body.role !== undefined && hasAnyRole(authUser, ['admin'])) {
@@ -2444,6 +3072,7 @@ async function startServer() {
       for (const [tok, sess] of activeSessions.entries()) {
         if (sess.userId === user.id && authUser.id !== user.id) activeSessions.delete(tok);
       }
+      savePersistedSessions();
     }
     saveStore(store);
     res.json(sanitizeUser(user));
@@ -2504,6 +3133,7 @@ async function startServer() {
       for (const [tok, sess] of activeSessions.entries()) {
         if (sess.userId === user.id) activeSessions.delete(tok);
       }
+      savePersistedSessions();
     }
     saveStore(store);
     res.json(sanitizeUser(user));
@@ -2526,6 +3156,7 @@ async function startServer() {
     for (const [tok, sess] of activeSessions.entries()) {
       if (sess.userId === targetId) activeSessions.delete(tok);
     }
+    savePersistedSessions();
     saveStore(store);
     res.json({ ok: true });
   });
@@ -2628,7 +3259,7 @@ async function startServer() {
     });
   });
 
-  app.post('/api/cashbook', (req: Request, res: Response) => {
+  app.post('/api/cashbook', (req: AuthedRequest, res: Response) => {
     const store = getStore();
     const type = req.body?.type === 'out' ? 'out' : 'in';
     const amount = Number(req.body?.amount ?? 0);
@@ -2653,7 +3284,7 @@ async function startServer() {
       amount,
       description: String(req.body?.description ?? '').trim(),
       transaction_date: String(req.body?.transaction_date ?? new Date().toISOString().slice(0, 10)),
-      created_by: 1,
+      created_by: req.authUser?.id ?? 1,
       created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
     };
     store.cash_transactions.unshift(row);
@@ -2674,6 +3305,7 @@ async function startServer() {
       .filter((p) => Number(p.status ?? 1) === 1)
       .map((p) => ({
         ...p,
+        image: resolveProductImage(p.image, p.name),
         category_name: catMap.get(Number(p.category_id)) ?? 'Uncategorized',
         brand_name: brandMap.get(Number(p.brand_id)) ?? 'No Brand',
         quantity: Number(p.stock_quantity ?? p.quantity ?? 0),
@@ -2792,7 +3424,7 @@ async function startServer() {
     res.status(201).json(emp);
   });
 
-  app.post('/api/employees/:id/pay-salary', (req: Request, res: Response) => {
+  app.post('/api/employees/:id/pay-salary', (req: AuthedRequest, res: Response) => {
     const store = getStore();
     const emp = store.employees.find((e) => Number(e.id) === Number(req.params.id));
     if (!emp) {
@@ -2810,7 +3442,7 @@ async function startServer() {
       description: `Salary paid to ${emp.name} (${emp.designation || 'Staff'})${req.body?.note ? ` - ${req.body.note}` : ''}`,
       amount,
       expense_date: String(req.body?.date ?? new Date().toISOString().slice(0, 10)),
-      created_by: 1,
+      created_by: req.authUser?.id ?? 1,
       created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
     };
     store.expenses.unshift(exp);
@@ -2888,8 +3520,43 @@ async function startServer() {
       res.status(400).json({ error: 'Invalid backup JSON file. Required POS tables missing.' });
       return;
     }
-    saveStore(payload);
-    res.json({ ok: true, products: payload.products.length, sales: payload.sales.length });
+    const current = getStore();
+    const safeStore: PosStoreData = {
+      ...current,
+      settings: payload.settings && typeof payload.settings === 'object' ? { ...current.settings, ...payload.settings } : current.settings,
+      menus: Array.isArray(payload.menus) && payload.menus.length ? payload.menus : current.menus,
+      users: Array.isArray(payload.users) && payload.users.length ? payload.users : current.users,
+      categories: Array.isArray(payload.categories) ? payload.categories : [],
+      brands: Array.isArray(payload.brands) ? payload.brands : [],
+      units: Array.isArray(payload.units) ? payload.units : [],
+      warranties: Array.isArray(payload.warranties) ? payload.warranties : [],
+      products: (payload.products as SqlRow[]).map((p) => ({
+        ...p,
+        image: resolveProductImage(p.image, p.name),
+      })),
+      stock_movements: Array.isArray(payload.stock_movements) ? payload.stock_movements : [],
+      customers: Array.isArray(payload.customers) ? payload.customers : [],
+      suppliers: Array.isArray(payload.suppliers) ? payload.suppliers : [],
+      owners: Array.isArray(payload.owners) ? payload.owners : [],
+      employees: Array.isArray(payload.employees) ? payload.employees : [],
+      bank_accounts: Array.isArray(payload.bank_accounts) ? payload.bank_accounts : [],
+      bank_transactions: Array.isArray(payload.bank_transactions) ? payload.bank_transactions : [],
+      cash_transactions: Array.isArray(payload.cash_transactions) ? payload.cash_transactions : [],
+      expense_categories: Array.isArray(payload.expense_categories) ? payload.expense_categories : current.expense_categories,
+      expenses: Array.isArray(payload.expenses) ? payload.expenses : [],
+      sales: payload.sales,
+      sale_items: Array.isArray(payload.sale_items) ? payload.sale_items : [],
+      payments: Array.isArray(payload.payments) ? payload.payments : [],
+      purchases: Array.isArray(payload.purchases) ? payload.purchases : [],
+      purchase_items: Array.isArray(payload.purchase_items) ? payload.purchase_items : [],
+      supplier_payments: Array.isArray(payload.supplier_payments) ? payload.supplier_payments : [],
+      estimates: Array.isArray(payload.estimates) ? payload.estimates : [],
+      estimate_items: Array.isArray(payload.estimate_items) ? payload.estimate_items : [],
+      returns: Array.isArray(payload.returns) ? payload.returns : [],
+      damages: Array.isArray(payload.damages) ? payload.damages : [],
+    };
+    saveStore(safeStore);
+    res.json({ ok: true, products: safeStore.products.length, sales: safeStore.sales.length });
   });
 
   app.post('/api/backup/import-sql', (req: Request, res: Response) => {
@@ -2961,6 +3628,7 @@ async function startServer() {
         quantity: qty,
         stock_quantity: qty,
         alert_quantity: Number(p.alert_quantity ?? 5),
+        image: resolveProductImage(p.image, p.name),
         status: Number(p.status ?? 1),
       };
     });
@@ -3271,14 +3939,23 @@ async function startServer() {
   });
 
   // ---- Vite / Static Frontend ----
-  if (process.env.NODE_ENV !== 'production') {
+  const distPath = path.resolve(process.cwd(), 'dist');
+  const distIndexExists = fs.existsSync(path.join(distPath, 'index.html'));
+  const runningCompiledServer = path.basename(process.argv[1] || '') === 'server.js';
+  const hasViteInstalled = fs.existsSync(path.resolve(process.cwd(), 'node_modules/vite/package.json'));
+  const useProductionDist =
+    process.env.NODE_ENV === 'production' ||
+    (runningCompiledServer && distIndexExists) ||
+    (!hasViteInstalled && distIndexExists);
+
+  if (!useProductionDist) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.resolve(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req: Request, res: Response) => {
       res.sendFile(path.join(distPath, 'index.html'));

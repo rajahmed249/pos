@@ -11,13 +11,19 @@ import {
   Phone,
 } from 'lucide-react';
 import { apiFetch } from '../lib/api.ts';
-import type { UserAccount } from '../types/pos.ts';
+import type { BootstrapPayload, UserAccount } from '../types/pos.ts';
 
 interface LoginViewProps {
   settings: Record<string, string>;
   setupRequired?: boolean;
   sessionNotice?: string | null;
-  onSuccess: (payload: { token: string; user: UserAccount; expiresAt?: number }) => void;
+  onSuccess: (payload: {
+    token: string;
+    user: UserAccount;
+    expiresAt?: number;
+    bootstrap?: BootstrapPayload;
+    remember?: boolean;
+  }) => void;
 }
 
 export function LoginView({
@@ -27,7 +33,7 @@ export function LoginView({
   onSuccess,
 }: LoginViewProps) {
   const [mode, setMode] = useState<'login' | 'recover'>('login');
-  const [recoverStep, setRecoverStep] = useState<'request' | 'verify'>('request');
+  const [recoverStep, setRecoverStep] = useState<'request' | 'verify' | 'reset'>('request');
   const [recoverChannel, setRecoverChannel] = useState<'email' | 'sms'>('email');
   const [identifier, setIdentifier] = useState('rajahmed249@gmail.com');
   const [recoverEmail, setRecoverEmail] = useState('rajahmed249@gmail.com');
@@ -37,6 +43,7 @@ export function LoginView({
   const [remember, setRemember] = useState(true);
 
   const [recoveryCode, setRecoveryCode] = useState('');
+  const [resetProof, setResetProof] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -55,14 +62,16 @@ export function LoginView({
     setNotice(null);
     setSubmitting(true);
     try {
-      const res = await apiFetch<{ token: string; user: UserAccount; expiresAt?: number }>(
-        '/api/auth/login',
-        {
-          method: 'POST',
-          body: JSON.stringify({ identifier, password, remember }),
-        }
-      );
-      onSuccess(res);
+      const res = await apiFetch<{
+        token: string;
+        user: UserAccount;
+        expiresAt?: number;
+        bootstrap?: BootstrapPayload;
+      }>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ identifier, password, remember }),
+      });
+      onSuccess({ ...res, remember });
     } catch (err) {
       setNotice({
         type: 'error',
@@ -99,6 +108,8 @@ export function LoginView({
           }),
         }
       );
+      setRecoveryCode('');
+      setResetProof('');
       setNotice({ type: 'success', text: res.message });
       setRecoverStep('verify');
     } catch (err) {
@@ -111,12 +122,49 @@ export function LoginView({
     }
   }
 
-  async function handleRecover(e: React.FormEvent) {
+  async function handleVerifyRecoveryCode(e: React.FormEvent) {
     e.preventDefault();
     setNotice(null);
     const activeRecoverId = (recoverChannel === 'email' ? recoverEmail : recoverPhone).trim() || identifier.trim();
     if (!/^\d{6}$/.test(recoveryCode.trim())) {
       setNotice({ type: 'error', text: 'Please enter the 6-digit verification code sent to you.' });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await apiFetch<{ ok: boolean; reset_proof: string; message: string }>(
+        '/api/auth/verify-recovery-code',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            identifier: activeRecoverId,
+            code: recoveryCode.trim(),
+          }),
+        }
+      );
+      setResetProof(res.reset_proof);
+      setNewPassword('');
+      setConfirmPassword('');
+      setNotice({ type: 'success', text: res.message });
+      setRecoverStep('reset');
+    } catch (err) {
+      setResetProof('');
+      setNotice({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Verification code did not match.',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleRecover(e: React.FormEvent) {
+    e.preventDefault();
+    setNotice(null);
+    const activeRecoverId = (recoverChannel === 'email' ? recoverEmail : recoverPhone).trim() || identifier.trim();
+    if (!resetProof) {
+      setRecoverStep('verify');
+      setNotice({ type: 'error', text: 'Please verify your 6-digit code first.' });
       return;
     }
     if (newPassword.length < 6) {
@@ -134,6 +182,7 @@ export function LoginView({
         body: JSON.stringify({
           identifier: activeRecoverId,
           code: recoveryCode.trim(),
+          reset_proof: resetProof,
           new_password: newPassword,
         }),
       });
@@ -142,6 +191,7 @@ export function LoginView({
       setNewPassword('');
       setConfirmPassword('');
       setRecoveryCode('');
+      setResetProof('');
       setRecoverStep('request');
       setMode('login');
     } catch (err) {
@@ -389,10 +439,69 @@ export function LoginView({
               {mode === 'login'
                 ? 'Welcome Back'
                 : recoverStep === 'request'
-                  ? 'Send a 6-digit recovery code to your email or mobile'
-                  : 'Enter the 6-digit verification code sent to you'}
+                  ? 'Step 1: Send a 6-digit recovery code'
+                  : recoverStep === 'verify'
+                    ? 'Step 2: Verify the 6-digit code sent to you'
+                    : 'Step 3: Create your new password'}
             </p>
           </div>
+
+          {mode === 'recover' && (
+            <div className="mb-4 px-1">
+              <div className="grid grid-cols-3 items-start gap-1.5 relative">
+                {[
+                  { id: 'request', num: 1, label: 'Send Code' },
+                  { id: 'verify', num: 2, label: 'Verify Code' },
+                  { id: 'reset', num: 3, label: 'New Password' },
+                ].map((step) => {
+                  const order = { request: 1, verify: 2, reset: 3 } as const;
+                  const currentNum = order[recoverStep];
+                  const isDone = currentNum > step.num;
+                  const isCurrent = currentNum === step.num;
+                  return (
+                    <div key={step.id} className="flex flex-col items-center text-center gap-1.5">
+                      <div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border transition-all ${
+                          isDone
+                            ? 'bg-emerald-500 border-emerald-400 text-white shadow-[0_0_12px_rgba(16,185,129,0.45)]'
+                            : isCurrent
+                              ? 'bg-[#7c3aed] border-[#c084fc] text-white shadow-[0_0_14px_rgba(124,58,237,0.55)]'
+                              : 'bg-[#0e132d]/85 border-indigo-300/25 text-indigo-200/60'
+                        }`}
+                      >
+                        {isDone ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : step.num}
+                      </div>
+                      <span
+                        className={`text-[10px] font-semibold tracking-tight ${
+                          isDone
+                            ? 'text-emerald-300'
+                            : isCurrent
+                              ? 'text-white'
+                              : 'text-indigo-200/55'
+                        }`}
+                      >
+                        {step.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-2.5 h-1.5 w-full rounded-full bg-[#0e132d]/90 overflow-hidden border border-indigo-300/15">
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{
+                    width:
+                      recoverStep === 'request'
+                        ? '33.33%'
+                        : recoverStep === 'verify'
+                          ? '66.66%'
+                          : '100%',
+                    background: 'linear-gradient(90deg, #3b82f6 0%, #7c3aed 55%, #10b981 100%)',
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
           {setupRequired && !notice && mode === 'login' && (
             <div className="mb-4 px-3.5 py-2 rounded-xl border border-sky-400/35 bg-sky-500/15 text-sky-200 text-xs font-medium flex items-start gap-2">
@@ -601,8 +710,8 @@ export function LoginView({
                 </button>
               </div>
             </form>
-          ) : (
-            <form onSubmit={handleRecover} className="space-y-2.5">
+          ) : recoverStep === 'verify' ? (
+            <form onSubmit={handleVerifyRecoveryCode} className="space-y-3">
               <div className="relative flex items-center">
                 <KeyRound className="w-[18px] h-[18px] text-indigo-200/80 absolute left-4 pointer-events-none" />
                 <input
@@ -610,12 +719,58 @@ export function LoginView({
                   inputMode="numeric"
                   maxLength={6}
                   required
+                  autoFocus
                   aria-label="6-digit verification code"
                   value={recoveryCode}
                   onChange={(e) => setRecoveryCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="6-digit verification code"
-                  className="w-full pl-11 pr-4 py-2.5 rounded-[14px] text-sm tracking-[0.2em] text-white placeholder:tracking-normal placeholder:text-indigo-100/65 bg-[#0e132d]/85 border border-indigo-300/20 focus:outline-none focus:border-violet-400/75 focus:ring-2 focus:ring-violet-500/25 transition-all"
+                  placeholder="Enter 6-digit verification code"
+                  className="w-full pl-11 pr-4 py-3 rounded-[14px] text-sm tracking-[0.22em] text-white placeholder:tracking-normal placeholder:text-indigo-100/65 bg-[#0e132d]/85 border border-indigo-300/20 focus:outline-none focus:border-violet-400/75 focus:ring-2 focus:ring-violet-500/25 transition-all"
                 />
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting || recoveryCode.trim().length !== 6}
+                style={{
+                  background: 'linear-gradient(90deg, #3b82f6 0%, #7c3aed 52%, #e052f5 100%)',
+                }}
+                className="w-full py-3 px-5 rounded-[14px] text-[15px] font-semibold text-white shadow-[0_10px_28px_rgba(124,58,237,0.45)] hover:brightness-110 transition-all disabled:opacity-60 cursor-pointer"
+              >
+                {submitting ? 'Verifying Code...' : 'Verify Code'}
+              </button>
+
+              <div className="flex items-center justify-between pt-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecoverStep('request');
+                    setResetProof('');
+                    setNotice(null);
+                  }}
+                  className="font-medium text-[#c084fc] hover:text-[#e879f9] inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Resend code</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('login');
+                    setRecoverStep('request');
+                    setResetProof('');
+                    setNotice(null);
+                  }}
+                  className="font-medium text-indigo-200/80 hover:text-white cursor-pointer"
+                >
+                  Back to Login
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleRecover} className="space-y-2.5">
+              <div className="px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-400/35 text-emerald-200 text-xs font-medium flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-300" />
+                <span>Code verified! Enter your new password below.</span>
               </div>
 
               <div className="relative flex items-center">
@@ -624,6 +779,7 @@ export function LoginView({
                   type={showNewPassword ? 'text' : 'password'}
                   required
                   minLength={6}
+                  autoFocus
                   aria-label="New Password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
@@ -658,11 +814,11 @@ export function LoginView({
                 type="submit"
                 disabled={submitting}
                 style={{
-                  background: 'linear-gradient(90deg, #3b82f6 0%, #7c3aed 52%, #e052f5 100%)',
+                  background: 'linear-gradient(90deg, #3b82f6 0%, #7c3aed 52%, #10b981 100%)',
                 }}
-                className="w-full py-3 px-5 rounded-[14px] text-[15px] font-semibold text-white shadow-[0_10px_28px_rgba(124,58,237,0.45)] hover:brightness-110 transition-all disabled:opacity-60 cursor-pointer"
+                className="w-full py-3 px-5 rounded-[14px] text-[15px] font-semibold text-white shadow-[0_10px_28px_rgba(16,185,129,0.35)] hover:brightness-110 transition-all disabled:opacity-60 cursor-pointer"
               >
-                {submitting ? 'Verifying...' : 'Verify Code & Reset'}
+                {submitting ? 'Updating Password...' : 'Save New Password'}
               </button>
 
               <div className="flex items-center justify-between pt-1 text-xs">
@@ -670,18 +826,21 @@ export function LoginView({
                   type="button"
                   onClick={() => {
                     setRecoverStep('request');
+                    setResetProof('');
+                    setRecoveryCode('');
                     setNotice(null);
                   }}
                   className="font-medium text-[#c084fc] hover:text-[#e879f9] inline-flex items-center gap-1 cursor-pointer"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Resend code</span>
+                  <span>Start over</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setMode('login');
                     setRecoverStep('request');
+                    setResetProof('');
                     setNotice(null);
                   }}
                   className="font-medium text-indigo-200/80 hover:text-white cursor-pointer"

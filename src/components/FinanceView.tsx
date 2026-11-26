@@ -36,19 +36,27 @@ export function FinanceView({ section, bootstrap, onRefreshBootstrap }: FinanceV
 
   function loadSection() {
     if (section === 'estimates') {
-      apiFetch<{ items: typeof estimates }>('/api/estimates').then((r) => setEstimates(r.items));
+      apiFetch<{ items: typeof estimates }>('/api/estimates')
+        .then((r) => setEstimates(r.items))
+        .catch((err) => setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load estimates.' }));
     } else if (section === 'accounts') {
-      apiFetch<{ accounts: BankAccount[]; transactions: typeof transactions }>('/api/accounts').then((r) => {
-        setAccounts(r.accounts);
-        setTransactions(r.transactions);
-      });
+      apiFetch<{ accounts: BankAccount[]; transactions: typeof transactions }>('/api/accounts')
+        .then((r) => {
+          setAccounts(r.accounts);
+          setTransactions(r.transactions);
+        })
+        .catch((err) => setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load accounts.' }));
     } else if (section === 'expenses') {
-      apiFetch<{ items: typeof expenses }>('/api/expenses').then((r) => setExpenses(r.items));
+      apiFetch<{ items: typeof expenses }>('/api/expenses')
+        .then((r) => setExpenses(r.items))
+        .catch((err) => setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load expenses.' }));
     } else if (section === 'returns' || section === 'damages') {
-      apiFetch<{ returns: typeof returnsList; damages: typeof damagesList }>('/api/returns-damages').then((r) => {
-        setReturnsList(r.returns);
-        setDamagesList(r.damages);
-      });
+      apiFetch<{ returns: typeof returnsList; damages: typeof damagesList }>('/api/returns-damages')
+        .then((r) => {
+          setReturnsList(r.returns);
+          setDamagesList(r.damages);
+        })
+        .catch((err) => setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load returns and damages.' }));
     }
   }
 
@@ -56,20 +64,24 @@ export function FinanceView({ section, bootstrap, onRefreshBootstrap }: FinanceV
     setNotice(null);
     loadSection();
     if (section === 'estimates' || section === 'returns' || section === 'damages') {
-      apiFetch<{ items: Product[] }>('/api/products?all=1').then((r) => {
-        setProducts(r.items);
-        if (r.items[0]) {
-          setEstForm((prev) => ({ ...prev, product_id: prev.product_id || String(r.items[0].id), price: prev.price || String(r.items[0].selling_price) }));
-          setRetForm((prev) => ({ ...prev, product_id: prev.product_id || String(r.items[0].id), price: prev.price !== '0' ? prev.price : String(r.items[0].selling_price) }));
-          setDmgForm((prev) => ({ ...prev, product_id: prev.product_id || String(r.items[0].id) }));
-        }
-      });
+      apiFetch<{ items: Product[] }>('/api/products?all=1')
+        .then((r) => {
+          setProducts(r.items);
+          if (r.items[0]) {
+            setEstForm((prev) => ({ ...prev, product_id: prev.product_id || String(r.items[0].id), price: prev.price || String(r.items[0].selling_price) }));
+            setRetForm((prev) => ({ ...prev, product_id: prev.product_id || String(r.items[0].id), price: prev.price !== '0' ? prev.price : String(r.items[0].selling_price) }));
+            setDmgForm((prev) => ({ ...prev, product_id: prev.product_id || String(r.items[0].id) }));
+          }
+        })
+        .catch((err) => setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load products catalog.' }));
     }
     if (section === 'returns') {
-      apiFetch<{ items: Sale[] }>('/api/sales?all=1').then((r) => {
-        setSales(r.items);
-        if (r.items[0]) setRetForm((prev) => ({ ...prev, sale_id: prev.sale_id || String(r.items[0].id) }));
-      });
+      apiFetch<{ items: Sale[] }>('/api/sales?all=1')
+        .then((r) => {
+          setSales(r.items);
+          if (r.items[0]) setRetForm((prev) => ({ ...prev, sale_id: prev.sale_id || String(r.items[0].id) }));
+        })
+        .catch((err) => setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load sales list.' }));
     }
   }, [section]);
 

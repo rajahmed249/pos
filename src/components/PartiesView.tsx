@@ -18,14 +18,18 @@ export function PartiesView({ mode, currency }: PartiesViewProps) {
   function load() {
     const params = new URLSearchParams({ page: String(page), limit: '25' });
     if (query) params.set('q', query);
-    apiFetch<{ items: Array<Customer & Supplier>; total: number }>(`/api/${mode}?${params.toString()}`).then((res) => {
-      if (res.items.length === 0 && res.total > 0 && page > 1) {
-        setPage(Math.max(1, Math.ceil(res.total / 25)));
-        return;
-      }
-      setRows(res.items);
-      setTotal(res.total);
-    });
+    apiFetch<{ items: Array<Customer & Supplier>; total: number }>(`/api/${mode}?${params.toString()}`)
+      .then((res) => {
+        if (res.items.length === 0 && res.total > 0 && page > 1) {
+          setPage(Math.max(1, Math.ceil(res.total / 25)));
+          return;
+        }
+        setRows(res.items);
+        setTotal(res.total);
+      })
+      .catch((err) => {
+        setNotice({ type: 'error', text: err instanceof Error ? err.message : `Failed to load ${mode}.` });
+      });
   }
 
   useEffect(() => {
@@ -158,6 +162,13 @@ export function PartiesView({ mode, currency }: PartiesViewProps) {
                     </td>
                   </tr>
                 ))}
+                {rows.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center text-xs text-slate-500">
+                      No {mode} found.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

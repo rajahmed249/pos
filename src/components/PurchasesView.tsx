@@ -28,30 +28,38 @@ export function PurchasesView({ currency, onRefreshBootstrap }: PurchasesViewPro
   function loadPurchases() {
     const params = new URLSearchParams({ page: String(page), limit: '25' });
     if (query) params.set('q', query);
-    apiFetch<{ items: Purchase[]; total: number }>(`/api/purchases?${params.toString()}`).then((res) => {
-      if (res.items.length === 0 && res.total > 0 && page > 1) {
-        setPage(Math.max(1, Math.ceil(res.total / 25)));
-        return;
-      }
-      setPurchases(res.items);
-      setTotal(res.total);
-    });
+    apiFetch<{ items: Purchase[]; total: number }>(`/api/purchases?${params.toString()}`)
+      .then((res) => {
+        if (res.items.length === 0 && res.total > 0 && page > 1) {
+          setPage(Math.max(1, Math.ceil(res.total / 25)));
+          return;
+        }
+        setPurchases(res.items);
+        setTotal(res.total);
+      })
+      .catch((err) => {
+        setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load purchases.' });
+      });
   }
 
   function loadCatalog() {
     Promise.all([
       apiFetch<{ items: Supplier[] }>('/api/suppliers?all=1'),
       apiFetch<{ items: Product[] }>('/api/products?all=1'),
-    ]).then(([supRes, prodRes]) => {
-      setSuppliers(supRes.items);
-      setProducts(prodRes.items);
-      setForm((prev) => ({
-        ...prev,
-        supplier_id: prev.supplier_id || String(supRes.items[0]?.id ?? ''),
-        product_id: prev.product_id || String(prodRes.items[0]?.id ?? ''),
-        price: prev.price || String(prodRes.items[0]?.purchase_price ?? '0'),
-      }));
-    });
+    ])
+      .then(([supRes, prodRes]) => {
+        setSuppliers(supRes.items);
+        setProducts(prodRes.items);
+        setForm((prev) => ({
+          ...prev,
+          supplier_id: prev.supplier_id || String(supRes.items[0]?.id ?? ''),
+          product_id: prev.product_id || String(prodRes.items[0]?.id ?? ''),
+          price: prev.price || String(prodRes.items[0]?.purchase_price ?? '0'),
+        }));
+      })
+      .catch((err) => {
+        setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load suppliers/products.' });
+      });
   }
 
   useEffect(() => {
@@ -88,6 +96,7 @@ export function PurchasesView({ currency, onRefreshBootstrap }: PurchasesViewPro
           payment_method: form.payment_method,
         }),
       });
+      setForm((prev) => ({ ...prev, quantity: '1', paid: '0' }));
       setNotice({ type: 'success', text: 'Purchase recorded and stock updated!' });
       loadPurchases();
       loadCatalog();
@@ -238,6 +247,13 @@ export function PurchasesView({ currency, onRefreshBootstrap }: PurchasesViewPro
                   </td>
                 </tr>
               ))}
+              {purchases.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-xs text-slate-500">
+                    No purchases found.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

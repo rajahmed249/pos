@@ -72,42 +72,52 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
 
   function loadSection() {
     if (section === 'owners') {
-      apiFetch<typeof owners>('/api/owners').then(setOwners);
+      apiFetch<typeof owners>('/api/owners')
+        .then(setOwners)
+        .catch((err) => setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load owners.' }));
     } else if (section === 'cashbook') {
-      apiFetch<typeof cashData>('/api/cashbook').then(setCashData);
+      apiFetch<typeof cashData>('/api/cashbook')
+        .then(setCashData)
+        .catch((err) => setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load cash book.' }));
     } else if (section === 'stock') {
       const qs = new URLSearchParams({ filter: stockFilter });
       if (stockQuery.trim()) qs.set('q', stockQuery.trim());
-      apiFetch<typeof stockData>(`/api/stock?${qs.toString()}`).then((r) => {
-        setStockData(r);
-        setAdjForm((prev) => {
-          const matched = r.products.find((x) => String(x.id) === prev.product_id);
-          if (matched) {
-            return { ...prev, quantity: String(matched.quantity) };
-          }
-          if (r.products[0]) {
-            return {
-              ...prev,
-              product_id: String(r.products[0].id),
-              quantity: String(r.products[0].quantity),
-            };
-          }
-          return { ...prev, product_id: '', quantity: '' };
-        });
-      });
+      apiFetch<typeof stockData>(`/api/stock?${qs.toString()}`)
+        .then((r) => {
+          setStockData(r);
+          setAdjForm((prev) => {
+            const matched = r.products.find((x) => String(x.id) === prev.product_id);
+            if (matched) {
+              return { ...prev, quantity: String(matched.quantity) };
+            }
+            if (r.products[0]) {
+              return {
+                ...prev,
+                product_id: String(r.products[0].id),
+                quantity: String(r.products[0].quantity),
+              };
+            }
+            return { ...prev, product_id: '', quantity: '' };
+          });
+        })
+        .catch((err) => setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load stock ledger.' }));
     } else if (section === 'payments') {
-      apiFetch<typeof payData>('/api/payments').then((r) => {
-        setPayData(r);
-        if (payMode === 'customer' && r.dueSales[0]) {
-          setCollectForm((prev) => ({ ...prev, target_id: String(r.dueSales[0].id), amount: String(r.dueSales[0].due) }));
-        } else if (payMode === 'supplier' && r.duePurchases[0]) {
-          setCollectForm((prev) => ({ ...prev, target_id: String(r.duePurchases[0].id), amount: String(r.duePurchases[0].due) }));
-        } else {
-          setCollectForm((prev) => ({ ...prev, target_id: '', amount: '' }));
-        }
-      });
+      apiFetch<typeof payData>('/api/payments')
+        .then((r) => {
+          setPayData(r);
+          if (payMode === 'customer' && r.dueSales[0]) {
+            setCollectForm((prev) => ({ ...prev, target_id: String(r.dueSales[0].id), amount: String(r.dueSales[0].due) }));
+          } else if (payMode === 'supplier' && r.duePurchases[0]) {
+            setCollectForm((prev) => ({ ...prev, target_id: String(r.duePurchases[0].id), amount: String(r.duePurchases[0].due) }));
+          } else {
+            setCollectForm((prev) => ({ ...prev, target_id: '', amount: '' }));
+          }
+        })
+        .catch((err) => setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load payments.' }));
     } else if (section === 'employees') {
-      apiFetch<typeof employees>('/api/employees').then(setEmployees);
+      apiFetch<typeof employees>('/api/employees')
+        .then(setEmployees)
+        .catch((err) => setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to load employees.' }));
     }
   }
 
@@ -213,8 +223,13 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
                         <button
                           type="button"
                           onClick={async () => {
-                            await apiFetch(`/api/owners/${o.id}/toggle`, { method: 'PATCH' });
-                            loadSection();
+                            setNotice(null);
+                            try {
+                              await apiFetch(`/api/owners/${o.id}/toggle`, { method: 'PATCH' });
+                              loadSection();
+                            } catch (err) {
+                              setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to update owner status.' });
+                            }
                           }}
                           className={`px-2.5 py-0.5 rounded-full text-xs font-semibold cursor-pointer ${
                             o.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
@@ -227,8 +242,14 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
                         <button
                           type="button"
                           onClick={async () => {
-                            await apiFetch(`/api/owners/${o.id}`, { method: 'DELETE' });
-                            loadSection();
+                            setNotice(null);
+                            try {
+                              await apiFetch(`/api/owners/${o.id}`, { method: 'DELETE' });
+                              setNotice({ type: 'success', text: `Owner "${o.name}" deleted.` });
+                              loadSection();
+                            } catch (err) {
+                              setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to delete owner.' });
+                            }
                           }}
                           className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg cursor-pointer"
                           title="Delete Owner"
@@ -417,6 +438,13 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
                       </tr>
                     );
                   })}
+                  {stockData.products.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-xs text-slate-500">
+                        No matching products found.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -482,6 +510,9 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
                     </span>
                   </div>
                 ))}
+                {stockData.movements.length === 0 && (
+                  <div className="py-4 text-center text-xs text-slate-500">No recent stock movements recorded.</div>
+                )}
               </div>
             </div>
           </div>
@@ -546,7 +577,7 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
                   await apiFetch(url, {
                     method: 'POST',
                     body: JSON.stringify({
-                      account_id: Number(collectForm.account_id),
+                      account_id: collectForm.account_id ? Number(collectForm.account_id) : null,
                       amount: Number(collectForm.amount),
                       note: collectForm.note,
                     }),
@@ -736,8 +767,13 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
                       <button
                         type="button"
                         onClick={async () => {
-                          await apiFetch(`/api/employees/${emp.id}/toggle`, { method: 'PATCH' });
-                          loadSection();
+                          setNotice(null);
+                          try {
+                            await apiFetch(`/api/employees/${emp.id}/toggle`, { method: 'PATCH' });
+                            loadSection();
+                          } catch (err) {
+                            setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to update employee status.' });
+                          }
                         }}
                         className={`px-2.5 py-0.5 rounded-full text-xs font-semibold cursor-pointer ${Number(emp.status) === 1 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
                       >
@@ -767,8 +803,14 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
                         <button
                           type="button"
                           onClick={async () => {
-                            await apiFetch(`/api/employees/${emp.id}`, { method: 'DELETE' });
-                            loadSection();
+                            setNotice(null);
+                            try {
+                              await apiFetch(`/api/employees/${emp.id}`, { method: 'DELETE' });
+                              setNotice({ type: 'success', text: `Employee "${emp.name}" removed.` });
+                              loadSection();
+                            } catch (err) {
+                              setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Failed to delete employee.' });
+                            }
                           }}
                           className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg cursor-pointer"
                           title="Delete Employee"
