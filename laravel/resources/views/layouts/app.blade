@@ -109,26 +109,28 @@
                         <span class="text-white">{{ $shopName }}</span>
                     @endif
                 </h3>
-                <p class="text-[10px] text-white/60 truncate">
-                    <i class="fas fa-phone text-[#ffd166] mr-1"></i>{{ $appSettings['shop_phone'] ?? '01674297522' }}
+                <p class="text-[10px] text-white/60 truncate flex items-center gap-1">
+                    <svg width="10" height="10" style="width:10px;height:10px;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="text-[#ffd166]" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                    <span>{{ $appSettings['shop_phone'] ?? '01674297522' }}</span>
                 </p>
             </div>
         </a>
-        <button type="button" onclick="closeSidebar()" class="lg:hidden text-white/70 hover:text-white p-1">
-            <i class="fas fa-times"></i>
+        <button type="button" onclick="closeSidebar()" class="lg:hidden text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10" aria-label="Close sidebar">
+            <svg width="16" height="16" style="width:16px;height:16px;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         </button>
     </div>
 
     <nav class="flex-1 px-3 pt-3 pb-5 space-y-1">
         @php
-            $grouped = $sidebarMenus->groupBy(fn ($m) => $m->group_label ?: 'Main');
+            $menuCollection = ($sidebarMenus ?? collect())->toBase();
+            $grouped = $menuCollection->groupBy(fn ($m) => $m->group_label ?: 'Main');
             $mainItems = $grouped->get('Main', collect());
-            $dropdownGroups = $grouped->except(['Main']);
+            $dropdownGroups = $grouped->filter(fn ($items, $groupName) => $groupName !== 'Main');
         @endphp
 
-        {{-- Standalone Main Items (Dashboard, Owners, Bank Accounts, Cash Book, POS, Sales) --}}
+        {{-- Standalone Main Items (Dashboard, Owners, Bank Accounts, Cash Book, POS, Sales, Purchase) --}}
         @if($mainItems->isNotEmpty())
-            <ul class="space-y-0.5 mb-2">
+            <ul class="list-none m-0 px-0 w-full space-y-0.5 pb-2 border-b border-white/10">
                 @foreach($mainItems as $menu)
                     @php
                         $targetUrl = $menu->resolvedUrl();
@@ -139,10 +141,15 @@
                             <div class="border-t border-dashed border-white/25"></div>
                         </li>
                     @endif
-                    <li>
+                    <li class="w-full">
                         <a href="{{ $targetUrl }}"
-                           class="flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] text-[13px] transition-all {{ $isActive ? 'bg-[#ffd166] text-[#1a1a2e] font-semibold shadow-[0_4px_15px_rgba(255,215,0,0.3)]' : 'text-white/80 font-medium hover:bg-[#ffd166]/10 hover:text-white' }}">
-                            <i class="fas fa-circle-dot w-4 text-center {{ $isActive ? 'text-[#1a1a2e]' : 'text-[#ffd166]' }}"></i>
+                           class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] text-[13px] transition-all {{ $isActive ? 'bg-[#ffd166] text-[#1a1a2e] font-semibold shadow-[0_4px_15px_rgba(255,215,0,0.3)]' : 'text-white/85 font-medium hover:bg-[#ffd166]/10 hover:text-white' }}">
+                            @include('components.menu-icon', [
+                                'name' => $menu->icon,
+                                'route' => $menu->route_name,
+                                'size' => 17,
+                                'class' => $isActive ? 'text-[#1a1a2e]' : 'text-[#ffd166]',
+                            ])
                             <span class="truncate">{{ $menu->title }}</span>
                         </a>
                     </li>
@@ -150,46 +157,55 @@
             </ul>
         @endif
 
-        {{-- Collapsible Dropdown Sections (Closed by default, toggle ONLY on click) --}}
-        @foreach($dropdownGroups as $group => $items)
-            @php
-                $groupId = 'grp-' . \Illuminate\Support\Str::slug($group);
-                $isMenuActive = function ($m) {
-                    $targetUrl = $m->resolvedUrl();
-                    return request()->url() === $targetUrl
-                        || ($m->route_name && request()->routeIs($m->route_name))
-                        || ($m->route_name === 'products.index' && request()->routeIs('products.edit'))
-                        || ($m->route_name === 'units.index' && request()->routeIs('warranties.*'));
-                };
-                $hasActiveChild = $items->contains($isMenuActive);
-            @endphp
-            <div class="pt-1 border-t border-white/10">
-                <button type="button"
-                        onclick="toggleMenuGroup('{{ $groupId }}')"
-                        class="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-[10px] text-[13px] font-semibold transition-all cursor-pointer {{ $hasActiveChild ? 'bg-white/10 text-[#ffd166]' : 'text-white/85 hover:bg-white/10 hover:text-white' }}">
-                    <span class="flex items-center gap-3 min-w-0">
-                        <i class="fas fa-folder w-4 text-center text-[#ffd166]"></i>
-                        <span class="truncate">{{ $group }}</span>
-                    </span>
-                    <i id="{{ $groupId }}-arrow" class="fas fa-chevron-right text-[11px] text-white/60 transition-transform duration-200"></i>
-                </button>
-                <ul id="{{ $groupId }}-list" class="hidden mt-1 pl-3 ml-3 border-l border-white/15 space-y-0.5">
-                    @foreach($items as $menu)
-                        @php
-                            $targetUrl = $menu->resolvedUrl();
-                            $isActive = $isMenuActive($menu);
-                        @endphp
-                        <li>
-                            <a href="{{ $targetUrl }}"
-                               class="flex items-center gap-2.5 px-3 py-2 rounded-[8px] text-[12.5px] transition-all {{ $isActive ? 'bg-[#ffd166] text-[#1a1a2e] font-semibold shadow-[0_3px_12px_rgba(255,215,0,0.28)]' : 'text-white/75 font-medium hover:bg-[#ffd166]/10 hover:text-white' }}">
-                                <span class="w-1.5 h-1.5 rounded-full shrink-0 {{ $isActive ? 'bg-[#1a1a2e]' : 'bg-[#ffd166]/70' }}"></span>
-                                <span class="truncate">{{ $menu->title }}</span>
-                            </a>
-                        </li>
-                    @endforeach
-                </ul>
-            </div>
-        @endforeach
+        {{-- Collapsible Dropdown Sections (Auto-expand active group, toggle on click) --}}
+        <div class="space-y-1 pt-1 w-full">
+            @foreach($dropdownGroups as $group => $items)
+                @php
+                    $groupId = 'grp-' . \Illuminate\Support\Str::slug($group);
+                    $isMenuActive = function ($m) {
+                        $targetUrl = $m->resolvedUrl();
+                        return request()->url() === $targetUrl
+                            || ($m->route_name && request()->routeIs($m->route_name))
+                            || ($m->route_name === 'products.index' && request()->routeIs('products.edit'))
+                            || ($m->route_name === 'units.index' && request()->routeIs('warranties.*'));
+                    };
+                    $hasActiveChild = $items->contains($isMenuActive);
+                @endphp
+                <div class="w-full">
+                    <button type="button"
+                            onclick="toggleMenuGroup('{{ $groupId }}')"
+                            class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] text-[13px] font-medium transition-all cursor-pointer {{ $hasActiveChild ? 'bg-white/10 text-white' : 'text-white/85 hover:bg-[#ffd166]/10 hover:text-white' }}">
+                        @include('components.menu-icon', [
+                            'group' => $group,
+                            'size' => 17,
+                            'class' => 'text-[#ffd166]',
+                        ])
+                        <span class="truncate flex-1 text-left">{{ $group }}</span>
+                        <svg id="{{ $groupId }}-arrow" width="15" height="15" style="width:15px;height:15px;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="transition-transform duration-200 {{ $hasActiveChild ? 'rotate-90 text-[#ffd166]' : 'text-white/50' }}" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                    </button>
+                    <ul id="{{ $groupId }}-list" class="{{ $hasActiveChild ? '' : 'hidden' }} list-none m-0 px-0 w-full mt-1 rounded-xl bg-black/25 py-1 space-y-0.5">
+                        @foreach($items as $menu)
+                            @php
+                                $targetUrl = $menu->resolvedUrl();
+                                $isActive = $isMenuActive($menu);
+                            @endphp
+                            <li class="w-full">
+                                <a href="{{ $targetUrl }}"
+                                   class="relative w-full flex items-center gap-2.5 pl-9 pr-3.5 py-2 rounded-lg text-[12px] transition-all {{ $isActive ? 'bg-[#ffd166] text-[#1a1a2e] font-semibold shadow-[0_3px_12px_rgba(255,215,0,0.28)]' : 'text-white/75 font-medium hover:bg-[#ffd166]/10 hover:text-white' }}">
+                                    @include('components.menu-icon', [
+                                        'name' => $menu->icon,
+                                        'route' => $menu->route_name,
+                                        'size' => 14,
+                                        'class' => $isActive ? 'text-[#1a1a2e]' : 'text-[#ffd166]/80',
+                                    ])
+                                    <span class="truncate">{{ $menu->title }}</span>
+                                </a>
+                            </li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endforeach
+        </div>
     </nav>
 
     <div class="px-3 pb-5 pt-3 border-t border-white/10 space-y-2 text-xs">
@@ -198,7 +214,7 @@
                 <img src="{{ asset(ltrim(auth()->user()->profile_image, '/')) }}" alt="{{ auth()->user()?->name }}" class="w-9 h-9 rounded-full object-cover object-top border border-[#ffd166]/60 shrink-0">
             @else
                 <div class="w-9 h-9 rounded-full bg-white/15 border border-white/20 text-[#ffd166] flex items-center justify-center shrink-0">
-                    <i class="fas fa-user text-xs"></i>
+                    <svg width="15" height="15" style="width:15px;height:15px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 </div>
             @endif
             <div class="min-w-0">
@@ -211,14 +227,14 @@
             @csrf
             <button type="submit"
                     class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] border border-red-400/20 bg-red-500/10 text-[13px] font-medium text-red-200 hover:bg-red-500/20 hover:text-white transition-all cursor-pointer">
-                <i class="fas fa-sign-out-alt text-red-300 w-4 text-center"></i>
+                <svg width="17" height="17" style="width:17px;height:17px;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-red-300" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
                 <span>Logout</span>
             </button>
         </form>
 
         <a href="https://youthit.com.bd/" target="_blank" rel="noreferrer"
            class="flex items-center gap-3 px-3.5 py-2.5 rounded-[10px] border border-white/10 text-[13px] font-medium text-white/75 hover:bg-white/5 hover:text-white hover:border-[#34d399] transition-all">
-            <i class="fas fa-globe text-[#34d399] w-4 text-center"></i>
+            <svg width="17" height="17" style="width:17px;height:17px;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-[#34d399]" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
             <span>View Website</span>
         </a>
     </div>
@@ -229,8 +245,8 @@
     <header class="no-print sticky top-0 z-30 h-16 bg-white border-b border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-3 sm:px-6 lg:px-7 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-4">
         <div class="flex items-center gap-2 sm:gap-3 min-w-0 justify-start">
             <button type="button" onclick="toggleSidebar()"
-                    class="p-2 shrink-0 rounded-xl border border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors cursor-pointer">
-                <i class="fas fa-bars"></i>
+                    class="p-2 shrink-0 rounded-xl border border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors cursor-pointer" aria-label="Toggle menu">
+                <svg width="16" height="16" style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
             </button>
             <span class="font-display text-xs sm:text-sm md:text-base font-bold text-slate-800 truncate">@yield('breadcrumb', 'Dashboard')</span>
         </div>
@@ -252,7 +268,7 @@
             <a href="{{ route('pos.index') }}" title="Open POS"
                style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
                class="inline-flex items-center gap-1.5 p-2 sm:px-3.5 sm:py-2 rounded-[10px] text-xs font-semibold text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)] whitespace-nowrap shrink-0">
-                <i class="fas fa-cash-register"></i>
+                <svg width="14" height="14" style="width:14px;height:14px;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
                 <span class="hidden sm:inline">Open POS</span>
             </a>
 
@@ -265,13 +281,13 @@
                     @else
                         <span class="w-8 h-8 rounded-full flex items-center justify-center text-white shadow-xs shrink-0 ring-2 ring-white"
                               style="background: linear-gradient(135deg, #065AA4, #4f46e5);">
-                            <i class="fas fa-user text-xs"></i>
+                            <svg width="14" height="14" style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                         </span>
                     @endif
                     <span class="hidden sm:inline text-xs font-bold uppercase tracking-wide text-slate-800 max-w-[140px] md:max-w-[170px] truncate">
                         {{ auth()->user()?->name ?? 'RAJ AHMED' }}
                     </span>
-                    <i class="hidden sm:inline fas fa-chevron-down text-[10px] text-slate-400 shrink-0"></i>
+                    <svg width="12" height="12" style="width:12px;height:12px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="hidden sm:inline text-slate-400 shrink-0" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                 </button>
 
                 <div id="userDropdownMenu"
@@ -325,8 +341,14 @@
 
     <main class="flex-1 min-w-0 w-full px-3 sm:px-6 lg:px-7 {{ $compact ? 'py-4' : 'py-4 sm:py-6 lg:py-7' }}">
         @if(session('success'))
-            <div class="no-print mb-5 px-4 py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 text-sm font-medium">
-                <i class="fas fa-check-circle mr-2"></i>{{ session('success') }}
+            <div id="flashSuccessBanner" class="no-print mb-5 px-4 py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 text-sm font-medium flex items-center justify-between gap-3 transition-opacity duration-300">
+                <span class="flex items-center gap-2">
+                    <svg width="16" height="16" style="width:16px;height:16px;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-600" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <span>{{ session('success') }}</span>
+                </span>
+                <button type="button" onclick="var b=document.getElementById('flashSuccessBanner'); if(b) b.remove();" class="text-emerald-500 hover:text-emerald-800 p-1 rounded cursor-pointer" aria-label="Dismiss message">
+                    <svg width="14" height="14" style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
             </div>
         @endif
         @if($errors->any())
@@ -438,7 +460,12 @@
         }
     });
 
+    var centerPopupTimer = null;
     window.closeCenterPopup = function() {
+        if (centerPopupTimer) {
+            clearTimeout(centerPopupTimer);
+            centerPopupTimer = null;
+        }
         var m = document.getElementById('centerPopupModal');
         if (m) {
             m.classList.add('hidden');
@@ -448,6 +475,10 @@
     window.showCenterPopup = function(type, title, message, confirmLabel) {
         var m = document.getElementById('centerPopupModal');
         if (!m) return;
+        if (centerPopupTimer) {
+            clearTimeout(centerPopupTimer);
+            centerPopupTimer = null;
+        }
         var accent = document.getElementById('centerPopupAccent');
         var iconBox = document.getElementById('centerPopupIconBox');
         var icon = document.getElementById('centerPopupIcon');
@@ -468,17 +499,33 @@
         document.getElementById('centerPopupMessage').textContent = message || '';
         m.classList.remove('hidden');
         m.classList.add('flex');
+        if (type === 'success' || type === 'info') {
+            centerPopupTimer = setTimeout(function() {
+                window.closeCenterPopup();
+            }, 3200);
+        }
     };
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') window.closeCenterPopup();
     });
+    document.addEventListener('DOMContentLoaded', function() {
+        var flashBanner = document.getElementById('flashSuccessBanner');
+        if (flashBanner) {
+            setTimeout(function() {
+                flashBanner.style.opacity = '0';
+                setTimeout(function() {
+                    if (flashBanner && flashBanner.parentNode) flashBanner.parentNode.removeChild(flashBanner);
+                }, 320);
+            }, 3200);
+        }
+    });
     @if(session('success'))
         document.addEventListener('DOMContentLoaded', function() {
-            window.showCenterPopup('success', 'Success', @js(session('success')));
+            window.showCenterPopup('success', 'Success', {!! json_encode((string) session('success'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) !!});
         });
-    @elseif($errors->any())
+    @elseif(isset($errors) && $errors->any())
         document.addEventListener('DOMContentLoaded', function() {
-            window.showCenterPopup('error', 'Action Required', @js($errors->first()));
+            window.showCenterPopup('error', 'Action Required', {!! json_encode((string) $errors->first(), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) !!});
         });
     @endif
     // 1-Hour Continuous Inactivity Auto-Logout (3,600,000 ms)

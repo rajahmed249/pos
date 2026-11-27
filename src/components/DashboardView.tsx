@@ -1,4 +1,16 @@
-import { AlertTriangle, ArrowUpRight, Landmark, PackageCheck, TrendingUp, Users } from 'lucide-react';
+import {
+  AlertTriangle,
+  Building2,
+  CreditCard,
+  Landmark,
+  Package,
+  Percent,
+  ShoppingCart,
+  TrendingUp,
+  Users,
+  Wallet,
+  XCircle,
+} from 'lucide-react';
 import { formatMoney } from '../lib/api.ts';
 import type { BootstrapPayload } from '../types/pos.ts';
 
@@ -15,97 +27,235 @@ export function DashboardView({ data, onNavigate, onOpenInvoice }: DashboardView
 
   return (
     <div className="space-y-5">
-      {/* KPI Summary Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+      {/* 2-Row x 5-Card Vibrant Compact KPI Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
+        {/* Row 1: Today's Sales */}
         <button
           type="button"
           onClick={() => onNavigate('sales')}
-          className="group relative min-w-0 text-left overflow-hidden bg-gradient-to-br from-white via-white to-indigo-50/55 border border-indigo-100/90 hover:border-indigo-300 rounded-2xl px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40"
+          style={{ background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)' }}
+          className="group relative min-w-0 text-left overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(37,99,235,0.20)] hover:shadow-[0_10px_22px_rgba(37,99,235,0.28)] hover:-translate-y-0.5 transition-all duration-150 cursor-pointer"
         >
-          <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-indigo-500 via-violet-500/70 to-transparent" />
-          <div className="flex items-center justify-between gap-2.5">
-            <span className="text-[12px] font-medium text-slate-600 truncate">
-              Total Revenue ({m.saleCount.toLocaleString()})
-            </span>
-            <span className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100 flex items-center justify-center shrink-0 group-hover:bg-indigo-600 group-hover:text-white group-hover:ring-indigo-600 transition-colors">
-              <TrendingUp className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="mt-1.5 text-lg sm:text-[19px] font-display font-bold tabular-nums tracking-tight text-slate-900 leading-snug truncate">
-            {formatMoney(m.totalRevenue, cur)}
-          </div>
-          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] font-medium text-emerald-700 tabular-nums">
-            <span className="truncate">Gross Profit: {formatMoney(m.totalProfit, cur)}</span>
-            <ArrowUpRight className="w-3.5 h-3.5 text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-          </div>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onNavigate('sales')}
-          className="group relative min-w-0 text-left overflow-hidden bg-gradient-to-br from-white via-white to-emerald-50/55 border border-emerald-100/90 hover:border-emerald-300 rounded-2xl px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
-        >
-          <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-emerald-500 via-teal-500/70 to-transparent" />
-          <div className="flex items-center justify-between gap-2.5">
-            <span className="text-[12px] font-medium text-slate-600 truncate">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">
               Today&apos;s Sales
             </span>
-            <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white group-hover:ring-emerald-600 transition-colors">
-              <ArrowUpRight className="w-4 h-4" />
+            <span className="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
+              <ShoppingCart className="w-3.5 h-3.5" />
             </span>
           </div>
-          <div className="mt-1.5 text-lg sm:text-[19px] font-display font-bold tabular-nums tracking-tight text-slate-900 leading-snug truncate">
+          <div className="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
             {formatMoney(m.todaySales, cur)}
           </div>
-          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] font-medium text-slate-600 tabular-nums">
-            <span className="truncate">Today&apos;s Profit: {formatMoney(m.todayProfit, cur)}</span>
-            <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+          <div className="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
+            Total Revenue: {formatMoney(m.totalRevenue, cur)}
           </div>
         </button>
 
+        {/* Row 1: Today's Profit */}
+        <button
+          type="button"
+          onClick={() => onNavigate('reports')}
+          style={{ background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)' }}
+          className="group relative min-w-0 text-left overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(5,150,105,0.20)] hover:shadow-[0_10px_22px_rgba(5,150,105,0.28)] hover:-translate-y-0.5 transition-all duration-150 cursor-pointer"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">
+              Today&apos;s Profit
+            </span>
+            <span className="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
+              <TrendingUp className="w-3.5 h-3.5" />
+            </span>
+          </div>
+          <div className="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+            {formatMoney(m.todayProfit, cur)}
+          </div>
+          <div className="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
+            Total Profit: {formatMoney(m.totalProfit, cur)}
+          </div>
+        </button>
+
+        {/* Row 1: Today's Expense */}
+        <button
+          type="button"
+          onClick={() => onNavigate('expenses')}
+          style={{ background: 'linear-gradient(135deg, #e11d48 0%, #f43f5e 100%)' }}
+          className="group relative min-w-0 text-left overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(225,29,72,0.20)] hover:shadow-[0_10px_22px_rgba(225,29,72,0.28)] hover:-translate-y-0.5 transition-all duration-150 cursor-pointer"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">
+              Today&apos;s Expense
+            </span>
+            <span className="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
+              <Wallet className="w-3.5 h-3.5" />
+            </span>
+          </div>
+          <div className="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+            {formatMoney(m.todayExpense, cur)}
+          </div>
+          <div className="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
+            All Expenses: {formatMoney(m.totalExpenses, cur)}
+          </div>
+        </button>
+
+        {/* Row 1: Today's Margin */}
+        <button
+          type="button"
+          onClick={() => onNavigate('reports')}
+          style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #9333ea 100%)' }}
+          className="group relative min-w-0 text-left overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(124,58,237,0.20)] hover:shadow-[0_10px_22px_rgba(124,58,237,0.28)] hover:-translate-y-0.5 transition-all duration-150 cursor-pointer"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">
+              Today&apos;s Margin
+            </span>
+            <span className="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
+              <Percent className="w-3.5 h-3.5" />
+            </span>
+          </div>
+          <div className="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+            {Number(m.todayMargin ?? 0).toFixed(1)}%
+          </div>
+          <div className="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
+            Gross Profit Ratio
+          </div>
+        </button>
+
+        {/* Row 1: Customer Due */}
         <button
           type="button"
           onClick={() => onNavigate('customers')}
-          className="group relative min-w-0 text-left overflow-hidden bg-gradient-to-br from-white via-white to-amber-50/55 border border-amber-100/90 hover:border-amber-300 rounded-2xl px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
+          style={{ background: 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)' }}
+          className="group relative min-w-0 text-left overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(217,119,6,0.20)] hover:shadow-[0_10px_22px_rgba(217,119,6,0.28)] hover:-translate-y-0.5 transition-all duration-150 cursor-pointer"
         >
-          <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-amber-500 via-orange-400/70 to-transparent" />
-          <div className="flex items-center justify-between gap-2.5">
-            <span className="text-[12px] font-medium text-slate-600 truncate">
-              Customer Receivable Due
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">
+              Customer Due
             </span>
-            <span className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 ring-1 ring-amber-100 flex items-center justify-center shrink-0 group-hover:bg-amber-500 group-hover:text-white group-hover:ring-amber-500 transition-colors">
-              <Users className="w-4 h-4" />
+            <span className="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
+              <CreditCard className="w-3.5 h-3.5" />
             </span>
           </div>
-          <div className="mt-1.5 text-lg sm:text-[19px] font-display font-bold tabular-nums tracking-tight text-amber-700 leading-snug truncate">
+          <div className="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
             {formatMoney(m.customerDue, cur)}
           </div>
-          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] font-medium text-slate-600 tabular-nums">
-            <span className="truncate">Supplier Payable: {formatMoney(m.supplierDue, cur)}</span>
-            <ArrowUpRight className="w-3.5 h-3.5 text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+          <div className="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
+            Supplier Payable: {formatMoney(m.supplierDue, cur)}
           </div>
         </button>
 
+        {/* Row 2: Total Products */}
+        <button
+          type="button"
+          onClick={() => onNavigate('products')}
+          style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%)' }}
+          className="group relative min-w-0 text-left overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(2,132,199,0.20)] hover:shadow-[0_10px_22px_rgba(2,132,199,0.28)] hover:-translate-y-0.5 transition-all duration-150 cursor-pointer"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">
+              Total Products
+            </span>
+            <span className="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
+              <Package className="w-3.5 h-3.5" />
+            </span>
+          </div>
+          <div className="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+            {m.productCount.toLocaleString()}
+          </div>
+          <div className="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
+            Active SKUs in Store
+          </div>
+        </button>
+
+        {/* Row 2: Total Customers */}
+        <button
+          type="button"
+          onClick={() => onNavigate('customers')}
+          style={{ background: 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)' }}
+          className="group relative min-w-0 text-left overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(13,148,136,0.20)] hover:shadow-[0_10px_22px_rgba(13,148,136,0.28)] hover:-translate-y-0.5 transition-all duration-150 cursor-pointer"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">
+              Total Customers
+            </span>
+            <span className="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
+              <Users className="w-3.5 h-3.5" />
+            </span>
+          </div>
+          <div className="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+            {m.customerCount.toLocaleString()}
+          </div>
+          <div className="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
+            Registered Buyers
+          </div>
+        </button>
+
+        {/* Row 2: Total Suppliers */}
+        <button
+          type="button"
+          onClick={() => onNavigate('suppliers')}
+          style={{ background: 'linear-gradient(135deg, #334155 0%, #475569 100%)' }}
+          className="group relative min-w-0 text-left overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(51,65,85,0.20)] hover:shadow-[0_10px_22px_rgba(51,65,85,0.28)] hover:-translate-y-0.5 transition-all duration-150 cursor-pointer"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">
+              Total Suppliers
+            </span>
+            <span className="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
+              <Building2 className="w-3.5 h-3.5" />
+            </span>
+          </div>
+          <div className="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+            {m.supplierCount.toLocaleString()}
+          </div>
+          <div className="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
+            Active Vendors
+          </div>
+        </button>
+
+        {/* Row 2: Low Stock */}
         <button
           type="button"
           onClick={() => onNavigate('stock')}
-          className="group relative min-w-0 text-left overflow-hidden bg-gradient-to-br from-white via-white to-sky-50/55 border border-sky-100/90 hover:border-sky-300 rounded-2xl px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
+          style={{ background: 'linear-gradient(135deg, #ea580c 0%, #f97316 100%)' }}
+          className="group relative min-w-0 text-left overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(234,88,12,0.20)] hover:shadow-[0_10px_22px_rgba(234,88,12,0.28)] hover:-translate-y-0.5 transition-all duration-150 cursor-pointer"
         >
-          <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-sky-500 via-cyan-500/70 to-transparent" />
-          <div className="flex items-center justify-between gap-2.5">
-            <span className="text-[12px] font-medium text-slate-600 truncate">
-              Stock Valuation ({m.productCount} SKUs)
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">
+              Low Stock
             </span>
-            <span className="w-8 h-8 rounded-lg bg-sky-50 text-sky-600 ring-1 ring-sky-100 flex items-center justify-center shrink-0 group-hover:bg-sky-600 group-hover:text-white group-hover:ring-sky-600 transition-colors">
-              <PackageCheck className="w-4 h-4" />
+            <span className="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-3.5 h-3.5" />
             </span>
           </div>
-          <div className="mt-1.5 text-lg sm:text-[19px] font-display font-bold tabular-nums tracking-tight text-slate-900 leading-snug truncate">
-            {formatMoney(m.stockCostValue, cur)}
+          <div className="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+            {Number(m.lowStockCount ?? 0).toLocaleString()}
           </div>
-          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] font-medium text-sky-700 tabular-nums">
-            <span className="truncate">Retail Value: {formatMoney(m.stockRetailValue, cur)}</span>
-            <ArrowUpRight className="w-3.5 h-3.5 text-sky-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+          <div className="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
+            Needs Restocking Soon
+          </div>
+        </button>
+
+        {/* Row 2: Out of Stock */}
+        <button
+          type="button"
+          onClick={() => onNavigate('stock')}
+          style={{ background: 'linear-gradient(135deg, #991b1b 0%, #dc2626 100%)' }}
+          className="group relative min-w-0 text-left overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(185,28,28,0.20)] hover:shadow-[0_10px_22px_rgba(185,28,28,0.28)] hover:-translate-y-0.5 transition-all duration-150 cursor-pointer"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">
+              Out of Stock
+            </span>
+            <span className="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
+              <XCircle className="w-3.5 h-3.5" />
+            </span>
+          </div>
+          <div className="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+            {Number(m.outOfStockCount ?? 0).toLocaleString()}
+          </div>
+          <div className="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
+            Zero Stock SKUs
           </div>
         </button>
       </div>

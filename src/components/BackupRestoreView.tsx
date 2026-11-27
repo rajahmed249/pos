@@ -178,42 +178,14 @@ export function BackupRestoreView({ onRefreshBootstrap }: BackupRestoreViewProps
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/70 flex flex-col justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-slate-900 font-semibold text-sm">
-                    <Archive className="w-4 h-4 text-indigo-600 shrink-0" />
-                    Full Project + Database (.zip)
-                  </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Complete Node.js + React + built frontend + Laravel 13 + live store + MySQL <code className="bg-white px-1 rounded">.sql</code> dump.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled={downloadingKey !== null}
-                  onClick={() =>
-                    void triggerDownload(
-                      'full-zip',
-                      '/api/backup/download-full-project-zip',
-                      'youthit-pos-full-project.zip'
-                    )
-                  }
-                  style={{ background: 'linear-gradient(135deg, #4f46e5, #6366f1)' }}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-white shadow-sm cursor-pointer disabled:opacity-60"
-                >
-                  <Download className="w-4 h-4 shrink-0" />
-                  {downloadingKey === 'full-zip' ? 'Preparing Full ZIP...' : 'Download Full Project (.zip)'}
-                </button>
-              </div>
-
-              <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/70 flex flex-col justify-between gap-3">
+              <div className="border border-emerald-200 rounded-2xl p-4 bg-emerald-50/40 flex flex-col justify-between gap-3">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-slate-900 font-semibold text-sm">
                     <FileCode className="w-4 h-4 text-emerald-600 shrink-0" />
-                    cPanel PHP / Laravel 13 (.zip)
+                    Laravel 13 Single Package + DB (.zip)
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Native Laravel 13 PHP/Blade codebase with shop logos, uploads, and live MySQL <code className="bg-white px-1 rounded">.sql</code> database bundled.
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Unified standalone Laravel 13 root (all files, images, <code className="bg-white px-1 rounded">.sql</code> &amp; JSON store). Run <code className="bg-white px-1 rounded">php artisan serve</code> (auto-installs packages even without Composer) or upload to cPanel.
                   </p>
                 </div>
                 <button
@@ -231,6 +203,34 @@ export function BackupRestoreView({ onRefreshBootstrap }: BackupRestoreViewProps
                 >
                   <Download className="w-4 h-4 shrink-0" />
                   {downloadingKey === 'laravel-zip' ? 'Preparing Laravel ZIP...' : 'Download Laravel 13 + DB (.zip)'}
+                </button>
+              </div>
+
+              <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/70 flex flex-col justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-slate-900 font-semibold text-sm">
+                    <Archive className="w-4 h-4 text-indigo-600 shrink-0" />
+                    Node.js + React Full Source (.zip)
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Complete Node.js + React + prebuilt <code className="bg-white px-1 rounded">dist/</code> + <code className="bg-white px-1 rounded">server.js</code> + live store for Node.js VPS or cPanel Node app.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={downloadingKey !== null}
+                  onClick={() =>
+                    void triggerDownload(
+                      'full-zip',
+                      '/api/backup/download-full-project-zip',
+                      'youthit-pos-full-project.zip'
+                    )
+                  }
+                  style={{ background: 'linear-gradient(135deg, #4f46e5, #6366f1)' }}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-white shadow-sm cursor-pointer disabled:opacity-60"
+                >
+                  <Download className="w-4 h-4 shrink-0" />
+                  {downloadingKey === 'full-zip' ? 'Preparing Full ZIP...' : 'Download Node.js Full (.zip)'}
                 </button>
               </div>
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Setting;
 use App\Models\User;
+use App\Support\LegacyScrypt;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -39,17 +40,18 @@ class AuthController extends Controller
         }
 
         $storedHash = (string) $user->password;
-        if (!str_starts_with($storedHash, '$')) {
-            return back()->withErrors([
-                'email' => 'This migrated account password must be set for Laravel. Use Forgot Password or complete /setup first.',
-            ])->onlyInput('email');
-        }
-
         $passwordMatches = false;
-        try {
-            $passwordMatches = Hash::check($credentials['password'], $storedHash);
-        } catch (\Throwable) {
-            $passwordMatches = false;
+        $needsRehashToBcrypt = false;
+
+        if (str_starts_with($storedHash, '$')) {
+            try {
+                $passwordMatches = Hash::check($credentials['password'], $storedHash);
+            } catch (\Throwable) {
+                $passwordMatches = false;
+            }
+        } elseif (LegacyScrypt::isLegacyHash($storedHash)) {
+            $passwordMatches = LegacyScrypt::verify($credentials['password'], $storedHash);
+            $needsRehashToBcrypt = $passwordMatches;
         }
 
         if (!$passwordMatches) {
@@ -64,7 +66,19 @@ class AuthController extends Controller
             ])->onlyInput('email');
         }
 
-        Auth::login($user, $request->boolean('remember'));
+        if ($needsRehashToBcrypt) {
+            try {
+                $user->forceFill(['password' => Hash::make($credentials['password'])])->save();
+            } catch (\Throwable) {
+                // Keep login working even if password upgrade cannot be persisted immediately
+            }
+        }
+
+        try {
+            Auth::login($user, $request->boolean('remember'));
+        } catch (\Throwable) {
+            Auth::login($user, false);
+        }
         $request->session()->regenerate();
         $request->session()->put('last_activity_ts', time());
 

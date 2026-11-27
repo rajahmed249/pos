@@ -1,0 +1,247 @@
+@if ($paginator->hasPages() || (method_exists($paginator, 'total') && $paginator->total() > 0))
+    @php
+        $relUrl = static function (?string $url): string {
+            if (!$url) {
+                return '#';
+            }
+            $relative = preg_replace('#^https?://[^/]+#i', '', $url);
+            return $relative !== '' && $relative !== null ? $relative : $url;
+        };
+        $currentPage = $paginator->currentPage();
+        $lastPage = method_exists($paginator, 'lastPage') ? max(1, (int) $paginator->lastPage()) : $currentPage;
+        $firstItem = method_exists($paginator, 'firstItem') ? ($paginator->firstItem() ?? 0) : 1;
+        $lastItem = method_exists($paginator, 'lastItem') ? ($paginator->lastItem() ?? 0) : 0;
+        $totalItems = method_exists($paginator, 'total') ? (int) $paginator->total() : 0;
+        $perPage = method_exists($paginator, 'perPage') ? (int) $paginator->perPage() : (int) request('limit', 10);
+
+        $window = 2;
+        $startPage = max(1, $currentPage - $window);
+        $endPage = min($lastPage, $currentPage + $window);
+        $existingQuery = request()->except(['page', 'limit']);
+    @endphp
+    <style>
+        .yit-pag-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            width: 100%;
+            font-size: 13px;
+            line-height: 1.25;
+        }
+        .yit-pag-info {
+            color: #64748b;
+            font-size: 13px;
+            font-variant-numeric: tabular-nums;
+        }
+        .yit-pag-info strong {
+            color: #0f172a;
+            font-weight: 700;
+        }
+        .yit-pag-nav {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 4px;
+        }
+        .yit-pag-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 36px;
+            height: 36px;
+            padding: 0 10px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            background: #ffffff;
+            color: #334155;
+            font-size: 13px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.15s ease;
+            box-sizing: border-box;
+            user-select: none;
+            font-variant-numeric: tabular-nums;
+        }
+        a.yit-pag-btn:hover {
+            border-color: #4f46e5;
+            color: #4f46e5;
+            background: #f8fafc;
+        }
+        .yit-pag-btn.is-active {
+            border-color: #4f46e5;
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: #ffffff;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(79, 70, 229, 0.28);
+        }
+        .yit-pag-btn.is-disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .yit-pag-dots {
+            padding: 0 6px;
+            color: #94a3b8;
+            font-weight: 600;
+        }
+        .yit-pag-controls {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+        }
+        .yit-pag-ctrl-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #64748b;
+            font-size: 13px;
+        }
+        .yit-pag-select,
+        .yit-pag-input {
+            padding: 5px 8px;
+            border: 1px solid #e2e8f0;
+            border-radius: 7px;
+            background: #ffffff;
+            color: #334155;
+            font-size: 12.5px;
+            font-weight: 500;
+        }
+        .yit-pag-input {
+            width: 54px;
+            text-align: center;
+        }
+        .yit-pag-go {
+            padding: 5px 11px;
+            border-radius: 7px;
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            color: #334155;
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .yit-pag-go:hover {
+            border-color: #4f46e5;
+            color: #4f46e5;
+        }
+        .yit-pag-svg {
+            width: 15px !important;
+            height: 15px !important;
+            display: block;
+            flex-shrink: 0;
+        }
+    </style>
+
+    <nav role="navigation" aria-label="{{ __('Pagination Navigation') }}" class="yit-pag-wrap">
+        {{-- Left: Range Info --}}
+        <div class="yit-pag-info">
+            @if (method_exists($paginator, 'total'))
+                <strong>{{ number_format($firstItem) }}</strong> – <strong>{{ number_format($lastItem) }}</strong> of <strong>{{ number_format($totalItems) }}</strong>
+            @else
+                Page <strong>{{ $currentPage }}</strong>
+            @endif
+        </div>
+
+        {{-- Center: « ‹ 1 ... window ... N › » --}}
+        @if ($paginator->hasPages())
+            <div class="yit-pag-nav">
+                @if ($paginator->onFirstPage())
+                    <span class="yit-pag-btn is-disabled" aria-disabled="true" title="First Page">
+                        <svg class="yit-pag-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="m11 17-5-5 5-5"/><path stroke-linecap="round" stroke-linejoin="round" d="m18 17-5-5 5-5"/></svg>
+                    </span>
+                    <span class="yit-pag-btn is-disabled" aria-disabled="true" title="Previous Page">
+                        <svg class="yit-pag-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                    </span>
+                @else
+                    <a href="{{ $relUrl($paginator->url(1)) }}" class="yit-pag-btn" title="First Page">
+                        <svg class="yit-pag-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="m11 17-5-5 5-5"/><path stroke-linecap="round" stroke-linejoin="round" d="m18 17-5-5 5-5"/></svg>
+                    </a>
+                    <a href="{{ $relUrl($paginator->previousPageUrl()) }}" rel="prev" class="yit-pag-btn" title="Previous Page">
+                        <svg class="yit-pag-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                    </a>
+                @endif
+
+                @if ($startPage > 1)
+                    <a href="{{ $relUrl($paginator->url(1)) }}" class="yit-pag-btn">1</a>
+                    @if ($startPage > 2)
+                        <span class="yit-pag-dots">&hellip;</span>
+                    @endif
+                @endif
+
+                @for ($p = $startPage; $p <= $endPage; $p++)
+                    @if ($p === $currentPage)
+                        <span class="yit-pag-btn is-active" aria-current="page">{{ $p }}</span>
+                    @else
+                        <a href="{{ $relUrl($paginator->url($p)) }}" class="yit-pag-btn">{{ $p }}</a>
+                    @endif
+                @endfor
+
+                @if ($endPage < $lastPage)
+                    @if ($endPage < $lastPage - 1)
+                        <span class="yit-pag-dots">&hellip;</span>
+                    @endif
+                    <a href="{{ $relUrl($paginator->url($lastPage)) }}" class="yit-pag-btn">{{ $lastPage }}</a>
+                @endif
+
+                @if ($paginator->hasMorePages())
+                    <a href="{{ $relUrl($paginator->nextPageUrl()) }}" rel="next" class="yit-pag-btn" title="Next Page">
+                        <svg class="yit-pag-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                    </a>
+                    <a href="{{ $relUrl($paginator->url($lastPage)) }}" class="yit-pag-btn" title="Last Page">
+                        <svg class="yit-pag-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="m13 17 5-5-5-5"/><path stroke-linecap="round" stroke-linejoin="round" d="m6 17 5-5-5-5"/></svg>
+                    </a>
+                @else
+                    <span class="yit-pag-btn is-disabled" aria-disabled="true" title="Next Page">
+                        <svg class="yit-pag-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                    </span>
+                    <span class="yit-pag-btn is-disabled" aria-disabled="true" title="Last Page">
+                        <svg class="yit-pag-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="m13 17 5-5-5-5"/><path stroke-linecap="round" stroke-linejoin="round" d="m6 17 5-5-5-5"/></svg>
+                    </span>
+                @endif
+            </div>
+        @endif
+
+        {{-- Right: Show [10/20/50/100] + Go [n] [Go] --}}
+        <div class="yit-pag-controls">
+            <form method="GET" action="{{ url()->current() }}" class="yit-pag-ctrl-group">
+                @foreach ($existingQuery as $qKey => $qVal)
+                    @if (is_array($qVal))
+                        @foreach ($qVal as $subVal)
+                            <input type="hidden" name="{{ $qKey }}[]" value="{{ $subVal }}">
+                        @endforeach
+                    @else
+                        <input type="hidden" name="{{ $qKey }}" value="{{ $qVal }}">
+                    @endif
+                @endforeach
+                <input type="hidden" name="page" value="1">
+                <label for="pagLimitSelect">Show:</label>
+                <select id="pagLimitSelect" name="limit" onchange="this.form.submit()" class="yit-pag-select">
+                    @foreach ([10, 20, 50, 100] as $opt)
+                        <option value="{{ $opt }}" {{ $perPage === $opt ? 'selected' : '' }}>{{ $opt }}</option>
+                    @endforeach
+                </select>
+            </form>
+
+            @if ($lastPage > 1)
+                <form method="GET" action="{{ url()->current() }}" class="yit-pag-ctrl-group">
+                    @foreach ($existingQuery as $qKey => $qVal)
+                        @if (is_array($qVal))
+                            @foreach ($qVal as $subVal)
+                                <input type="hidden" name="{{ $qKey }}[]" value="{{ $subVal }}">
+                            @endforeach
+                        @else
+                            <input type="hidden" name="{{ $qKey }}" value="{{ $qVal }}">
+                        @endif
+                    @endforeach
+                    <input type="hidden" name="limit" value="{{ $perPage }}">
+                    <label for="pagGoInput">Go:</label>
+                    <input id="pagGoInput" type="number" name="page" min="1" max="{{ $lastPage }}" value="{{ $currentPage }}" class="yit-pag-input">
+                    <button type="submit" class="yit-pag-go">Go</button>
+                </form>
+            @endif
+        </div>
+    </nav>
+@endif

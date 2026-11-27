@@ -56,6 +56,7 @@ Route::middleware('auth')->group(function () {
     // Inventory, Stock & Products
     Route::get('/products', [ProductController::class, 'index'])->name('products.index');
     Route::get('/products/create', [ProductController::class, 'create'])->name('products.create');
+    Route::get('/add-product', [ProductController::class, 'create']);
     Route::post('/products', [ProductController::class, 'store'])->name('products.store');
     Route::get('/products/{product}/edit', [ProductController::class, 'edit'])->name('products.edit');
     Route::put('/products/{product}', [ProductController::class, 'update'])->name('products.update');
@@ -74,6 +75,9 @@ Route::middleware('auth')->group(function () {
         // Owners & Cash Book
         Route::get('/owners', [OperationsController::class, 'owners'])->name('owners.index');
         Route::post('/owners', [OperationsController::class, 'storeOwner'])->name('owners.store');
+        Route::get('/owners/{owner}/history', [OperationsController::class, 'ownerHistory'])->name('owners.history');
+        Route::put('/owners/{owner}', [OperationsController::class, 'updateOwner'])->name('owners.update');
+        Route::post('/owners/{owner}/transaction', [OperationsController::class, 'ownerTransaction'])->name('owners.transaction');
         Route::patch('/owners/{owner}/toggle', [OperationsController::class, 'toggleOwner'])->name('owners.toggle');
         Route::delete('/owners/{owner}', [OperationsController::class, 'destroyOwner'])->name('owners.destroy');
 
@@ -115,7 +119,9 @@ Route::middleware('auth')->group(function () {
         // Accounts, Expenses, Payments, Returns & Damages
         Route::get('/accounts', [AccountController::class, 'index'])->name('accounts.index');
         Route::post('/accounts', [AccountController::class, 'storeAccount'])->name('accounts.store');
+        Route::put('/accounts/{bankAccount}', [AccountController::class, 'updateAccount'])->name('accounts.update');
         Route::post('/accounts/transaction', [AccountController::class, 'storeTransaction'])->name('accounts.transaction');
+        Route::post('/accounts/transfer', [AccountController::class, 'transferAccount'])->name('accounts.transfer');
 
         Route::get('/expenses', [AccountController::class, 'expenses'])->name('expenses.index');
         Route::post('/expenses', [AccountController::class, 'storeExpense'])->name('expenses.store');
@@ -153,6 +159,8 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/backup', [OperationsController::class, 'backup'])->name('backup.index');
         Route::get('/backup/download', [OperationsController::class, 'downloadBackup'])->name('backup.download');
+        Route::get('/backup/download-sql', [OperationsController::class, 'downloadSql'])->name('backup.download_sql');
         Route::post('/backup/restore', [OperationsController::class, 'restoreBackup'])->name('backup.restore');
+        Route::post('/backup/import-sql', [OperationsController::class, 'importSql'])->name('backup.import_sql');
     });
 });

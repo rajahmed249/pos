@@ -6,10 +6,107 @@ use Symfony\Component\Console\Input\ArgvInput;
 
 define('LARAVEL_START', microtime(true));
 
-require __DIR__.'/vendor/autoload.php';
+$baseDir = __DIR__;
+
+// 1. Ensure writable Laravel storage & cache directories exist
+foreach ([
+    $baseDir.'/bootstrap/cache',
+    $baseDir.'/storage/app/private',
+    $baseDir.'/storage/app/public',
+    $baseDir.'/storage/framework/cache/data',
+    $baseDir.'/storage/framework/sessions',
+    $baseDir.'/storage/framework/views',
+    $baseDir.'/storage/logs',
+] as $dir) {
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+}
+
+// 2. Ensure .env & valid APP_KEY exist automatically
+$envFile = $baseDir.'/.env';
+$envExample = $baseDir.'/.env.example';
+if (!file_exists($envFile) && file_exists($envExample)) {
+    @copy($envExample, $envFile);
+}
+if (file_exists($envFile) && is_writable($envFile)) {
+    $envRaw = @file_get_contents($envFile);
+    if (is_string($envRaw) && preg_match('/^APP_KEY=\s*$/m', $envRaw)) {
+        try {
+            $generatedKey = 'base64:'.base64_encode(random_bytes(32));
+            $envRaw = preg_replace('/^APP_KEY=\s*$/m', 'APP_KEY='.$generatedKey, $envRaw, 1);
+            @file_put_contents($envFile, $envRaw);
+        } catch (\Throwable) {
+            // ignore
+        }
+    }
+}
+
+// 3. Auto-install vendor/ even when Composer is not pre-installed globally
+$autoloader = $baseDir.'/vendor/autoload.php';
+if (!file_exists($autoloader)) {
+    fwrite(STDOUT, "\n[Youth IT POS] First-time setup: installing Laravel packages...\n");
+
+    $hasGlobalComposer = false;
+    $checkCmd = DIRECTORY_SEPARATOR === '\\' ? 'where composer 2>NUL' : 'command -v composer 2>/dev/null';
+    $out = [];
+    $code = 1;
+    @exec($checkCmd, $out, $code);
+    if ($code === 0 && !empty($out)) {
+        $hasGlobalComposer = true;
+    }
+
+    $installCode = 1;
+    if ($hasGlobalComposer) {
+        passthru('composer install --no-dev --optimize-autoloader --no-interaction', $installCode);
+    } else {
+        $composerPhar = $baseDir.'/composer.phar';
+        if (!file_exists($composerPhar)) {
+            fwrite(STDOUT, "[Youth IT POS] Composer not found globally. Downloading official composer.phar...\n");
+            $downloaded = false;
+            $pharData = @file_get_contents('https://getcomposer.org/composer-stable.phar');
+            if ($pharData !== false && strlen($pharData) > 100000) {
+                $downloaded = @file_put_contents($composerPhar, $pharData) !== false;
+            }
+            if (!$downloaded && function_exists('curl_init')) {
+                $ch = curl_init('https://getcomposer.org/composer-stable.phar');
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_TIMEOUT => 120,
+                ]);
+                $res = curl_exec($ch);
+                curl_close($ch);
+                if (is_string($res) && strlen($res) > 100000) {
+                    $downloaded = @file_put_contents($composerPhar, $res) !== false;
+                }
+            }
+            if (!$downloaded) {
+                fwrite(STDERR, "\n[Error] Could not download composer.phar (check internet connection or php.ini allow_url_fopen/openssl).\n");
+                fwrite(STDERR, "Download composer.phar manually from https://getcomposer.org/composer-stable.phar and run:\n");
+                fwrite(STDERR, "  php composer.phar install --no-dev --optimize-autoloader\n\n");
+                exit(1);
+            }
+        }
+
+        $cmd = escapeshellarg(PHP_BINARY).' '.escapeshellarg($composerPhar).' install --no-dev --optimize-autoloader --no-interaction';
+        passthru($cmd, $installCode);
+        if ($installCode === 0 && file_exists($composerPhar)) {
+            @unlink($composerPhar);
+        }
+    }
+
+    if ($installCode !== 0 || !file_exists($autoloader)) {
+        fwrite(STDERR, "\n[Error] Failed to install Laravel vendor dependencies. Please check PHP extensions (pdo_mysql/pdo_sqlite, mbstring, openssl, zip).\n");
+        exit(1);
+    }
+    fwrite(STDOUT, "[Youth IT POS] Dependencies ready! Starting application...\n\n");
+}
+
+require $autoloader;
 
 /** @var Application $app */
-$app = require_once __DIR__.'/bootstrap/app.php';
+$app = require_once $baseDir.'/bootstrap/app.php';
 
 $status = $app->handleCommand(new ArgvInput);
 

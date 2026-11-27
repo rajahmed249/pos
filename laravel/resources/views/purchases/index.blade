@@ -1,76 +1,719 @@
 @extends('layouts.app')
 
 @section('title', 'Purchases — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
-@section('breadcrumb', 'Procurement / Purchases')
+@section('breadcrumb', 'Main / Purchase')
 
 @section('content')
-@php $cur = $appSettings['currency'] ?? '৳'; @endphp
+@php
+    $cur = $appSettings['currency'] ?? '৳';
+    $pageTotal = (float) $purchases->getCollection()->sum('total');
+    $pagePaid = (float) $purchases->getCollection()->sum('paid');
+    $pageDue = (float) $purchases->getCollection()->sum('due');
 
-<div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-4 h-fit">
-        <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">New Purchase</h2>
-        <form method="POST" action="{{ route('purchases.store') }}" class="space-y-3 text-sm">
+    $suppliersJson = $suppliers->map(fn ($s) => [
+        'id' => $s->id,
+        'name' => $s->name,
+        'phone' => $s->phone ?? '',
+        'email' => $s->email ?? '',
+    ])->values();
+
+    $productsJson = $products->map(fn ($p) => [
+        'id' => $p->id,
+        'name' => $p->name,
+        'sku' => $p->sku ?? '',
+        'barcode' => $p->barcode ?? '',
+        'stock' => (int) ($p->stock_quantity ?? $p->quantity ?? 0),
+        'purchase_price' => (float) ($p->purchase_price ?? 0),
+    ])->values();
+@endphp
+
+<div class="w-full space-y-5">
+    {{-- Page Header --}}
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+            <div class="w-11 h-11 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-[0_6px_18px_rgba(79,70,229,0.3)]"
+                 style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+            </div>
+            <div class="min-w-0">
+                <h1 class="text-xl sm:text-2xl font-display font-extrabold text-slate-900 truncate">
+                    Stock <span class="bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] bg-clip-text text-transparent">Purchases</span>
+                </h1>
+                <p class="text-xs text-slate-500">Multi-product purchase cart on top &amp; supplier invoice history below</p>
+            </div>
+        </div>
+        <span class="px-3.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100 text-xs font-semibold tabular-nums">
+            {{ number_format($purchases->total()) }} Total Purchases
+        </span>
+    </div>
+
+    {{-- Compact KPI Strip --}}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+        <div style="background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);"
+             class="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(79,70,229,0.20)]">
+            <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Page Purchase Total</div>
+            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ $cur }}{{ number_format($pageTotal, 2) }}</div>
+            <div class="mt-0.5 text-[10px] text-white/80">{{ $purchases->count() }} entries shown</div>
+        </div>
+        <div style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);"
+             class="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(5,150,105,0.20)]">
+            <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Paid to Suppliers</div>
+            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ $cur }}{{ number_format($pagePaid, 2) }}</div>
+            <div class="mt-0.5 text-[10px] text-white/80">Settled on Current Page</div>
+        </div>
+        <div style="background: linear-gradient(135deg, #e11d48 0%, #f43f5e 100%);"
+             class="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(225,29,72,0.20)]">
+            <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Payable Due</div>
+            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ $cur }}{{ number_format($pageDue, 2) }}</div>
+            <div class="mt-0.5 text-[10px] text-white/80">Supplier Balances Due</div>
+        </div>
+    </div>
+
+    {{-- Inline Validation Alert --}}
+    <div id="purchaseClientError" class="hidden px-4 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold"></div>
+
+    {{-- TOP FULL-WIDTH: New Purchase Entry (Multi-Product Cart) --}}
+    <div class="w-full bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-visible">
+        <div class="px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r from-indigo-50/80 via-white to-violet-50/70 rounded-t-[20px] flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5">
+                <span class="w-8 h-8 rounded-lg text-white flex items-center justify-center shrink-0"
+                      style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
+                </span>
+                <div>
+                    <h2 class="font-display text-sm font-bold text-slate-900">Purchase Items</h2>
+                    <p class="text-[11px] text-slate-500">Search supplier &amp; add multiple products to a single purchase invoice</p>
+                </div>
+            </div>
+            <span id="purchaseCartBadge" class="hidden px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-100 text-xs font-semibold text-indigo-700 tabular-nums"></span>
+        </div>
+
+        <form id="multiPurchaseForm" method="POST" action="{{ route('purchases.store') }}" class="p-5 space-y-4 text-sm">
             @csrf
-            <div>
-                <label class="block text-xs text-slate-600 mb-1">Supplier</label>
-                <select name="supplier_id" required class="w-full px-2.5 py-1.5 border border-slate-300 rounded-md">
-                    @foreach($suppliers as $s)
-                        <option value="{{ $s->id }}">{{ $s->name }}</option>
-                    @endforeach
-                </select>
+            <input type="hidden" name="supplier_id" id="purchaseSupplierId" value="{{ $suppliers->first()?->id ?? '' }}">
+            <div id="purchaseCartHiddenInputs"></div>
+
+            {{-- Row 1: Searchable Supplier & Purchase Date --}}
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                <div class="lg:col-span-8 relative" id="purchaseSupplierWrap">
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">
+                        Supplier <span class="text-red-500">*</span>
+                    </label>
+                    <div class="relative">
+                        <input type="text"
+                               id="purchaseSupplierSearch"
+                               autocomplete="off"
+                               value="{{ $suppliers->first()?->name ?? '' }}"
+                               placeholder="Search supplier by name, phone or email..."
+                               class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:border-indigo-500 outline-none pr-36">
+                        <span id="purchaseSupplierChip"
+                              class="{{ $suppliers->first() ? '' : 'hidden' }} absolute right-2.5 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200 text-[10.5px] font-semibold text-indigo-700 max-w-[140px] truncate">
+                            {{ $suppliers->first()?->name ?? '' }}
+                        </span>
+                    </div>
+                    <div id="purchaseSupplierDropdown" class="hidden absolute z-40 left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto divide-y divide-slate-100"></div>
+                </div>
+
+                <div class="lg:col-span-4">
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Purchase Date</label>
+                    <input type="date" name="purchase_date" value="{{ date('Y-m-d') }}"
+                           class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:border-indigo-500 outline-none tabular-nums">
+                </div>
             </div>
-            <div>
-                <label class="block text-xs text-slate-600 mb-1">Product</label>
-                <select name="product_id" required class="w-full px-2.5 py-1.5 border border-slate-300 rounded-md">
-                    @foreach($products as $p)
-                        <option value="{{ $p->id }}">{{ $p->name }}</option>
-                    @endforeach
-                </select>
+
+            {{-- Row 2: Searchable Product Picker --}}
+            <div class="relative" id="purchaseProductWrap">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Product</label>
+                <div class="relative">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <input type="text"
+                           id="purchaseProductSearch"
+                           autocomplete="off"
+                           placeholder="Search product by name or barcode..."
+                           class="w-full pl-9 pr-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:border-indigo-500 outline-none">
+                </div>
+                <div id="purchaseProductDropdown" class="hidden absolute z-40 left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100"></div>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input type="number" min="1" name="quantity" placeholder="Qty" required class="w-full min-w-0 px-2.5 py-1.5 border border-slate-300 rounded-md tabular-nums">
-                <input type="number" step="0.01" min="0" name="price" placeholder="Unit Cost" required class="w-full min-w-0 px-2.5 py-1.5 border border-slate-300 rounded-md tabular-nums">
+
+            {{-- Row 3: Dynamic Cart Table --}}
+            <div class="border border-slate-200/80 rounded-2xl overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs sm:text-sm text-left">
+                        <thead class="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                            <tr>
+                                <th class="px-4 py-2.5 font-semibold w-12">SL</th>
+                                <th class="px-4 py-2.5 font-semibold">PRODUCT</th>
+                                <th class="px-4 py-2.5 font-semibold text-right w-36">RATE ({{ $cur }})</th>
+                                <th class="px-4 py-2.5 font-semibold text-center w-28">QTY</th>
+                                <th class="px-4 py-2.5 font-semibold text-right w-36">SUB TOTAL</th>
+                                <th class="px-4 py-2.5 font-semibold text-center w-20">ACTION</th>
+                            </tr>
+                        </thead>
+                        <tbody id="purchaseCartTbody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input type="number" step="0.01" min="0" name="paid" value="0" placeholder="Paid" required class="w-full min-w-0 px-2.5 py-1.5 border border-slate-300 rounded-md tabular-nums">
-                <select name="payment_method" class="w-full min-w-0 px-2.5 py-1.5 border border-slate-300 rounded-md">
-                    <option value="cash">Cash</option>
-                    <option value="bank">Bank</option>
-                    <option value="bkash">bKash</option>
-                </select>
+
+            {{-- Row 4: Payment Details (Left) & Totals Summary (Right) --}}
+            <div class="pt-2 border-t border-slate-100 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+                <div class="lg:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Payment Method</label>
+                        <select name="payment_method" class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-indigo-500 outline-none">
+                            <option value="cash">Cash</option>
+                            <option value="bank">Bank</option>
+                            <option value="bkash">bKash</option>
+                            <option value="nagad">Nagad</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-xs font-semibold text-slate-700">Paid ({{ $cur }})</label>
+                            <button type="button" id="purchaseFullPaidBtn" class="hidden text-[10.5px] font-semibold text-emerald-600 hover:underline cursor-pointer">Full Paid</button>
+                        </div>
+                        <input type="number" step="0.01" min="0" name="paid" id="purchasePaidInput" value="0" required
+                               class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-emerald-500 outline-none tabular-nums">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Note / Challan</label>
+                        <input type="text" name="note" placeholder="Optional reference..."
+                               class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-indigo-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="lg:col-span-5 flex flex-col items-end space-y-2 text-xs sm:text-sm">
+                    <div class="flex items-center justify-between w-full sm:w-72">
+                        <span class="text-slate-500 font-medium">Subtotal:</span>
+                        <span id="purchaseSubtotalText" class="font-mono font-bold text-slate-800 tabular-nums">{{ $cur }}0.00</span>
+                    </div>
+                    <div class="flex items-center justify-between w-full sm:w-72">
+                        <span class="text-slate-500 font-medium">Discount:</span>
+                        <input type="number" step="0.01" min="0" name="discount" id="purchaseDiscountInput" value="0"
+                               class="w-28 px-2.5 py-1 text-right font-mono text-xs border border-slate-200 rounded-lg bg-white focus:border-indigo-500 outline-none tabular-nums">
+                    </div>
+                    <div class="flex items-center justify-between w-full sm:w-72 pt-2 border-t border-slate-200">
+                        <span class="font-bold text-indigo-700">Total:</span>
+                        <span id="purchaseTotalText" class="font-mono text-base font-extrabold text-indigo-700 tabular-nums">{{ $cur }}0.00</span>
+                    </div>
+                    <div id="purchaseDueRow" class="hidden flex items-center justify-between w-full sm:w-72 text-xs">
+                        <span class="text-slate-500">Supplier Due:</span>
+                        <span id="purchaseDueText" class="font-mono font-bold tabular-nums text-rose-600">{{ $cur }}0.00</span>
+                    </div>
+                </div>
             </div>
-            <button type="submit" class="w-full py-2 bg-slate-900 text-white rounded-md font-medium">Record Purchase</button>
+
+            {{-- Row 5: Full-Width Emerald Payment CTA --}}
+            <button type="submit" style="background: linear-gradient(135deg, #059669, #10b981);"
+                    class="w-full py-3 rounded-xl text-white font-semibold shadow-[0_6px_18px_rgba(5,150,105,0.28)] hover:opacity-95 transition flex items-center justify-center gap-2 cursor-pointer">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                <span>Payment &amp; Record Purchase</span>
+            </button>
         </form>
     </div>
 
-    <div class="lg:col-span-3 min-w-0 bg-white border border-slate-200 rounded-lg overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-                <thead class="bg-slate-50 text-xs text-slate-500 border-b border-slate-200">
+    {{-- BOTTOM FULL-WIDTH: Purchase History --}}
+    <div class="w-full bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden flex flex-col">
+        <div class="px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <h2 class="font-display text-sm sm:text-base font-bold text-slate-900">Purchase History</h2>
+                <p class="text-[11px] text-slate-500">All supplier invoices, multi-product items &amp; due settlement</p>
+            </div>
+            <form method="GET" action="{{ route('purchases.index') }}" class="flex items-center gap-2 w-full sm:w-auto">
+                <input type="hidden" name="limit" value="{{ $limit ?? 10 }}">
+                <input type="text" name="q" value="{{ request('q') }}" placeholder="Search invoice or supplier..."
+                       class="flex-1 sm:w-64 px-3 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:border-indigo-500 outline-none">
+                <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" class="px-3.5 py-1.5 rounded-xl text-white text-xs font-semibold cursor-pointer">Search</button>
+                @if(request('q'))
+                    <a href="{{ route('purchases.index') }}" class="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50">Reset</a>
+                @endif
+            </form>
+        </div>
+
+        <div class="overflow-x-auto flex-1">
+            <table class="w-full text-sm text-left">
+                <thead class="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
                     <tr>
-                        <th class="px-4 py-2.5 text-left">Invoice</th>
-                        <th class="px-4 py-2.5 text-left">Supplier</th>
-                        <th class="px-4 py-2.5 text-left">Date</th>
-                        <th class="px-4 py-2.5 text-right">Total</th>
-                        <th class="px-4 py-2.5 text-right">Paid</th>
-                        <th class="px-4 py-2.5 text-right">Due</th>
+                        <th class="px-4 py-3 font-semibold">Invoice &amp; Date</th>
+                        <th class="px-4 py-3 font-semibold">Supplier</th>
+                        <th class="px-4 py-3 font-semibold">Products</th>
+                        <th class="px-4 py-3 font-semibold text-right whitespace-nowrap">Total</th>
+                        <th class="px-4 py-3 font-semibold text-right whitespace-nowrap">Paid</th>
+                        <th class="px-4 py-3 font-semibold text-right whitespace-nowrap">Due</th>
+                        <th class="px-4 py-3 font-semibold text-center whitespace-nowrap">Action</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                    @foreach($purchases as $purchase)
-                        <tr>
-                            <td class="px-4 py-2.5 font-mono text-xs whitespace-nowrap">{{ $purchase->invoice_no }}</td>
-                            <td class="px-4 py-2.5">{{ $purchase->supplier?->name ?: 'Unknown' }}</td>
-                            <td class="px-4 py-2.5 text-xs text-slate-500 tabular-nums whitespace-nowrap">{{ $purchase->purchase_date?->format('Y-m-d') }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums font-medium whitespace-nowrap">{{ $cur }}{{ number_format($purchase->total, 2) }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums text-emerald-700 whitespace-nowrap">{{ $cur }}{{ number_format($purchase->paid, 2) }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums whitespace-nowrap {{ $purchase->due > 0 ? 'text-red-600' : 'text-slate-400' }}">{{ $cur }}{{ number_format($purchase->due, 2) }}</td>
+                    @forelse($purchases as $purchase)
+                        <tr class="hover:bg-slate-50/80 transition-colors">
+                            <td class="px-4 py-2.5 whitespace-nowrap">
+                                <div class="font-mono text-xs font-bold text-indigo-700">{{ $purchase->invoice_no }}</div>
+                                <div class="text-[11px] text-slate-400 tabular-nums">{{ $purchase->purchase_date?->format('d M Y') ?: '—' }}</div>
+                            </td>
+                            <td class="px-4 py-2.5">
+                                <div class="font-semibold text-slate-900 text-xs sm:text-sm">{{ $purchase->supplier?->name ?: 'Unknown Supplier' }}</div>
+                                <div class="text-[11px] text-slate-400 uppercase">{{ $purchase->payment_method ?: 'cash' }}</div>
+                            </td>
+                            <td class="px-4 py-2.5 text-xs text-slate-600 max-w-[260px]">
+                                @if($purchase->items && $purchase->items->isNotEmpty())
+                                    <div class="space-y-0.5">
+                                        @foreach($purchase->items->take(2) as $it)
+                                            <div class="truncate">
+                                                <span class="font-medium text-slate-800">{{ $it->product?->name ?? 'Product' }}</span>
+                                                <span class="text-slate-400">&times;{{ $it->quantity }}</span>
+                                            </div>
+                                        @endforeach
+                                        @if($purchase->items->count() > 2)
+                                            <span class="inline-block text-[10.5px] font-semibold text-indigo-600">
+                                                +{{ $purchase->items->count() - 2 }} more items
+                                            </span>
+                                        @endif
+                                    </div>
+                                @else
+                                    <span>—</span>
+                                @endif
+                            </td>
+                            <td class="px-4 py-2.5 text-right font-mono text-xs font-semibold text-slate-800 tabular-nums whitespace-nowrap">{{ $cur }}{{ number_format((float) $purchase->total, 2) }}</td>
+                            <td class="px-4 py-2.5 text-right font-mono text-xs font-semibold text-emerald-700 tabular-nums whitespace-nowrap">{{ $cur }}{{ number_format((float) $purchase->paid, 2) }}</td>
+                            <td class="px-4 py-2.5 text-right font-mono text-xs font-bold tabular-nums whitespace-nowrap {{ (float) $purchase->due > 0 ? 'text-rose-600' : 'text-slate-400' }}">
+                                {{ $cur }}{{ number_format((float) $purchase->due, 2) }}
+                            </td>
+                            <td class="px-4 py-2.5 text-center whitespace-nowrap">
+                                @if((float) $purchase->due > 0)
+                                    <button type="button"
+                                            onclick="openSupplierPayModal({{ $purchase->id }}, @json($purchase->invoice_no), @json($purchase->supplier?->name ?: 'Supplier'), {{ (float) $purchase->due }})"
+                                            class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 text-xs font-semibold cursor-pointer">
+                                        Pay Due
+                                    </button>
+                                @else
+                                    <span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10.5px] font-semibold">Paid</span>
+                                @endif
+                            </td>
                         </tr>
-                    @endforeach
+                    @empty
+                        <tr>
+                            <td colspan="7" class="px-4 py-10 text-center text-xs text-slate-500">No purchase invoices recorded yet.</td>
+                        </tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>
-        <div class="p-4 border-t border-slate-200">{{ $purchases->links() }}</div>
+        <div class="p-4 border-t border-slate-200 bg-slate-50/70">{{ $purchases->links('pagination.custom') }}</div>
     </div>
 </div>
+
+{{-- Pay Supplier Due Modal --}}
+<div id="supplierPayModal" onclick="closeSupplierPayModal()" class="fixed inset-0 z-[120] bg-slate-950/55 backdrop-blur-xs hidden items-center justify-center p-4">
+    <div onclick="event.stopPropagation()" class="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div>
+                <h3 class="font-display text-base font-bold text-slate-900">Pay Supplier Due</h3>
+                <p id="supPaySubtitle" class="text-xs text-slate-500 mt-0.5"></p>
+            </div>
+            <button type="button" onclick="closeSupplierPayModal()" class="text-slate-400 hover:text-slate-700 p-1 text-lg leading-none cursor-pointer">&times;</button>
+        </div>
+        <form id="supPayForm" method="POST" action="" class="p-5 space-y-3.5 text-sm">
+            @csrf
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Amount ({{ $cur }}) *</label>
+                <input type="number" step="0.01" min="0.01" name="amount" id="supPayAmount" required class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl tabular-nums outline-none focus:border-indigo-500">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Payment Method</label>
+                <select name="payment_method" class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl bg-white outline-none focus:border-indigo-500">
+                    <option value="cash">Cash</option>
+                    <option value="bank">Bank Transfer</option>
+                    <option value="bkash">bKash</option>
+                    <option value="nagad">Nagad</option>
+                </select>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="closeSupplierPayModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">Cancel</button>
+                <button type="submit" style="background: linear-gradient(135deg, #059669, #10b981);" class="px-5 py-2 rounded-xl text-xs font-semibold text-white cursor-pointer">Confirm Payment</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script type="application/json" id="purchaseSuppliersData">@json($suppliersJson)</script>
+<script type="application/json" id="purchaseProductsData">@json($productsJson)</script>
+
+<script>
+(function() {
+    var cur = @json($cur);
+    var suppliers = [];
+    var products = [];
+    try { suppliers = JSON.parse(document.getElementById('purchaseSuppliersData').textContent || '[]'); } catch (e) {}
+    try { products = JSON.parse(document.getElementById('purchaseProductsData').textContent || '[]'); } catch (e) {}
+
+    var cart = [];
+    var supplierWrap = document.getElementById('purchaseSupplierWrap');
+    var supplierSearch = document.getElementById('purchaseSupplierSearch');
+    var supplierDropdown = document.getElementById('purchaseSupplierDropdown');
+    var supplierIdInput = document.getElementById('purchaseSupplierId');
+    var supplierChip = document.getElementById('purchaseSupplierChip');
+
+    var productWrap = document.getElementById('purchaseProductWrap');
+    var productSearch = document.getElementById('purchaseProductSearch');
+    var productDropdown = document.getElementById('purchaseProductDropdown');
+
+    var cartTbody = document.getElementById('purchaseCartTbody');
+    var cartBadge = document.getElementById('purchaseCartBadge');
+    var hiddenInputs = document.getElementById('purchaseCartHiddenInputs');
+    var discountInput = document.getElementById('purchaseDiscountInput');
+    var paidInput = document.getElementById('purchasePaidInput');
+    var fullPaidBtn = document.getElementById('purchaseFullPaidBtn');
+    var errorBox = document.getElementById('purchaseClientError');
+
+    function showError(msg) {
+        if (!errorBox) return;
+        errorBox.textContent = msg;
+        errorBox.classList.remove('hidden');
+        errorBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function clearError() {
+        if (errorBox) errorBox.classList.add('hidden');
+    }
+
+    function renderSupplierDropdown() {
+        if (!supplierDropdown) return;
+        var q = (supplierSearch.value || '').trim().toLowerCase();
+        var active = suppliers.find(function(s) { return String(s.id) === String(supplierIdInput.value); });
+        var list = (!q || (active && active.name.toLowerCase() === q))
+            ? suppliers.slice(0, 12)
+            : suppliers.filter(function(s) {
+                return s.name.toLowerCase().includes(q) ||
+                    (s.phone || '').toLowerCase().includes(q) ||
+                    (s.email || '').toLowerCase().includes(q);
+            }).slice(0, 12);
+
+        supplierDropdown.innerHTML = '';
+        if (list.length === 0) {
+            var empty = document.createElement('div');
+            empty.className = 'px-3.5 py-3 text-xs text-slate-400';
+            empty.textContent = 'No matching suppliers found.';
+            supplierDropdown.appendChild(empty);
+            return;
+        }
+        list.forEach(function(s) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'w-full px-3.5 py-2 text-left text-xs hover:bg-indigo-50 flex items-center justify-between gap-2 cursor-pointer ' +
+                (String(s.id) === String(supplierIdInput.value) ? 'bg-indigo-50/70 font-semibold text-indigo-800' : 'text-slate-700');
+            var nameSpan = document.createElement('span');
+            nameSpan.className = 'truncate';
+            nameSpan.textContent = s.name;
+            var metaSpan = document.createElement('span');
+            metaSpan.className = 'text-[11px] text-slate-400 font-mono shrink-0';
+            metaSpan.textContent = s.phone || s.email || '';
+            btn.appendChild(nameSpan);
+            btn.appendChild(metaSpan);
+            btn.addEventListener('click', function() {
+                supplierIdInput.value = s.id;
+                supplierSearch.value = s.name;
+                if (supplierChip) {
+                    supplierChip.textContent = s.name;
+                    supplierChip.classList.remove('hidden');
+                }
+                supplierDropdown.classList.add('hidden');
+                clearError();
+            });
+            supplierDropdown.appendChild(btn);
+        });
+    }
+
+    function getFilteredProducts() {
+        var q = (productSearch.value || '').trim().toLowerCase();
+        if (!q) return products.slice(0, 15);
+        return products.filter(function(p) {
+            return p.name.toLowerCase().includes(q) ||
+                (p.sku || '').toLowerCase().includes(q) ||
+                (p.barcode || '').toLowerCase().includes(q);
+        }).slice(0, 15);
+    }
+
+    function renderProductDropdown() {
+        if (!productDropdown) return;
+        var list = getFilteredProducts();
+        productDropdown.innerHTML = '';
+        if (list.length === 0) {
+            var empty = document.createElement('div');
+            empty.className = 'px-4 py-4 text-xs text-slate-400';
+            empty.textContent = 'No matching products found.';
+            productDropdown.appendChild(empty);
+            return;
+        }
+        list.forEach(function(p) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'w-full px-4 py-2.5 text-left text-xs hover:bg-indigo-50 flex items-center justify-between gap-3 cursor-pointer';
+
+            var left = document.createElement('div');
+            left.className = 'min-w-0';
+            var title = document.createElement('div');
+            title.className = 'font-semibold text-slate-900 truncate';
+            title.textContent = p.name;
+            var sub = document.createElement('div');
+            sub.className = 'text-[11px] text-slate-400 font-mono';
+            sub.textContent = (p.sku || 'No SKU') + (p.barcode ? (' · ' + p.barcode) : '') + ' · Stock: ' + p.stock;
+            left.appendChild(title);
+            left.appendChild(sub);
+
+            var right = document.createElement('div');
+            right.className = 'text-right shrink-0';
+            var cost = document.createElement('div');
+            cost.className = 'font-mono font-bold text-indigo-700 tabular-nums';
+            cost.textContent = cur + Number(p.purchase_price || 0).toFixed(2);
+            var addHint = document.createElement('div');
+            addHint.className = 'text-[10px] text-emerald-600 font-semibold';
+            addHint.textContent = '+ Add';
+            right.appendChild(cost);
+            right.appendChild(addHint);
+
+            btn.appendChild(left);
+            btn.appendChild(right);
+            btn.addEventListener('click', function() {
+                addProductToCart(p);
+            });
+            productDropdown.appendChild(btn);
+        });
+    }
+
+    function addProductToCart(product) {
+        clearError();
+        var existing = cart.find(function(item) { return item.product_id === product.id; });
+        if (existing) {
+            existing.quantity += 1;
+        } else {
+            cart.push({
+                product_id: product.id,
+                name: product.name,
+                sku: product.sku || '',
+                stock: Number(product.stock || 0),
+                price: Number(product.purchase_price || 0),
+                quantity: 1
+            });
+        }
+        productSearch.value = '';
+        productDropdown.classList.add('hidden');
+        renderCart();
+    }
+
+    function updateSummaryAndHiddenInputs() {
+        var subtotal = cart.reduce(function(sum, it) { return sum + (it.price * it.quantity); }, 0);
+        var disc = Math.max(0, Math.min(subtotal, Number(discountInput.value || 0)));
+        var total = Math.max(0, subtotal - disc);
+        var paid = Math.max(0, Math.min(total, Number(paidInput.value || 0)));
+        var due = Math.max(0, total - paid);
+
+        document.getElementById('purchaseSubtotalText').textContent = cur + subtotal.toFixed(2);
+        document.getElementById('purchaseTotalText').textContent = cur + total.toFixed(2);
+
+        if (total > 0) {
+            fullPaidBtn.classList.remove('hidden');
+            document.getElementById('purchaseDueRow').classList.remove('hidden');
+            var dueEl = document.getElementById('purchaseDueText');
+            dueEl.textContent = cur + due.toFixed(2);
+            dueEl.className = 'font-mono font-bold tabular-nums ' + (due > 0 ? 'text-rose-600' : 'text-emerald-600');
+        } else {
+            fullPaidBtn.classList.add('hidden');
+            document.getElementById('purchaseDueRow').classList.add('hidden');
+        }
+
+        if (cart.length > 0) {
+            cartBadge.classList.remove('hidden');
+            cartBadge.textContent = cart.length + (cart.length === 1 ? ' product' : ' products') + ' in cart';
+        } else {
+            cartBadge.classList.add('hidden');
+        }
+
+        hiddenInputs.innerHTML = '';
+        cart.forEach(function(item, idx) {
+            [
+                ['product_id', item.product_id],
+                ['quantity', item.quantity],
+                ['price', item.price]
+            ].forEach(function(pair) {
+                var inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.name = 'items[' + idx + '][' + pair[0] + ']';
+                inp.value = String(pair[1]);
+                hiddenInputs.appendChild(inp);
+            });
+        });
+    }
+
+    function renderCart() {
+        cartTbody.innerHTML = '';
+        if (cart.length === 0) {
+            var emptyTr = document.createElement('tr');
+            var emptyTd = document.createElement('td');
+            emptyTd.colSpan = 6;
+            emptyTd.className = 'px-4 py-10 text-center text-slate-400 text-xs font-medium';
+            emptyTd.textContent = 'Cart is empty. Search and add products.';
+            emptyTr.appendChild(emptyTd);
+            cartTbody.appendChild(emptyTr);
+            updateSummaryAndHiddenInputs();
+            return;
+        }
+
+        cart.forEach(function(item, idx) {
+            var tr = document.createElement('tr');
+            tr.className = 'hover:bg-slate-50/70';
+
+            var tdSl = document.createElement('td');
+            tdSl.className = 'px-4 py-2.5 font-mono text-xs text-slate-500 tabular-nums';
+            tdSl.textContent = String(idx + 1);
+
+            var tdProd = document.createElement('td');
+            tdProd.className = 'px-4 py-2.5';
+            var pName = document.createElement('div');
+            pName.className = 'font-semibold text-slate-900';
+            pName.textContent = item.name;
+            var pMeta = document.createElement('div');
+            pMeta.className = 'text-[11px] text-slate-400 font-mono';
+            pMeta.textContent = (item.sku ? item.sku + ' · ' : '') + 'In stock: ' + item.stock;
+            tdProd.appendChild(pName);
+            tdProd.appendChild(pMeta);
+
+            var tdRate = document.createElement('td');
+            tdRate.className = 'px-4 py-2.5 text-right';
+            var rateInp = document.createElement('input');
+            rateInp.type = 'number';
+            rateInp.step = '0.01';
+            rateInp.min = '0';
+            rateInp.value = String(item.price);
+            rateInp.className = 'w-28 ml-auto px-2.5 py-1.5 text-right font-mono text-xs border border-slate-200 rounded-lg bg-slate-50/60 focus:bg-white focus:border-indigo-500 outline-none tabular-nums';
+            tdRate.appendChild(rateInp);
+
+            var tdQty = document.createElement('td');
+            tdQty.className = 'px-4 py-2.5 text-center';
+            var qtyInp = document.createElement('input');
+            qtyInp.type = 'number';
+            qtyInp.min = '1';
+            qtyInp.value = String(item.quantity);
+            qtyInp.className = 'w-20 mx-auto px-2.5 py-1.5 text-center font-mono text-xs border border-slate-200 rounded-lg bg-slate-50/60 focus:bg-white focus:border-indigo-500 outline-none tabular-nums';
+            tdQty.appendChild(qtyInp);
+
+            var tdSub = document.createElement('td');
+            tdSub.className = 'px-4 py-2.5 text-right font-mono text-xs font-bold text-slate-900 tabular-nums whitespace-nowrap';
+            tdSub.textContent = cur + (item.price * item.quantity).toFixed(2);
+
+            rateInp.addEventListener('input', function() {
+                item.price = Math.max(0, Number(rateInp.value || 0));
+                tdSub.textContent = cur + (item.price * item.quantity).toFixed(2);
+                updateSummaryAndHiddenInputs();
+            });
+            qtyInp.addEventListener('input', function() {
+                item.quantity = Math.max(1, Math.floor(Number(qtyInp.value || 1)));
+                tdSub.textContent = cur + (item.price * item.quantity).toFixed(2);
+                updateSummaryAndHiddenInputs();
+            });
+
+            var tdAct = document.createElement('td');
+            tdAct.className = 'px-4 py-2.5 text-center';
+            var rmBtn = document.createElement('button');
+            rmBtn.type = 'button';
+            rmBtn.className = 'px-2 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer';
+            rmBtn.textContent = 'Remove';
+            rmBtn.addEventListener('click', function() {
+                cart = cart.filter(function(c) { return c.product_id !== item.product_id; });
+                renderCart();
+            });
+            tdAct.appendChild(rmBtn);
+
+            tr.appendChild(tdSl);
+            tr.appendChild(tdProd);
+            tr.appendChild(tdRate);
+            tr.appendChild(tdQty);
+            tr.appendChild(tdSub);
+            tr.appendChild(tdAct);
+            cartTbody.appendChild(tr);
+        });
+        updateSummaryAndHiddenInputs();
+    }
+
+    if (supplierSearch) {
+        supplierSearch.addEventListener('focus', function() {
+            renderSupplierDropdown();
+            supplierDropdown.classList.remove('hidden');
+        });
+        supplierSearch.addEventListener('input', function() {
+            renderSupplierDropdown();
+            supplierDropdown.classList.remove('hidden');
+        });
+    }
+
+    if (productSearch) {
+        productSearch.addEventListener('focus', function() {
+            renderProductDropdown();
+            productDropdown.classList.remove('hidden');
+        });
+        productSearch.addEventListener('input', function() {
+            renderProductDropdown();
+            productDropdown.classList.remove('hidden');
+        });
+        productSearch.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                var list = getFilteredProducts();
+                if (list.length > 0) {
+                    e.preventDefault();
+                    addProductToCart(list[0]);
+                }
+            }
+        });
+    }
+
+    if (discountInput) discountInput.addEventListener('input', updateSummaryAndHiddenInputs);
+    if (paidInput) paidInput.addEventListener('input', updateSummaryAndHiddenInputs);
+    if (fullPaidBtn) {
+        fullPaidBtn.addEventListener('click', function() {
+            var subtotal = cart.reduce(function(sum, it) { return sum + (it.price * it.quantity); }, 0);
+            var disc = Math.max(0, Math.min(subtotal, Number(discountInput.value || 0)));
+            var total = Math.max(0, subtotal - disc);
+            paidInput.value = total.toFixed(2);
+            updateSummaryAndHiddenInputs();
+        });
+    }
+
+    document.getElementById('multiPurchaseForm').addEventListener('submit', function(e) {
+        if (!supplierIdInput.value) {
+            e.preventDefault();
+            showError('Please select a supplier first.');
+            return;
+        }
+        if (cart.length === 0) {
+            e.preventDefault();
+            showError('Cart is empty. Search and add at least one product.');
+            return;
+        }
+        updateSummaryAndHiddenInputs();
+    });
+
+    document.addEventListener('mousedown', function(e) {
+        if (supplierWrap && !supplierWrap.contains(e.target)) supplierDropdown.classList.add('hidden');
+        if (productWrap && !productWrap.contains(e.target)) productDropdown.classList.add('hidden');
+    });
+
+    window.openSupplierPayModal = function(id, inv, supplier, due) {
+        var form = document.getElementById('supPayForm');
+        form.action = '{{ url('/purchases') }}/' + id + '/payment';
+        document.getElementById('supPaySubtitle').textContent = inv + ' · ' + supplier + ' (Due: ' + cur + Number(due).toFixed(2) + ')';
+        document.getElementById('supPayAmount').value = Number(due).toFixed(2);
+        document.getElementById('supPayAmount').max = Number(due).toFixed(2);
+        var modal = document.getElementById('supplierPayModal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    };
+    window.closeSupplierPayModal = function() {
+        var modal = document.getElementById('supplierPayModal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+    };
+
+    renderCart();
+})();
+</script>
 @endsection

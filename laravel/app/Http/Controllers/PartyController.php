@@ -12,6 +12,10 @@ class PartyController extends Controller
 {
     public function customers(Request $request): View
     {
+        $limit = in_array($request->integer('limit'), [10, 20, 50, 100], true)
+            ? $request->integer('limit')
+            : 10;
+
         $customers = Customer::query()
             ->withSum('sales as total_billed', 'receivable')
             ->withSum('sales as total_due', 'due')
@@ -20,10 +24,10 @@ class PartyController extends Controller
                 $q->where(fn ($w) => $w->where('name', 'like', $term)->orWhere('phone', 'like', $term)->orWhere('email', 'like', $term));
             })
             ->orderByDesc('id')
-            ->paginate(25)
+            ->paginate($limit)
             ->withQueryString();
 
-        return view('parties.customers', compact('customers'));
+        return view('parties.customers', compact('customers', 'limit'));
     }
 
     public function storeCustomer(Request $request): RedirectResponse
@@ -53,6 +57,10 @@ class PartyController extends Controller
 
     public function suppliers(Request $request): View
     {
+        $limit = in_array($request->integer('limit'), [10, 20, 50, 100], true)
+            ? $request->integer('limit')
+            : 10;
+
         $suppliers = Supplier::query()
             ->withSum('purchases as total_purchased', 'total')
             ->withSum('purchases as total_due', 'due')
@@ -61,10 +69,10 @@ class PartyController extends Controller
                 $q->where(fn ($w) => $w->where('name', 'like', $term)->orWhere('phone', 'like', $term)->orWhere('email', 'like', $term));
             })
             ->orderByDesc('id')
-            ->paginate(25)
+            ->paginate($limit)
             ->withQueryString();
 
-        return view('parties.suppliers', compact('suppliers'));
+        return view('parties.suppliers', compact('suppliers', 'limit'));
     }
 
     public function storeSupplier(Request $request): RedirectResponse

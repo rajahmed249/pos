@@ -14,13 +14,17 @@ use Illuminate\View\View;
 
 class EstimateController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
-        $estimates = Estimate::query()->with('items')->orderByDesc('id')->paginate(20);
+        $limit = in_array($request->integer('limit'), [10, 20, 50, 100], true)
+            ? $request->integer('limit')
+            : 10;
+
+        $estimates = Estimate::query()->with('items')->orderByDesc('id')->paginate($limit)->withQueryString();
         $customers = Customer::query()->orderBy('name')->get();
         $products = Product::query()->where('status', true)->orderBy('name')->get();
 
-        return view('estimates.index', compact('estimates', 'customers', 'products'));
+        return view('estimates.index', compact('estimates', 'customers', 'products', 'limit'));
     }
 
     public function store(Request $request): RedirectResponse

@@ -6,117 +6,401 @@
 @section('content')
 @php $cur = $appSettings['currency'] ?? '৳'; @endphp
 
-<div class="space-y-6">
+<div class="space-y-5">
+    {{-- Page Header --}}
     <div class="flex flex-wrap items-center justify-between gap-4">
         <div class="flex items-center gap-3 sm:gap-4 min-w-0">
-            <div class="w-11 h-11 sm:w-[52px] sm:h-[52px] shrink-0 rounded-xl flex items-center justify-center text-white text-xl sm:text-2xl shadow-[0_8px_24px_rgba(79,70,229,0.3)]"
+            <div class="w-11 h-11 sm:w-[50px] sm:h-[50px] shrink-0 rounded-xl flex items-center justify-center text-white text-xl shadow-[0_8px_24px_rgba(79,70,229,0.28)]"
                  style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
                 <i class="fas fa-file-invoice shrink-0"></i>
             </div>
             <div class="min-w-0">
                 <h1 class="text-xl sm:text-2xl font-bold text-[#0f172a] truncate">Sales Management</h1>
-                <p class="text-[12px] sm:text-[13px] text-[#64748b] mt-0.5"><i class="far fa-calendar-alt mr-1"></i>{{ date('d F, Y') }} &bull; <i class="far fa-clock mr-1"></i>{{ date('h:i A') }}</p>
+                <p class="text-[12px] text-[#64748b] mt-0.5"><i class="far fa-calendar-alt mr-1"></i>{{ date('d F, Y') }} &bull; <i class="far fa-clock mr-1"></i>{{ date('h:i A') }}</p>
             </div>
         </div>
         <a href="{{ route('pos.index') }}"
            style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
-           class="inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-[10px] text-[13px] font-semibold text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)] shrink-0 whitespace-nowrap">
+           class="inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-[10px] text-[13px] font-semibold text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)] hover:-translate-y-0.5 transition-all shrink-0 whitespace-nowrap">
             <i class="fas fa-plus-circle shrink-0"></i> New Sale
         </a>
     </div>
 
-    <div class="bg-white rounded-[20px] p-4 sm:px-5 shadow-xs border border-[#f1f5f9]">
-        <form method="GET" action="{{ route('sales.index') }}" class="flex flex-wrap gap-3">
-            <input type="text" name="q" value="{{ request('q') }}" placeholder="Search by Invoice No, Customer Name, Phone or Product..."
-                   class="w-full sm:flex-1 sm:min-w-[240px] px-4 py-2.5 border-2 border-[#e2e8f0] rounded-[10px] text-sm focus:outline-none focus:border-[#4f46e5]">
-            <select name="payment_status" class="w-full sm:w-auto px-3.5 py-2.5 border-2 border-[#e2e8f0] rounded-[10px] text-sm">
+    {{-- Search & Filter --}}
+    <div class="bg-white rounded-[20px] p-3.5 sm:px-5 shadow-xs border border-[#f1f5f9]">
+        <form method="GET" action="{{ route('sales.index') }}" class="flex flex-wrap gap-2.5 items-center">
+            @if(request('limit'))
+                <input type="hidden" name="limit" value="{{ (int) request('limit') }}">
+            @endif
+            <div class="relative w-full sm:flex-1 sm:min-w-[220px]">
+                <i class="fas fa-search text-xs text-[#94a3b8] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <input type="text" name="q" value="{{ request('q') }}" placeholder="Search by Invoice No, Customer Name, Phone or Product..."
+                       class="w-full pl-9 pr-4 py-2 border-2 border-[#e2e8f0] rounded-[10px] text-[13px] text-[#334155] focus:outline-none focus:border-[#4f46e5]">
+            </div>
+            <select name="payment_status" class="w-full sm:w-auto px-3.5 py-2 border-2 border-[#e2e8f0] rounded-[10px] text-[13px] font-medium text-[#334155] bg-white focus:outline-none focus:border-[#4f46e5]">
                 <option value="">All Status</option>
-                <option value="paid" @selected(request('payment_status') === 'paid')>Completed</option>
-                <option value="partial" @selected(request('payment_status') === 'partial')>Partial</option>
-                <option value="due" @selected(request('payment_status') === 'due')>Pending</option>
+                <option value="paid" @selected(request('payment_status') === 'paid')>Completed (Paid)</option>
+                <option value="partial" @selected(request('payment_status') === 'partial')>Pending (Partial)</option>
+                <option value="due" @selected(request('payment_status') === 'due')>Pending (Due)</option>
             </select>
-            <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" class="w-full sm:w-auto px-5 py-2.5 text-sm font-semibold text-white rounded-[10px] shrink-0">
-                Search
+            <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" class="w-full sm:w-auto px-5 py-2 text-[13px] font-semibold text-white rounded-[10px] shrink-0 cursor-pointer">
+                Filter
             </button>
         </form>
     </div>
 
-    <div class="bg-white rounded-[20px] shadow-xs border border-[#f1f5f9] overflow-hidden">
-        <div class="px-5 py-4 border-b border-[#f1f5f9] bg-[#f8fafc] flex flex-wrap items-center justify-between gap-3">
+    {{-- Sales Table Card (Compact One-Screen Fit) --}}
+    <div class="bg-white rounded-[20px] shadow-xs border border-[#f1f5f9] overflow-visible">
+        <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] rounded-t-[20px] flex flex-wrap items-center justify-between gap-3">
             <div class="flex items-center gap-2.5">
                 <i class="fas fa-list-ul text-[#4f46e5]"></i>
                 <h3 class="text-base font-semibold text-[#1e293b]">Sales List</h3>
-                <span class="px-3 py-0.5 rounded-full text-xs font-medium text-white" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                <span class="px-3 py-0.5 rounded-full text-xs font-medium text-white tabular-nums" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
                     {{ number_format($sales->total()) }}
                 </span>
             </div>
-            <div class="text-xs text-[#64748b]">Showing {{ $sales->count() }} of {{ number_format($sales->total()) }}</div>
+            <div class="text-xs text-[#64748b] tabular-nums">Showing {{ $sales->count() }} of {{ number_format($sales->total()) }}</div>
         </div>
 
         <div class="overflow-x-auto">
-            <table class="w-full text-[13px] border-collapse">
+            <table class="w-full text-[12px] border-collapse">
                 <thead class="bg-[#f8fafc]">
                     <tr>
-                        <th class="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">#</th>
-                        <th class="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Invoice</th>
-                        <th class="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Customer</th>
-                        <th class="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Products</th>
-                        <th class="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Date</th>
-                        <th class="py-3 px-4 text-right text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Amount</th>
-                        <th class="py-3 px-4 text-right text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Paid</th>
-                        <th class="py-3 px-4 text-right text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Due</th>
-                        <th class="py-3 px-4 text-center text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Status</th>
-                        <th class="py-3 px-4 text-center text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Actions</th>
+                        <th class="py-2.5 px-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] w-9">#</th>
+                        <th class="py-2.5 px-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] whitespace-nowrap">Invoice &amp; Date</th>
+                        <th class="py-2.5 px-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Customer</th>
+                        <th class="py-2.5 px-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] min-w-[175px]">Products</th>
+                        <th class="py-2.5 px-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] whitespace-nowrap">Amount</th>
+                        <th class="py-2.5 px-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] whitespace-nowrap">Paid</th>
+                        <th class="py-2.5 px-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] whitespace-nowrap">Due</th>
+                        <th class="py-2.5 px-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] whitespace-nowrap">Profit</th>
+                        <th class="py-2.5 px-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] whitespace-nowrap">Status</th>
+                        <th class="py-2.5 px-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] whitespace-nowrap">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach($sales as $idx => $sale)
-                        @php $completed = $sale->due <= 0; @endphp
-                        <tr class="border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
-                            <td class="py-3 px-4 text-[#64748b] tabular-nums">{{ $sales->firstItem() + $idx }}</td>
-                            <td class="py-3 px-4">
-                                <a href="{{ route('sales.invoice', $sale) }}" class="text-[#4f46e5] font-semibold hover:underline">{{ $sale->invoice_no }}</a>
+                    @forelse($sales as $idx => $sale)
+                        @php
+                            $due = (float) ($sale->due ?? 0);
+                            $paid = (float) ($sale->paid ?? 0);
+                            $receivable = (float) ($sale->receivable ?? 0);
+                            $purchaseCost = (float) ($sale->purchase_cost ?? 0);
+                            if ($purchaseCost <= 0 && $sale->items->isNotEmpty()) {
+                                $purchaseCost = (float) $sale->items->sum(fn ($it) => ((float) ($it->product?->purchase_price ?? 0)) * max(1, (int) ($it->quantity ?? 1)));
+                            }
+                            $profitVal = (float) ($sale->profit ?? 0);
+                            if (abs($profitVal) < 0.001 && $purchaseCost > 0) {
+                                $profitVal = $receivable - $purchaseCost;
+                            }
+                            $completed = $due <= 0.009;
+                            $saleDt = $sale->date ?? $sale->sale_date ?? $sale->created_at;
+                            $dateText = $saleDt ? \Illuminate\Support\Carbon::parse($saleDt)->format('d M Y') : '—';
+                            $timeText = ($sale->created_at || $sale->sale_date)
+                                ? \Illuminate\Support\Carbon::parse($sale->created_at ?? $sale->sale_date)->format('h:i A')
+                                : '';
+                            $items = $sale->items;
+                            $previewItems = $items->take(3);
+                            $extraItems = $items->slice(3);
+                        @endphp
+                        <tr class="border-b border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors align-top">
+                            <td class="py-2.5 px-2.5 text-[#64748b] tabular-nums">{{ ($sales->firstItem() ?? 1) + $idx }}</td>
+                            <td class="py-2.5 px-2.5 whitespace-nowrap">
+                                <a href="{{ route('sales.invoice', $sale) }}" class="text-[#4f46e5] font-bold text-[12px] hover:underline block leading-tight">
+                                    {{ $sale->invoice_no }}
+                                </a>
+                                <div class="text-[10.5px] text-[#64748b] tabular-nums mt-0.5">
+                                    {{ $dateText }}@if($timeText) &middot; {{ $timeText }}@endif
+                                </div>
                             </td>
-                            <td class="py-3 px-4">
-                                <div class="font-semibold text-[#1e293b]">{{ $sale->customer_name ?: 'Walk-in Customer' }}</div>
+                            <td class="py-2.5 px-2.5">
+                                <div class="font-semibold text-[#1e293b] leading-tight max-w-[155px] truncate" title="{{ $sale->customer_name ?: ($sale->customer?->name ?: 'Walk-in Customer') }}">
+                                    {{ $sale->customer_name ?: ($sale->customer?->name ?: 'Walk-in Customer') }}
+                                </div>
                                 @if($sale->customer?->phone)
-                                    <div class="text-[11px] text-[#94a3b8]"><i class="fas fa-phone mr-1"></i>{{ $sale->customer->phone }}</div>
+                                    <div class="text-[10.5px] text-[#94a3b8] tabular-nums mt-0.5"><i class="fas fa-phone mr-1 text-[9px]"></i>{{ $sale->customer->phone }}</div>
                                 @endif
                             </td>
-                            <td class="py-3 px-4">
-                                <ul class="list-disc pl-4 space-y-0.5 text-xs text-[#475569]">
-                                    @foreach($sale->items->take(4) as $item)
-                                        <li>{{ $item->product_name }} <span class="text-[#94a3b8]">×{{ $item->quantity }}</span></li>
-                                    @endforeach
-                                </ul>
+                            <td class="py-2.5 px-2.5">
+                                @if($items->isNotEmpty())
+                                    <ul class="list-disc pl-3.5 space-y-0.5 m-0 text-[11px] text-[#475569]">
+                                        @foreach($previewItems as $item)
+                                            @php $itemName = $item->product_name ?: ($item->product?->name ?: 'Product #' . $item->product_id); @endphp
+                                            <li class="leading-snug">{{ $itemName }} <span class="text-[#94a3b8] font-medium">×{{ (int) $item->quantity }}</span></li>
+                                        @endforeach
+                                        @if($extraItems->isNotEmpty())
+                                            <div id="sale-extra-{{ $sale->id }}" class="hidden space-y-0.5">
+                                                @foreach($extraItems as $item)
+                                                    @php $itemName = $item->product_name ?: ($item->product?->name ?: 'Product #' . $item->product_id); @endphp
+                                                    <li class="leading-snug">{{ $itemName }} <span class="text-[#94a3b8] font-medium">×{{ (int) $item->quantity }}</span></li>
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                    </ul>
+                                    @if($extraItems->isNotEmpty())
+                                        <button type="button"
+                                                onclick="toggleSaleItems({{ $sale->id }}, {{ $extraItems->count() }})"
+                                                id="sale-toggle-{{ $sale->id }}"
+                                                class="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-[#4f46e5] hover:text-[#4338ca] hover:underline cursor-pointer">
+                                            +{{ $extraItems->count() }} more items
+                                        </button>
+                                    @endif
+                                @else
+                                    <span class="text-[11px] text-slate-400">&mdash;</span>
+                                @endif
                             </td>
-                            <td class="py-3 px-4 text-xs text-slate-600 tabular-nums">{{ $sale->date?->format('d M Y') }}</td>
-                            <td class="py-3 px-4 text-right font-semibold tabular-nums">{{ $cur }}{{ number_format($sale->receivable, 2) }}</td>
-                            <td class="py-3 px-4 text-right font-semibold text-[#10b981] tabular-nums">{{ $cur }}{{ number_format($sale->paid, 2) }}</td>
-                            <td class="py-3 px-4 text-right font-semibold tabular-nums {{ $sale->due > 0 ? 'text-[#ef4444]' : 'text-[#10b981]' }}">
-                                {{ $cur }}{{ number_format($sale->due, 2) }}
+                            <td class="py-2.5 px-2.5 text-right font-semibold text-slate-800 tabular-nums whitespace-nowrap">{{ $cur }}{{ number_format($receivable, 2) }}</td>
+                            <td class="py-2.5 px-2.5 text-right font-semibold text-[#10b981] tabular-nums whitespace-nowrap">{{ $cur }}{{ number_format($paid, 2) }}</td>
+                            <td class="py-2.5 px-2.5 text-right font-semibold tabular-nums whitespace-nowrap {{ $due > 0 ? 'text-[#ef4444]' : 'text-[#10b981]' }}">
+                                {{ $cur }}{{ number_format($due, 2) }}
                             </td>
-                            <td class="py-3 px-4 text-center">
-                                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold {{ $completed ? 'bg-[#d1fae5] text-[#065f46]' : 'bg-[#fee2e2] text-[#991b1b]' }}">
+                            <td class="py-2.5 px-2.5 text-right font-bold tabular-nums whitespace-nowrap {{ $profitVal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]' }}">
+                                {{ $cur }}{{ number_format($profitVal, 2) }}
+                            </td>
+                            <td class="py-2.5 px-2.5 text-center whitespace-nowrap">
+                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-semibold {{ $completed ? 'bg-[#d1fae5] text-[#065f46]' : 'bg-[#fee2e2] text-[#991b1b]' }}">
                                     <span class="w-1.5 h-1.5 rounded-full {{ $completed ? 'bg-[#10b981]' : 'bg-[#ef4444]' }}"></span>
                                     {{ $completed ? 'Completed' : 'Pending' }}
                                 </span>
                             </td>
-                            <td class="py-3 px-4 text-center whitespace-nowrap space-x-2 text-xs">
-                                <a href="{{ route('sales.invoice', $sale) }}" class="text-[#4f46e5] font-semibold hover:underline">Invoice</a>
-                                <a href="{{ route('sales.print', $sale) }}" class="text-[#059669] font-semibold hover:underline">Print</a>
-                                <form method="POST" action="{{ route('sales.destroy', $sale) }}" class="inline">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button type="submit" class="text-[#ef4444] font-semibold hover:underline">Delete</button>
-                                </form>
+                            <td class="py-2.5 px-2.5 text-center whitespace-nowrap">
+                                <button type="button"
+                                        onclick="openSaleActionMenu(event, {{ $sale->id }})"
+                                        class="w-8 h-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 cursor-pointer"
+                                        aria-label="Sale Actions">
+                                    <i class="fas fa-ellipsis-v text-xs"></i>
+                                </button>
+
+                                <div id="sale-menu-{{ $sale->id }}"
+                                     onclick="event.stopPropagation()"
+                                     class="sale-floating-menu hidden fixed w-48 bg-white rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.16)] border border-[#e2e8f0] py-1.5 z-[110] text-left">
+                                    <a href="{{ route('sales.invoice', $sale) }}"
+                                       class="w-full px-4 py-2 text-[12.5px] text-[#334155] hover:bg-[#f8fafc] hover:text-[#4f46e5] flex items-center gap-2.5">
+                                        <i class="far fa-eye w-4 text-center"></i> View Invoice
+                                    </a>
+                                    <a href="{{ route('sales.print', $sale) }}"
+                                       class="w-full px-4 py-2 text-[12.5px] text-[#334155] hover:bg-[#f8fafc] hover:text-[#059669] flex items-center gap-2.5">
+                                        <i class="fas fa-print w-4 text-center"></i> Print Invoice
+                                    </a>
+                                    @if($due > 0.009)
+                                        <button type="button"
+                                                onclick='openSalePaymentModal({{ $sale->id }}, @json($sale->invoice_no), {{ number_format($due, 2, ".", "") }})'
+                                                class="w-full px-4 py-2 text-[12.5px] text-[#334155] hover:bg-[#f8fafc] hover:text-[#4f46e5] flex items-center gap-2.5 cursor-pointer">
+                                            <i class="fas fa-credit-card w-4 text-center"></i> Add Payment
+                                        </button>
+                                    @endif
+                                    <button type="button"
+                                            onclick='openSaleDeleteModal({{ $sale->id }}, @json($sale->invoice_no))'
+                                            class="w-full px-4 py-2 text-[12.5px] text-[#ef4444] hover:bg-[#fee2e2] hover:text-[#dc2626] flex items-center gap-2.5 cursor-pointer">
+                                        <i class="fas fa-trash-alt w-4 text-center"></i> Delete Sale
+                                    </button>
+                                </div>
                             </td>
                         </tr>
-                    @endforeach
+                    @empty
+                        <tr>
+                            <td colspan="10" class="py-14 text-center">
+                                <i class="fas fa-file-invoice text-4xl text-[#cbd5e1] mb-3 block"></i>
+                                <h3 class="text-base font-semibold text-[#334155]">No Sales Found</h3>
+                                <p class="text-xs text-[#94a3b8] mt-1">Try adjusting your search or create a new sale.</p>
+                            </td>
+                        </tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>
-        <div class="p-4 border-t border-[#f1f5f9] bg-[#f8fafc]">{{ $sales->links() }}</div>
+
+        <div class="px-5 py-3.5 border-t border-[#f1f5f9] bg-[#f8fafc] rounded-b-[20px]">
+            {{ $sales->links('pagination.custom') }}
+        </div>
     </div>
 </div>
+
+{{-- Collect Due Payment Modal --}}
+<div id="salePayModal" onclick="closeSalePayModal()" class="hidden fixed inset-0 z-[120] bg-slate-900/55 items-center justify-center p-4">
+    <div onclick="event.stopPropagation()" class="bg-white rounded-[20px] w-full max-w-[440px] shadow-2xl overflow-hidden">
+        <div class="relative px-6 pt-5 pb-4 text-center bg-gradient-to-b from-[#f8fafc] to-white border-b border-[#f1f5f9]">
+            <div class="w-12 h-12 rounded-full mx-auto mb-2.5 flex items-center justify-center text-white shadow-[0_8px_24px_rgba(79,70,229,0.25)]"
+                 style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                <i class="fas fa-credit-card text-lg"></i>
+            </div>
+            <h3 class="text-lg font-bold text-[#1e293b]">Add Payment</h3>
+            <button type="button" onclick="closeSalePayModal()" class="absolute top-3.5 right-4 text-[#94a3b8] hover:text-[#475569] cursor-pointer">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form id="salePayForm" method="POST" action="#" class="p-5 sm:p-6 space-y-4">
+            @csrf
+            <div class="bg-gradient-to-br from-[#f8fafc] to-[#f1f5f9] rounded-xl p-3.5 border border-[#e2e8f0]">
+                <div class="flex justify-between items-center pb-2 mb-1.5 border-b border-[#e2e8f0]">
+                    <span class="text-xs font-medium text-[#64748b]">Invoice No</span>
+                    <span id="salePayInvoice" class="text-sm font-semibold text-[#1e293b]"></span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-medium text-[#64748b]">Remaining Due</span>
+                    <span id="salePayDueText" class="text-lg font-bold text-[#ef4444] tabular-nums"></span>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-[#475569] mb-1">Amount <span class="text-red-500">*</span></label>
+                <input id="salePayAmount" type="number" name="amount" step="0.01" min="0.01" required
+                       class="w-full px-3.5 py-2.5 border-2 border-[#e2e8f0] rounded-[10px] text-lg font-bold text-[#1e293b] tabular-nums focus:outline-none focus:border-[#4f46e5]">
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-[#475569] mb-1">Payment Method</label>
+                    <select name="payment_method" class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px] text-sm bg-white focus:outline-none focus:border-[#4f46e5]">
+                        <option value="cash">Cash</option>
+                        <option value="card">Card</option>
+                        <option value="mobile_banking">Mobile Banking</option>
+                        <option value="bank_transfer">Bank Transfer</option>
+                        <option value="cheque">Cheque</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-[#475569] mb-1">Bank Account <span class="text-red-500">*</span></label>
+                    <select name="account_id" required class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px] text-sm bg-white focus:outline-none focus:border-[#4f46e5]">
+                        @foreach($accounts as $acc)
+                            <option value="{{ $acc->id }}">{{ $acc->account_name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-[#475569] mb-1">Payment Date</label>
+                    <input type="date" name="payment_date" value="{{ date('Y-m-d') }}" class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px] text-sm focus:outline-none focus:border-[#4f46e5]">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-[#475569] mb-1">Reference No</label>
+                    <input type="text" name="reference_no" placeholder="Optional" class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px] text-sm focus:outline-none focus:border-[#4f46e5]">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-[#475569] mb-1">Note</label>
+                <input type="text" name="note" placeholder="Due collection" class="w-full px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px] text-sm focus:outline-none focus:border-[#4f46e5]">
+            </div>
+
+            <div class="flex justify-end gap-2.5 pt-2">
+                <button type="button" onclick="closeSalePayModal()" class="px-5 py-2 rounded-full bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#475569] text-xs font-semibold cursor-pointer">Cancel</button>
+                <button type="submit" style="background: linear-gradient(135deg, #10b981, #059669);" class="px-6 py-2 rounded-full text-white text-xs font-semibold shadow-sm cursor-pointer">
+                    <i class="fas fa-check-circle mr-1"></i> Confirm Payment
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{{-- Delete Sale Confirmation Modal --}}
+<div id="saleDeleteModal" onclick="closeSaleDeleteModal()" class="hidden fixed inset-0 z-[120] bg-slate-900/55 items-center justify-center p-4">
+    <div onclick="event.stopPropagation()" class="bg-white rounded-[20px] w-full max-w-sm p-6 shadow-2xl space-y-4">
+        <div class="flex items-center gap-3 text-red-600">
+            <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <i class="fas fa-trash-alt"></i>
+            </div>
+            <div>
+                <h3 class="font-bold text-slate-900 text-base">Delete Sale <span id="saleDeleteInvoice"></span>?</h3>
+                <p class="text-xs text-slate-500">Sold product stock quantities will be restored automatically.</p>
+            </div>
+        </div>
+        <form id="saleDeleteForm" method="POST" action="#" class="flex justify-end gap-2 pt-2">
+            @csrf
+            @method('DELETE')
+            <button type="button" onclick="closeSaleDeleteModal()" class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold cursor-pointer">Cancel</button>
+            <button type="submit" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold cursor-pointer">Delete &amp; Restore Stock</button>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    var activeSaleMenuId = null;
+
+    window.toggleSaleItems = function (saleId, extraCount) {
+        var box = document.getElementById('sale-extra-' + saleId);
+        var btn = document.getElementById('sale-toggle-' + saleId);
+        if (!box || !btn) return;
+        var isHidden = box.classList.contains('hidden');
+        box.classList.toggle('hidden');
+        btn.textContent = isHidden ? 'Show less' : '+' + extraCount + ' more items';
+    };
+
+    window.closeSaleActionMenus = function () {
+        document.querySelectorAll('.sale-floating-menu').forEach(function (el) {
+            el.classList.add('hidden');
+        });
+        activeSaleMenuId = null;
+    };
+
+    window.openSaleActionMenu = function (e, saleId) {
+        e.stopPropagation();
+        var menu = document.getElementById('sale-menu-' + saleId);
+        if (!menu) return;
+        if (activeSaleMenuId === saleId && !menu.classList.contains('hidden')) {
+            window.closeSaleActionMenus();
+            return;
+        }
+        window.closeSaleActionMenus();
+        menu.classList.remove('hidden');
+        var rect = e.currentTarget.getBoundingClientRect();
+        var menuWidth = 192;
+        var menuHeight = menu.offsetHeight || 168;
+        var left = Math.max(12, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 12));
+        var spaceBelow = window.innerHeight - rect.bottom;
+        var top = spaceBelow >= menuHeight + 8 ? rect.bottom + 6 : Math.max(12, rect.top - menuHeight - 6);
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+        activeSaleMenuId = saleId;
+    };
+
+    window.openSalePaymentModal = function (saleId, invoiceNo, dueAmount) {
+        window.closeSaleActionMenus();
+        var form = document.getElementById('salePayForm');
+        form.action = '{{ url("/sales") }}/' + saleId + '/payment';
+        document.getElementById('salePayInvoice').textContent = invoiceNo;
+        document.getElementById('salePayDueText').textContent = '{{ $cur }}' + Number(dueAmount).toFixed(2);
+        var amtInput = document.getElementById('salePayAmount');
+        amtInput.value = Number(dueAmount).toFixed(2);
+        amtInput.max = Number(dueAmount).toFixed(2);
+        var modal = document.getElementById('salePayModal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    };
+
+    window.closeSalePayModal = function () {
+        var modal = document.getElementById('salePayModal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    };
+
+    window.openSaleDeleteModal = function (saleId, invoiceNo) {
+        window.closeSaleActionMenus();
+        var form = document.getElementById('saleDeleteForm');
+        form.action = '{{ url("/sales") }}/' + saleId;
+        document.getElementById('saleDeleteInvoice').textContent = invoiceNo;
+        var modal = document.getElementById('saleDeleteModal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    };
+
+    window.closeSaleDeleteModal = function () {
+        var modal = document.getElementById('saleDeleteModal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    };
+
+    document.addEventListener('click', window.closeSaleActionMenus);
+    window.addEventListener('scroll', window.closeSaleActionMenus, true);
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            window.closeSaleActionMenus();
+            window.closeSalePayModal();
+            window.closeSaleDeleteModal();
+        }
+    });
+})();
+</script>
 @endsection

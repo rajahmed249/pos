@@ -4,82 +4,169 @@
 @section('breadcrumb', 'Peoples / Employee & Salary')
 
 @section('content')
-@php $cur = $appSettings['currency'] ?? '৳'; @endphp
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
-        <h2 class="font-display text-base font-bold text-slate-900 mb-4">Add Employee</h2>
-        <form method="POST" action="{{ route('employees.store') }}" class="space-y-3 text-sm">
+@php
+    $cur = $appSettings['currency'] ?? '৳';
+    $activeStaff = $employees->where('status', true)->count();
+    $monthlyPayroll = (float) $employees->where('status', true)->sum('salary');
+    $paidSalaryTotal = (float) $salaryExpenses->sum('amount');
+@endphp
+
+<div class="w-full space-y-5">
+    {{-- Page Header --}}
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+            <div class="w-11 h-11 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-[0_6px_18px_rgba(79,70,229,0.3)]"
+                 style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            </div>
+            <div class="min-w-0">
+                <h1 class="text-xl sm:text-2xl font-display font-extrabold text-slate-900 truncate">
+                    Employee &amp; <span class="bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] bg-clip-text text-transparent">Salary</span>
+                </h1>
+                <p class="text-xs text-slate-500">Full-width staff onboarding on top &amp; payroll roster below</p>
+            </div>
+        </div>
+    </div>
+
+    {{-- Compact KPI Strip --}}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+        <div style="background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);" class="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(79,70,229,0.20)]">
+            <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Total Staff</div>
+            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ $employees->count() }}</div>
+        </div>
+        <div style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);" class="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(5,150,105,0.20)]">
+            <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Active Staff</div>
+            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ $activeStaff }}</div>
+        </div>
+        <div style="background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);" class="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(2,132,199,0.20)]">
+            <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Monthly Payroll</div>
+            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ $cur }}{{ number_format($monthlyPayroll, 2) }}</div>
+        </div>
+        <div style="background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);" class="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(124,58,237,0.20)]">
+            <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Recent Payouts</div>
+            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ $cur }}{{ number_format($paidSalaryTotal, 2) }}</div>
+        </div>
+    </div>
+
+    {{-- TOP FULL-WIDTH: Add Employee Form --}}
+    <div class="w-full bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r from-indigo-50/70 via-white to-violet-50/60 flex items-center gap-2.5">
+            <span class="w-8 h-8 rounded-lg text-white flex items-center justify-center shrink-0"
+                  style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+            </span>
+            <div>
+                <h2 class="font-display text-sm font-bold text-slate-900">Add Employee</h2>
+                <p class="text-[11px] text-slate-500">Onboard new team member across full workspace width</p>
+            </div>
+        </div>
+        <form method="POST" action="{{ route('employees.store') }}" class="p-5 grid grid-cols-1 md:grid-cols-12 gap-3.5 text-sm items-end">
             @csrf
-            <input type="text" name="name" placeholder="Full Name" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
-            <input type="text" name="phone" placeholder="Phone Number" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
-            <input type="text" name="designation" placeholder="Designation (e.g. Sales Executive)" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
-            <input type="text" name="department" placeholder="Department" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
-            <input type="number" name="salary" step="0.01" min="0" placeholder="Monthly Salary" required class="w-full px-3 py-2 border border-slate-300 rounded-lg tabular-nums">
-            <input type="date" name="joining_date" value="{{ now()->toDateString() }}" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
-            <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold">Save Employee</button>
+            <div class="md:col-span-3">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Full Name *</label>
+                <input type="text" name="name" placeholder="Full Name" required class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-indigo-500 outline-none">
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Phone Number</label>
+                <input type="text" name="phone" placeholder="01XXXXXXXXX" class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-indigo-500 outline-none">
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Designation</label>
+                <input type="text" name="designation" placeholder="Sales Executive" class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-indigo-500 outline-none">
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Department</label>
+                <input type="text" name="department" placeholder="Operations" class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-indigo-500 outline-none">
+            </div>
+            <div class="md:col-span-1">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Salary *</label>
+                <input type="number" name="salary" step="0.01" min="0" placeholder="0.00" required class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-indigo-500 outline-none tabular-nums">
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Joining Date</label>
+                <div class="flex gap-2">
+                    <input type="date" name="joining_date" value="{{ now()->toDateString() }}" class="flex-1 min-w-0 px-2.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-indigo-500 outline-none">
+                    <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" class="px-4 py-2.5 text-white rounded-xl font-semibold shadow-[0_6px_16px_rgba(79,70,229,0.28)] hover:opacity-95 transition shrink-0 cursor-pointer">
+                        Save
+                    </button>
+                </div>
+            </div>
         </form>
     </div>
 
-    <div class="lg:col-span-2 min-w-0 space-y-6">
-        <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-5 shadow-xs overflow-x-auto">
-            <h2 class="font-display text-base font-bold text-slate-900 mb-4">Staff Roster &amp; Payroll</h2>
+    {{-- BOTTOM FULL-WIDTH: Staff Roster & Payroll --}}
+    <div class="w-full bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+            <h2 class="font-display text-sm sm:text-base font-bold text-slate-900">Staff Roster &amp; Payroll</h2>
+            <span class="text-xs text-slate-500">{{ $employees->count() }} employees</span>
+        </div>
+        <div class="overflow-x-auto">
             <table class="w-full text-sm text-left">
-                <thead>
-                    <tr class="border-b border-slate-200 text-xs uppercase text-slate-500">
-                        <th class="py-2 pr-3">Employee</th>
-                        <th class="py-2 pr-3">Role</th>
-                        <th class="py-2 pr-3 text-right">Salary</th>
-                        <th class="py-2 pr-3">Status</th>
-                        <th class="py-2 text-right">Actions</th>
+                <thead class="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-3 font-semibold">Employee</th>
+                        <th class="px-4 py-3 font-semibold">Role</th>
+                        <th class="px-4 py-3 font-semibold text-right">Salary</th>
+                        <th class="px-4 py-3 font-semibold">Status</th>
+                        <th class="px-4 py-3 font-semibold text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     @forelse($employees as $emp)
-                        <tr>
-                            <td class="py-2.5 pr-3">
-                                <div class="font-medium text-slate-900">{{ $emp->name }}</div>
-                                <div class="text-xs text-slate-500">{{ $emp->employee_id }} &middot; {{ $emp->phone ?: '—' }}</div>
+                        <tr class="hover:bg-slate-50/80 transition-colors">
+                            <td class="px-4 py-2.5">
+                                <div class="font-semibold text-slate-900">{{ $emp->name }}</div>
+                                <div class="text-[11px] text-slate-500 font-mono">{{ $emp->employee_id }} &middot; {{ $emp->phone ?: '—' }}</div>
                             </td>
-                            <td class="py-2.5 pr-3 text-xs text-slate-600">{{ $emp->designation ?: 'Staff' }}</td>
-                            <td class="py-2.5 pr-3 text-right font-semibold tabular-nums">{{ $cur }}{{ number_format((float) $emp->salary, 2) }}</td>
-                            <td class="py-2.5 pr-3">
-                                <span class="px-2 py-0.5 rounded-full text-xs font-semibold {{ $emp->status ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500' }}">
+                            <td class="px-4 py-2.5 text-xs text-slate-600">
+                                <div>{{ $emp->designation ?: 'Staff' }}</div>
+                                @if($emp->department)
+                                    <div class="text-[10.5px] text-slate-400">{{ $emp->department }}</div>
+                                @endif
+                            </td>
+                            <td class="px-4 py-2.5 text-right font-mono text-xs font-bold text-slate-900 tabular-nums whitespace-nowrap">{{ $cur }}{{ number_format((float) $emp->salary, 2) }}</td>
+                            <td class="px-4 py-2.5 whitespace-nowrap">
+                                <span class="px-2.5 py-0.5 rounded-full text-[10.5px] font-semibold {{ $emp->status ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-500 border border-slate-200' }}">
                                     {{ $emp->status ? 'Active' : 'Inactive' }}
                                 </span>
                             </td>
-                            <td class="py-2.5 text-right space-x-1.5 whitespace-nowrap">
+                            <td class="px-4 py-2.5 text-right space-x-1.5 whitespace-nowrap">
                                 <form method="POST" action="{{ route('employees.salary', $emp) }}" class="inline">
                                     @csrf
                                     <input type="hidden" name="amount" value="{{ $emp->salary }}">
                                     <input type="hidden" name="month" value="{{ now()->format('F Y') }}">
-                                    <button type="submit" class="text-xs px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium">Pay Salary</button>
+                                    <button type="submit" class="text-xs px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-semibold cursor-pointer">Pay Salary</button>
                                 </form>
                                 <form method="POST" action="{{ route('employees.toggle', $emp) }}" class="inline">
                                     @csrf
                                     @method('PATCH')
-                                    <button type="submit" class="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50">Toggle</button>
+                                    <button type="submit" class="text-xs px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold cursor-pointer">{{ $emp->status ? 'Disable' : 'Enable' }}</button>
                                 </form>
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="py-6 text-center text-slate-400">No employees added yet.</td></tr>
+                        <tr><td colspan="5" class="px-4 py-10 text-center text-xs text-slate-400">No employees added yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
+    </div>
 
-        <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-xs overflow-x-auto">
-            <h3 class="font-display text-sm font-bold text-slate-900 mb-3">Recent Salary Payouts</h3>
-            <div class="divide-y divide-slate-100 text-xs">
-                @forelse($salaryExpenses as $exp)
-                    <div class="py-2 flex justify-between items-center">
-                        <span>{{ $exp->description }} <span class="text-slate-400">({{ $exp->expense_date?->format('d M Y') }})</span></span>
-                        <span class="font-semibold text-indigo-600 tabular-nums">{{ $cur }}{{ number_format((float) $exp->amount, 2) }}</span>
-                    </div>
-                @empty
-                    <div class="py-4 text-slate-400">No salary payouts recorded yet.</div>
-                @endforelse
-            </div>
+    {{-- FULL-WIDTH: Recent Salary Payouts --}}
+    <div class="w-full bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+            <h3 class="font-display text-sm font-bold text-slate-900">Recent Salary Payouts</h3>
+            <span class="text-xs text-slate-500">{{ $salaryExpenses->count() }} records</span>
+        </div>
+        <div class="divide-y divide-slate-100 text-xs px-5">
+            @forelse($salaryExpenses as $exp)
+                <div class="py-2.5 flex justify-between items-center gap-2">
+                    <span class="text-slate-700">{{ $exp->description }} <span class="text-slate-400 font-mono">({{ $exp->expense_date?->format('Y-m-d') }})</span></span>
+                    <span class="font-mono font-bold text-indigo-600 tabular-nums shrink-0">{{ $cur }}{{ number_format((float) $exp->amount, 2) }}</span>
+                </div>
+            @empty
+                <div class="py-6 text-center text-slate-400">No salary payouts recorded yet.</div>
+            @endforelse
         </div>
     </div>
 </div>

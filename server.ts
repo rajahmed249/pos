@@ -399,41 +399,35 @@ function collectFiles(dir: string, baseDir: string): string[] {
 }
 
 function buildHostingUploadGuide(): string {
-  return `# Youth IT POS — Easy Hosting & Local Setup Guide
+  return `# Youth IT POS — Easy Local & Hosting Setup Guide
 
-## Included Files & Database
-- \`database/youthit_pos_database.sql\` (and \`laravel/database/sql/youthits_pos.sql\`): Complete MySQL 8 / MariaDB schema + all live POS data.
-- \`data/pos-store.json\`: Live JSON database used by the Node.js + React server.
-- \`public/\`: Shop logos, favicon, QR code, and all uploaded product & avatar images.
-- \`.env.example\`: Safe environment template (\`.env\` with fresh \`APP_KEY\` is auto-created on first run for Laravel).
-
----
-
-## Option 1: cPanel Shared Hosting or Local XAMPP / Laragon (\`youthit-pos-laravel-13.zip\`)
-1. **Create an empty MySQL Database** (in cPanel -> *MySQL Databases* or locally in *phpMyAdmin*).
-2. **Upload & Extract** \`youthit-pos-laravel-13.zip\` into your domain folder (or \`C:\\xampp\\htdocs\\youthit-pos\` / \`C:\\laragon\\www\\youthit-pos\` locally).
-3. **Install PHP Vendor Packages** (only if \`vendor/\` folder is not already present):
-   \`\`\`bash
-   composer install --no-dev --optimize-autoloader
-   \`\`\`
-4. **Open Your Site in Browser** (e.g. \`https://yourdomain.com\` or \`http://localhost/youthit-pos\`):
-   - No manual \`.env\`, \`APP_KEY\`, or SQL import needed!
-   - The built-in **1-Click Setup Wizard (\`/setup\`)** opens automatically, creates \`.env\` + \`APP_KEY\`, connects your MySQL database, imports \`youthits_pos.sql\`, sets your admin login password, and redirects to \`/login\`.
-5. **Email & SMS Recovery (Optional)**: Update \`MAIL_*\` and \`SMS_*\` inside \`.env\`.
+## Included Inside This Single Package
+- \`artisan\`, \`app/\`, \`config/\`, \`routes/\`, \`resources/\`, \`public/\`: Complete Laravel 13 application with prebuilt CSS/JS and all shop & product images.
+- \`database/sql/youthits_pos.sql\` & \`database/pos-store.json\`: Complete database + all live store data.
+- \`.env.example\`: Automatically copied to \`.env\` with a fresh \`APP_KEY\` on first run.
 
 ---
 
-## Option 2: Node.js Hosting (VPS / cPanel Setup Node.js App) or Local PC (\`youthit-pos-full-project.zip\`)
-Prebuilt \`dist/\` frontend and compiled \`server.js\` are already bundled inside the ZIP!
-1. Extract \`youthit-pos-full-project.zip\`.
-2. Copy \`.env.example\` to \`.env\` (optional: add \`SMTP_*\` / \`SMS_*\` settings).
-3. Install runtime packages and start immediately (Node 18 / 20 / 22+):
+## Option 1: Run Locally With 1 Command (Even Without Composer!)
+1. Extract this ZIP into a folder (e.g. \`youthit-pos\`).
+2. Open Terminal / PowerShell inside that folder and run:
    \`\`\`bash
-   npm install --omit=dev
-   npm start
+   php artisan serve
    \`\`\`
-   *(For cPanel Setup Node.js App, set **Application startup file** to \`server.js\`.)*
-4. Open \`http://localhost:3000\` (or your domain) in the browser and sign in.
+   - **No Composer?** \`artisan\` automatically downloads \`composer.phar\` and installs \`vendor/\` on the first run.
+   - **No manual \`.env\` or \`key:generate\` needed.**
+3. Open **http://127.0.0.1:8000** in your browser.
+4. The **1-Click Setup Wizard (\`/setup\`)** opens automatically:
+   - Choose **Local SQLite** (zero config, no MySQL required) OR **MySQL** (XAMPP/Laragon).
+   - Set your Admin login password and click **Connect Database & Launch POS**.
+
+---
+
+## Option 2: cPanel Shared Hosting
+1. Upload & extract this ZIP into your domain folder (set Document Root to \`public/\` or keep root with \`.htaccess\`).
+2. If \`vendor/\` is not yet installed and you have Terminal/SSH, run \`php artisan serve\` (or \`composer install --no-dev --optimize-autoloader\`). *(If your shared hosting has no SSH, run \`php artisan serve\` once on your PC to generate \`vendor/\` before zipping & uploading.)*
+3. Create a MySQL database in cPanel -> **MySQL Databases**.
+4. Visit your domain in the browser — \`/setup\` connects MySQL, imports \`youthits_pos.sql\`, sets your password, and opens \`/login\`.
 `;
 }
 
@@ -628,17 +622,34 @@ async function startServer() {
     }
 
     let totalExpenses = 0;
+    let todayExpense = 0;
     for (const exp of store.expenses) {
-      totalExpenses += Number(exp.amount ?? 0);
+      const amt = Number(exp.amount ?? 0);
+      totalExpenses += amt;
+      const expDate = String(exp.expense_date ?? exp.date ?? '').slice(0, 10);
+      if (expDate === todayStr) {
+        todayExpense += amt;
+      }
     }
+
+    const todayMargin = todaySales > 0 ? Number(((todayProfit / todaySales) * 100).toFixed(1)) : 0;
 
     const activeProducts = store.products.filter((p) => Number(p.status ?? 1) === 1);
     let stockCostValue = 0;
     let stockRetailValue = 0;
+    let lowStockCount = 0;
+    let outOfStockCount = 0;
     for (const p of activeProducts) {
-      const qty = Math.max(0, Number(p.quantity ?? 0));
+      const rawQty = Number(p.quantity ?? p.stock_quantity ?? 0);
+      const alertQty = Number(p.alert_quantity ?? 5);
+      const qty = Math.max(0, rawQty);
       stockCostValue += qty * Number(p.purchase_price ?? 0);
       stockRetailValue += qty * Number(p.selling_price ?? 0);
+      if (rawQty <= 0) {
+        outOfStockCount += 1;
+      } else if (rawQty <= alertQty) {
+        lowStockCount += 1;
+      }
     }
 
     const lowStock = activeProducts
@@ -688,6 +699,8 @@ async function startServer() {
       metrics: {
         todaySales,
         todayProfit,
+        todayExpense,
+        todayMargin,
         totalRevenue,
         totalProfit,
         customerDue,
@@ -696,6 +709,8 @@ async function startServer() {
         productCount: activeProducts.length,
         customerCount: store.customers.length,
         supplierCount: store.suppliers.length,
+        lowStockCount,
+        outOfStockCount,
         saleCount: store.sales.length,
         purchaseCount: store.purchases.length,
         stockCostValue,
@@ -1038,25 +1053,42 @@ async function startServer() {
 
     const custPhoneMap = new Map(store.customers.map((c) => [Number(c.id), String(c.phone ?? '')]));
     const custNameMap = new Map(store.customers.map((c) => [Number(c.id), String(c.name ?? '')]));
-    const productNameMap = new Map(store.products.map((p) => [Number(p.id), String(p.name ?? '')]));
+    const productMap = new Map(store.products.map((p) => [Number(p.id), p]));
     const saleItemsMap = new Map<number, Array<{ product_name: string; quantity: number }>>();
+    const saleCostMap = new Map<number, number>();
     for (const it of store.sale_items) {
       const sid = Number(it.sale_id);
+      const pid = Number(it.product_id ?? 0);
+      const prod = pid ? productMap.get(pid) : undefined;
+      const qty = Math.max(1, Number(it.quantity ?? 1));
       const arr = saleItemsMap.get(sid) ?? [];
-      const resolvedName = String(it.product_name || productNameMap.get(Number(it.product_id)) || 'Product');
+      const resolvedName = String(it.product_name || prod?.name || 'Product');
       arr.push({
         product_name: resolvedName,
-        quantity: Number(it.quantity ?? 1),
+        quantity: qty,
       });
       saleItemsMap.set(sid, arr);
+
+      const unitBuy = Number(it.buying_price ?? it.purchase_cost ?? prod?.purchase_price ?? 0);
+      saleCostMap.set(sid, (saleCostMap.get(sid) ?? 0) + unitBuy * qty);
     }
 
     let items: Array<Record<string, unknown>> = store.sales.map((s) => {
       const sid = Number(s.id);
       const cid = Number(s.customer_id ?? 0);
       const prods = saleItemsMap.get(sid) ?? [];
+      const receivable = Number(s.receivable ?? 0);
+      const recordedCost = Number(s.purchase_cost ?? 0);
+      const fallbackCost = saleCostMap.get(sid) ?? 0;
+      const purchaseCost = recordedCost > 0 ? recordedCost : fallbackCost;
+      const rawProfit = Number(s.profit ?? 0);
+      const profit = rawProfit !== 0 ? rawProfit : (purchaseCost > 0 ? Number((receivable - purchaseCost).toFixed(2)) : 0);
+      const dateStr = String(s.date || s.sale_date || s.created_at || '').slice(0, 10);
       return {
         ...s,
+        date: dateStr,
+        purchase_cost: purchaseCost,
+        profit,
         customer_name: String(s.customer_name || (cid ? custNameMap.get(cid) : '') || 'Walk-in Customer'),
         customer_phone: cid ? (custPhoneMap.get(cid) ?? '') : '',
         products: prods,
@@ -1461,14 +1493,36 @@ async function startServer() {
     const page = Math.max(1, Number(req.query.page ?? 1));
     const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 25)));
     const supMap = new Map(store.suppliers.map((s) => [Number(s.id), String(s.name ?? '')]));
+    const prodMap = new Map(store.products.map((p) => [Number(p.id), String(p.name ?? 'Product')]));
+    const itemsByPurchase = new Map<number, Array<{ product_id: number; product_name: string; quantity: number; price: number; total: number }>>();
 
-    let items: Array<Record<string, unknown>> = store.purchases.map((p) => ({
-      ...p,
-      supplier_name: supMap.get(Number(p.supplier_id)) ?? 'Unknown Supplier',
-    }));
+    for (const pi of store.purchase_items) {
+      const pid = Number(pi.purchase_id ?? 0);
+      if (!pid) continue;
+      const list = itemsByPurchase.get(pid) ?? [];
+      list.push({
+        product_id: Number(pi.product_id),
+        product_name: prodMap.get(Number(pi.product_id)) ?? 'Product',
+        quantity: Number(pi.quantity ?? 0),
+        price: Number(pi.price ?? 0),
+        total: Number(pi.total ?? 0),
+      });
+      itemsByPurchase.set(pid, list);
+    }
+
+    let items: Array<Record<string, unknown>> = store.purchases.map((p) => {
+      const lineItems = itemsByPurchase.get(Number(p.id)) ?? [];
+      return {
+        ...p,
+        supplier_name: supMap.get(Number(p.supplier_id)) ?? 'Unknown Supplier',
+        items: lineItems,
+        items_count: lineItems.length,
+        items_summary: lineItems.map((it) => `${it.product_name} ×${it.quantity}`).join(', '),
+      };
+    });
     if (q) {
       items = items.filter((p) =>
-        matchesSearchTokens([p.invoice_no, p.supplier_name, p.payment_method], q)
+        matchesSearchTokens([p.invoice_no, p.supplier_name, p.payment_method, p.items_summary], q)
       );
     }
     items.sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0));
@@ -1478,43 +1532,70 @@ async function startServer() {
   app.post('/api/purchases', (req: AuthedRequest, res: Response) => {
     const store = getStore();
     const body = req.body ?? {};
-    const product = store.products.find((p) => Number(p.id) === Number(body.product_id));
-    if (!product) {
-      res.status(400).json({ error: 'Valid product is required.' });
-      return;
-    }
     const supplierId = Number(body.supplier_id);
     const supplier = store.suppliers.find((s) => Number(s.id) === supplierId);
     if (!supplier) {
       res.status(400).json({ error: 'Valid supplier is required.' });
       return;
     }
-    const rawQty = Number(body.quantity ?? 1);
-    const rawPrice = Number(body.price ?? product.purchase_price ?? 0);
-    const rawDiscount = Number(body.discount ?? 0);
-    const rawPaid = Number(body.paid ?? 0);
-    if (!Number.isFinite(rawQty) || rawQty < 1 || !Number.isFinite(rawPrice) || rawPrice < 0 || !Number.isFinite(rawDiscount) || rawDiscount < 0 || !Number.isFinite(rawPaid) || rawPaid < 0) {
-      res.status(400).json({ error: 'Quantity must be at least 1 and prices/amounts cannot be negative.' });
+
+    const rawItems = Array.isArray(body.items) && body.items.length > 0
+      ? body.items
+      : [{ product_id: body.product_id, quantity: body.quantity, price: body.price }];
+
+    const normalizedItems: Array<{ product: typeof store.products[number]; qty: number; price: number; lineTotal: number }> = [];
+    for (const raw of rawItems) {
+      const product = store.products.find((p) => Number(p.id) === Number(raw?.product_id));
+      if (!product) {
+        res.status(400).json({ error: 'Every purchase row must reference a valid product.' });
+        return;
+      }
+      const rawQty = Number(raw?.quantity ?? 1);
+      const rawPrice = Number(raw?.price ?? product.purchase_price ?? 0);
+      if (!Number.isFinite(rawQty) || rawQty < 1 || !Number.isFinite(rawPrice) || rawPrice < 0) {
+        res.status(400).json({ error: 'Quantity must be at least 1 and unit cost cannot be negative.' });
+        return;
+      }
+      const qty = Math.round(rawQty);
+      const price = Number(rawPrice.toFixed(2));
+      normalizedItems.push({
+        product,
+        qty,
+        price,
+        lineTotal: Number((qty * price).toFixed(2)),
+      });
+    }
+
+    if (normalizedItems.length === 0) {
+      res.status(400).json({ error: 'Add at least one product to purchase.' });
       return;
     }
-    const qty = Math.round(rawQty);
-    const price = rawPrice;
-    const subtotal = qty * price;
+
+    const rawDiscount = Number(body.discount ?? 0);
+    const rawPaid = Number(body.paid ?? 0);
+    if (!Number.isFinite(rawDiscount) || rawDiscount < 0 || !Number.isFinite(rawPaid) || rawPaid < 0) {
+      res.status(400).json({ error: 'Discount and paid amount cannot be negative.' });
+      return;
+    }
+
+    const subtotal = Number(normalizedItems.reduce((sum, it) => sum + it.lineTotal, 0).toFixed(2));
     const discount = Math.min(subtotal, rawDiscount);
-    const total = Math.max(0, subtotal - discount);
+    const total = Math.max(0, Number((subtotal - discount).toFixed(2)));
     const paid = Math.min(total, rawPaid);
-    const due = Math.max(0, total - paid);
+    const due = Math.max(0, Number((total - paid).toFixed(2)));
 
     const purchaseId = nextId(store.purchases);
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const invoiceNo = `PUR-${now.slice(0, 10).replace(/-/g, '')}-${String(purchaseId).padStart(4, '0')}`;
+    const rawDate = String(body.purchase_date ?? '').trim();
+    const purchaseDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? `${rawDate} ${now.slice(11)}` : now;
+    const invoiceNo = `PUR-${purchaseDate.slice(0, 10).replace(/-/g, '')}-${String(purchaseId).padStart(4, '0')}`;
     const actorId = req.authUser?.id ?? 1;
 
     const purchase = {
       id: purchaseId,
       invoice_no: invoiceNo,
       supplier_id: supplierId,
-      purchase_date: now,
+      purchase_date: purchaseDate,
       total_amount: total,
       paid_amount: paid,
       due_amount: due,
@@ -1530,31 +1611,34 @@ async function startServer() {
       created_at: now,
     };
     store.purchases.unshift(purchase);
-    store.purchase_items.push({
-      id: nextId(store.purchase_items),
-      purchase_id: purchaseId,
-      product_id: Number(product.id),
-      quantity: qty,
-      price,
-      warranty_months: 0,
-      total: subtotal,
-    });
 
-    const oldQty = Number(product.quantity ?? 0);
-    const newQty = oldQty + qty;
-    product.quantity = newQty;
-    product.stock_quantity = newQty;
-    product.purchase_price = price;
-    store.stock_movements.unshift({
-      id: nextId(store.stock_movements),
-      product_id: Number(product.id),
-      old_quantity: oldQty,
-      new_quantity: newQty,
-      difference: qty,
-      reason: `Purchase ${invoiceNo}`,
-      created_by: actorId,
-      created_at: now,
-    });
+    for (const item of normalizedItems) {
+      store.purchase_items.push({
+        id: nextId(store.purchase_items),
+        purchase_id: purchaseId,
+        product_id: Number(item.product.id),
+        quantity: item.qty,
+        price: item.price,
+        warranty_months: 0,
+        total: item.lineTotal,
+      });
+
+      const oldQty = Number(item.product.quantity ?? 0);
+      const newQty = oldQty + item.qty;
+      item.product.quantity = newQty;
+      item.product.stock_quantity = newQty;
+      item.product.purchase_price = item.price;
+      store.stock_movements.unshift({
+        id: nextId(store.stock_movements),
+        product_id: Number(item.product.id),
+        old_quantity: oldQty,
+        new_quantity: newQty,
+        difference: item.qty,
+        reason: `Purchase ${invoiceNo}`,
+        created_by: actorId,
+        created_at: now,
+      });
+    }
 
     if (paid > 0) {
       store.supplier_payments.unshift({
@@ -1562,7 +1646,7 @@ async function startServer() {
         purchase_id: purchaseId,
         supplier_id: supplierId,
         amount: paid,
-        payment_date: now,
+        payment_date: purchaseDate,
         payment_method: String(body.payment_method ?? 'cash'),
         reference_no: null,
         note: 'Initial purchase payment',
@@ -1691,6 +1775,27 @@ async function startServer() {
     res.status(201).json(row);
   });
 
+  app.put('/api/customers/:id', (req: Request, res: Response) => {
+    const store = getStore();
+    const id = Number(req.params.id);
+    const customer = store.customers.find((c) => Number(c.id) === id);
+    if (!customer) {
+      res.status(404).json({ error: 'Customer not found.' });
+      return;
+    }
+    const name = String(req.body?.name ?? '').trim();
+    if (!name) {
+      res.status(400).json({ error: 'Customer name is required.' });
+      return;
+    }
+    customer.name = name;
+    customer.phone = String(req.body?.phone ?? '').trim();
+    customer.email = String(req.body?.email ?? '').trim();
+    customer.address = String(req.body?.address ?? '').trim();
+    saveStore(store);
+    res.json(customer);
+  });
+
   app.get('/api/suppliers', (req: Request, res: Response) => {
     const store = getStore();
     const q = sanitizeSearch(req.query.q);
@@ -1761,6 +1866,27 @@ async function startServer() {
     res.status(201).json(row);
   });
 
+  app.put('/api/suppliers/:id', (req: Request, res: Response) => {
+    const store = getStore();
+    const id = Number(req.params.id);
+    const supplier = store.suppliers.find((s) => Number(s.id) === id);
+    if (!supplier) {
+      res.status(404).json({ error: 'Supplier not found.' });
+      return;
+    }
+    const name = String(req.body?.name ?? '').trim();
+    if (!name) {
+      res.status(400).json({ error: 'Supplier name is required.' });
+      return;
+    }
+    supplier.name = name;
+    supplier.phone = String(req.body?.phone ?? '').trim();
+    supplier.email = String(req.body?.email ?? '').trim();
+    supplier.address = String(req.body?.address ?? '').trim();
+    saveStore(store);
+    res.json(supplier);
+  });
+
   // ---- Estimates ----
   app.get('/api/estimates', (_req: Request, res: Response) => {
     const store = getStore();
@@ -1828,10 +1954,12 @@ async function startServer() {
   });
 
   // ---- Accounts & Expenses ----
-  app.get('/api/accounts', (_req: Request, res: Response) => {
+  app.get('/api/accounts', (req: Request, res: Response) => {
     const store = getStore();
+    const accountId = Number(req.query.account_id ?? 0);
     const accMap = new Map(store.bank_accounts.map((a) => [Number(a.id), String(a.account_name ?? '')]));
     const transactions = [...store.bank_transactions]
+      .filter((tx) => accountId <= 0 || Number(tx.bank_account_id) === accountId)
       .sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0))
       .map((tx) => ({ ...tx, account_name: accMap.get(Number(tx.bank_account_id)) ?? 'Account' }));
     res.json({ accounts: store.bank_accounts, transactions });
@@ -1870,6 +1998,62 @@ async function startServer() {
     acc.balance = type === 'deposit' ? currentBalance + amount : Math.max(0, currentBalance - amount);
     saveStore(store);
     res.status(201).json({ transaction: tx, account: acc });
+  });
+
+  app.post('/api/accounts/transfer', (req: Request, res: Response) => {
+    const store = getStore();
+    const fromId = Number(req.body?.from_account_id ?? 0);
+    const toId = Number(req.body?.to_account_id ?? 0);
+    const amount = Number(req.body?.amount ?? 0);
+    if (!fromId || !toId || fromId === toId) {
+      res.status(400).json({ error: 'Please select two different accounts for transfer.' });
+      return;
+    }
+    const fromAcc = store.bank_accounts.find((a) => Number(a.id) === fromId);
+    const toAcc = store.bank_accounts.find((a) => Number(a.id) === toId);
+    if (!fromAcc || !toAcc) {
+      res.status(404).json({ error: 'Selected source or destination account was not found.' });
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      res.status(400).json({ error: 'Transfer amount must be greater than 0.' });
+      return;
+    }
+    const fromBalance = Number(fromAcc.balance ?? 0);
+    if (amount > fromBalance + 0.009) {
+      res.status(400).json({ error: `Insufficient balance in "${fromAcc.account_name}" (${fromBalance.toFixed(2)} available).` });
+      return;
+    }
+    const txDate = String(req.body?.transaction_date ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const note = String(req.body?.description ?? '').trim();
+    const nowDt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    const withdrawId = nextId(store.bank_transactions);
+    const depositId = withdrawId + 1;
+    store.bank_transactions.unshift(
+      {
+        id: depositId,
+        bank_account_id: toId,
+        type: 'deposit',
+        amount,
+        description: `Transfer from ${fromAcc.account_name}${note ? ` - ${note}` : ''}`,
+        transaction_date: txDate,
+        created_at: nowDt,
+      },
+      {
+        id: withdrawId,
+        bank_account_id: fromId,
+        type: 'withdraw',
+        amount,
+        description: `Transfer to ${toAcc.account_name}${note ? ` - ${note}` : ''}`,
+        transaction_date: txDate,
+        created_at: nowDt,
+      }
+    );
+    fromAcc.balance = Number((fromBalance - amount).toFixed(2));
+    toAcc.balance = Number((Number(toAcc.balance ?? 0) + amount).toFixed(2));
+    saveStore(store);
+    res.status(201).json({ ok: true, fromAccount: fromAcc, toAccount: toAcc });
   });
 
   app.get('/api/expenses', (_req: Request, res: Response) => {
@@ -2013,7 +2197,7 @@ async function startServer() {
     res.status(201).json(row);
   });
 
-  // ---- Reports ----
+  // ---- Reports (All 13 POS Reports) ----
   app.get('/api/reports', (req: Request, res: Response) => {
     const store = getStore();
     let from = String(req.query.from ?? '2026-01-01').slice(0, 10);
@@ -2022,9 +2206,18 @@ async function startServer() {
       [from, to] = [to, from];
     }
 
-    const periodSales = store.sales.filter((s) => {
-      const d = String(s.date ?? '');
-      return d >= from && d <= to && String(s.status ?? 'completed') === 'completed';
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const monthPrefix = todayStr.slice(0, 7);
+
+    const productMap = new Map(store.products.map((p) => [Number(p.id), p]));
+    const categoryMap = new Map(store.categories.map((c) => [Number(c.id), String(c.name ?? 'Uncategorized')]));
+    const supplierMap = new Map(store.suppliers.map((s) => [Number(s.id), s]));
+    const customerMap = new Map(store.customers.map((c) => [Number(c.id), c]));
+
+    const completedSales = store.sales.filter((s) => String(s.status ?? 'completed') === 'completed');
+    const periodSales = completedSales.filter((s) => {
+      const d = String(s.date ?? s.sale_date ?? s.created_at ?? '').slice(0, 10);
+      return d >= from && d <= to;
     });
 
     const summary = periodSales.reduce<{
@@ -2033,55 +2226,367 @@ async function startServer() {
       collected: number;
       due: number;
       profit: number;
+      purchaseCost: number;
+      discount: number;
     }>(
       (acc, s) => {
+        const rec = Number(s.receivable ?? 0);
+        const cost = Number(s.purchase_cost ?? 0);
+        const prof = Number(s.profit ?? 0) || (cost > 0 ? rec - cost : 0);
         acc.invoiceCount += 1;
-        acc.revenue += Number(s.receivable ?? 0);
+        acc.revenue += rec;
         acc.collected += Number(s.paid ?? 0);
         acc.due += Number(s.due ?? 0);
-        acc.profit += Number(s.profit ?? 0);
+        acc.profit += prof;
+        acc.purchaseCost += cost;
+        acc.discount += Number(s.discount ?? 0);
         return acc;
       },
-      { invoiceCount: 0, revenue: 0, collected: 0, due: 0, profit: 0 }
+      { invoiceCount: 0, revenue: 0, collected: 0, due: 0, profit: 0, purchaseCost: 0, discount: 0 }
     );
 
-    const expensesTotal = store.expenses
-      .filter((e) => {
-        const d = String(e.expense_date ?? '');
-        return d >= from && d <= to;
-      })
-      .reduce((sum, e) => sum + Number(e.amount ?? 0), 0);
+    const periodExpenses = store.expenses.filter((e) => {
+      const d = String(e.expense_date ?? e.created_at ?? '').slice(0, 10);
+      return d >= from && d <= to;
+    });
+    const expensesTotal = periodExpenses.reduce((sum, e) => sum + Number(e.amount ?? 0), 0);
 
-    const custDuesMap = new Map<number, { id: number; name: string; phone: string; due: number }>();
+    // 1. Customer Due Report
+    const custDuesMap = new Map<number, { id: number; name: string; phone: string; invoices: number; total_billed: number; paid: number; due: number }>();
     for (const c of store.customers) {
-      custDuesMap.set(Number(c.id), { id: Number(c.id), name: String(c.name ?? ''), phone: String(c.phone ?? ''), due: 0 });
+      custDuesMap.set(Number(c.id), {
+        id: Number(c.id),
+        name: String(c.name ?? ''),
+        phone: String(c.phone ?? ''),
+        invoices: 0,
+        total_billed: Number(c.opening_balance ?? 0),
+        paid: 0,
+        due: Number(c.opening_balance ?? 0),
+      });
     }
-    for (const s of store.sales) {
+    for (const s of completedSales) {
       const cid = Number(s.customer_id ?? 0);
       const entry = custDuesMap.get(cid);
-      if (entry) entry.due += Number(s.due ?? 0);
+      if (entry) {
+        entry.invoices += 1;
+        entry.total_billed += Number(s.receivable ?? 0);
+        entry.paid += Number(s.paid ?? 0);
+        entry.due += Number(s.due ?? 0);
+      }
     }
-    const customerDues = [...custDuesMap.values()].filter((c) => c.due > 0).sort((a, b) => b.due - a.due).slice(0, 30);
+    const customerDues = [...custDuesMap.values()]
+      .filter((c) => c.due > 0.009)
+      .sort((a, b) => b.due - a.due)
+      .slice(0, 100);
 
-    const supDuesMap = new Map<number, { id: number; name: string; phone: string; due: number }>();
+    // 2. Supplier Due Report
+    const supDuesMap = new Map<number, { id: number; name: string; phone: string; purchases: number; total_billed: number; paid: number; due: number }>();
     for (const sup of store.suppliers) {
-      supDuesMap.set(Number(sup.id), { id: Number(sup.id), name: String(sup.name ?? ''), phone: String(sup.phone ?? ''), due: 0 });
+      supDuesMap.set(Number(sup.id), {
+        id: Number(sup.id),
+        name: String(sup.name ?? ''),
+        phone: String(sup.phone ?? ''),
+        purchases: 0,
+        total_billed: Number(sup.opening_balance ?? 0),
+        paid: 0,
+        due: Number(sup.opening_balance ?? 0),
+      });
     }
     for (const p of store.purchases) {
       const sid = Number(p.supplier_id ?? 0);
       const entry = supDuesMap.get(sid);
-      if (entry) entry.due += Number(p.due ?? 0);
+      if (entry) {
+        entry.purchases += 1;
+        entry.total_billed += Number(p.total ?? p.total_amount ?? 0);
+        entry.paid += Number(p.paid ?? p.paid_amount ?? 0);
+        entry.due += Number(p.due ?? p.due_amount ?? 0);
+      }
     }
-    const supplierDues = [...supDuesMap.values()].filter((s) => s.due > 0).sort((a, b) => b.due - a.due).slice(0, 30);
+    const supplierDues = [...supDuesMap.values()]
+      .filter((s) => s.due > 0.009)
+      .sort((a, b) => b.due - a.due)
+      .slice(0, 100);
+
+    // 3. Purchase Report (filtered by from/to)
+    const purchaseReportRows = store.purchases
+      .filter((p) => {
+        const d = String(p.purchase_date ?? p.created_at ?? '').slice(0, 10);
+        return d >= from && d <= to;
+      })
+      .sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0))
+      .map((p) => {
+        const sup = p.supplier_id ? supplierMap.get(Number(p.supplier_id)) : null;
+        return {
+          id: Number(p.id),
+          invoice_no: String(p.invoice_no ?? `PUR-${p.id}`),
+          date: String(p.purchase_date ?? p.created_at ?? '').slice(0, 10),
+          supplier_name: String(sup?.name ?? 'General Supplier'),
+          total: Number(p.total ?? p.total_amount ?? 0),
+          paid: Number(p.paid ?? p.paid_amount ?? 0),
+          due: Number(p.due ?? p.due_amount ?? 0),
+        };
+      });
+    const purchaseSummary = {
+      count: purchaseReportRows.length,
+      total: purchaseReportRows.reduce((s, r) => s + r.total, 0),
+      paid: purchaseReportRows.reduce((s, r) => s + r.paid, 0),
+      due: purchaseReportRows.reduce((s, r) => s + r.due, 0),
+    };
+
+    // 4. Profit & Loss Report
+    const damagesTotal = store.damages
+      .filter((d) => {
+        const dt = String(d.damage_date ?? d.created_at ?? '').slice(0, 10);
+        return dt >= from && dt <= to;
+      })
+      .reduce((s, d) => s + Number(d.loss_amount ?? 0), 0);
+    const returnsTotal = store.returns
+      .filter((r) => {
+        const dt = String(r.return_date ?? r.created_at ?? '').slice(0, 10);
+        return dt >= from && dt <= to;
+      })
+      .reduce((s, r) => s + Number(r.total_amount ?? 0), 0);
+    const expenseByCategoryMap = new Map<string, number>();
+    for (const ex of periodExpenses) {
+      const cat = String(ex.category || 'Other');
+      expenseByCategoryMap.set(cat, (expenseByCategoryMap.get(cat) ?? 0) + Number(ex.amount ?? 0));
+    }
+    const expenseBreakdown = [...expenseByCategoryMap.entries()]
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount);
+
+    // 5. Today Report
+    const todaySalesRows = completedSales.filter((s) => String(s.date ?? s.sale_date ?? s.created_at ?? '').slice(0, 10) === todayStr);
+    const todayExpensesTotal = store.expenses
+      .filter((e) => String(e.expense_date ?? e.created_at ?? '').slice(0, 10) === todayStr)
+      .reduce((s, e) => s + Number(e.amount ?? 0), 0);
+    const todayPurchasesTotal = store.purchases
+      .filter((p) => String(p.purchase_date ?? p.created_at ?? '').slice(0, 10) === todayStr)
+      .reduce((s, p) => s + Number(p.total ?? p.total_amount ?? 0), 0);
+    const todayPaymentsTotal = store.payments
+      .filter((p) => String(p.payment_date ?? p.created_at ?? '').slice(0, 10) === todayStr)
+      .reduce((s, p) => s + Number(p.amount ?? 0), 0);
+    const todayReport = {
+      date: todayStr,
+      sales_count: todaySalesRows.length,
+      revenue: todaySalesRows.reduce((s, r) => s + Number(r.receivable ?? 0), 0),
+      collected: todaySalesRows.reduce((s, r) => s + Number(r.paid ?? 0), 0),
+      due: todaySalesRows.reduce((s, r) => s + Number(r.due ?? 0), 0),
+      profit: todaySalesRows.reduce((s, r) => s + Number(r.profit ?? 0), 0),
+      expenses: todayExpensesTotal,
+      purchases: todayPurchasesTotal,
+      payments_received: todayPaymentsTotal,
+      invoices: todaySalesRows.slice(0, 50).map((s) => ({
+        invoice_no: String(s.invoice_no ?? ''),
+        customer_name: String(s.customer_name ?? 'Walk-in Customer'),
+        receivable: Number(s.receivable ?? 0),
+        paid: Number(s.paid ?? 0),
+        due: Number(s.due ?? 0),
+        profit: Number(s.profit ?? 0),
+      })),
+    };
+
+    // 6. Current Month Report
+    const monthSales = completedSales.filter((s) => String(s.date ?? s.sale_date ?? s.created_at ?? '').slice(0, 7) === monthPrefix);
+    const monthExpenses = store.expenses
+      .filter((e) => String(e.expense_date ?? e.created_at ?? '').slice(0, 7) === monthPrefix)
+      .reduce((s, e) => s + Number(e.amount ?? 0), 0);
+    const monthPurchases = store.purchases
+      .filter((p) => String(p.purchase_date ?? p.created_at ?? '').slice(0, 7) === monthPrefix)
+      .reduce((s, p) => s + Number(p.total ?? p.total_amount ?? 0), 0);
+    const monthDayMap = new Map<string, { date: string; invoices: number; revenue: number; collected: number; due: number; profit: number }>();
+    for (const s of monthSales) {
+      const dt = String(s.date ?? s.sale_date ?? s.created_at ?? '').slice(0, 10);
+      const row = monthDayMap.get(dt) ?? { date: dt, invoices: 0, revenue: 0, collected: 0, due: 0, profit: 0 };
+      row.invoices += 1;
+      row.revenue += Number(s.receivable ?? 0);
+      row.collected += Number(s.paid ?? 0);
+      row.due += Number(s.due ?? 0);
+      row.profit += Number(s.profit ?? 0);
+      monthDayMap.set(dt, row);
+    }
+    const currentMonthReport = {
+      month: monthPrefix,
+      sales_count: monthSales.length,
+      revenue: monthSales.reduce((s, r) => s + Number(r.receivable ?? 0), 0),
+      collected: monthSales.reduce((s, r) => s + Number(r.paid ?? 0), 0),
+      due: monthSales.reduce((s, r) => s + Number(r.due ?? 0), 0),
+      profit: monthSales.reduce((s, r) => s + Number(r.profit ?? 0), 0),
+      expenses: monthExpenses,
+      purchases: monthPurchases,
+      daily_rows: [...monthDayMap.values()].sort((a, b) => b.date.localeCompare(a.date)),
+    };
+
+    // 7. Summary Report (Business Overview)
+    const bankBalance = store.bank_accounts.reduce((s, a) => s + Number(a.balance ?? 0), 0);
+    const cashIn = store.cash_transactions.filter((c) => String(c.type) === 'in').reduce((s, c) => s + Number(c.amount ?? 0), 0);
+    const cashOut = store.cash_transactions.filter((c) => String(c.type) === 'out').reduce((s, c) => s + Number(c.amount ?? 0), 0);
+    const stockValuation = store.products
+      .filter((p) => Number(p.status ?? 1) === 1)
+      .reduce((s, p) => s + Math.max(0, Number(p.stock_quantity ?? p.quantity ?? 0)) * Number(p.purchase_price ?? 0), 0);
+    const retailValuation = store.products
+      .filter((p) => Number(p.status ?? 1) === 1)
+      .reduce((s, p) => s + Math.max(0, Number(p.stock_quantity ?? p.quantity ?? 0)) * Number(p.selling_price ?? 0), 0);
+    const summaryReport = {
+      total_revenue: completedSales.reduce((s, r) => s + Number(r.receivable ?? 0), 0),
+      total_profit: completedSales.reduce((s, r) => s + Number(r.profit ?? 0), 0),
+      total_purchases: store.purchases.reduce((s, r) => s + Number(r.total ?? r.total_amount ?? 0), 0),
+      total_expenses: store.expenses.reduce((s, r) => s + Number(r.amount ?? 0), 0),
+      customer_due_total: customerDues.reduce((s, r) => s + r.due, 0),
+      supplier_due_total: supplierDues.reduce((s, r) => s + r.due, 0),
+      bank_balance: bankBalance,
+      cash_balance: cashIn - cashOut,
+      stock_cost_value: stockValuation,
+      stock_retail_value: retailValuation,
+      active_products: store.products.filter((p) => Number(p.status ?? 1) === 1).length,
+      total_customers: store.customers.length,
+      total_suppliers: store.suppliers.length,
+    };
+
+    // 8. Daily Report (within from..to date range)
+    const dailyMap = new Map<string, { date: string; invoices: number; revenue: number; collected: number; due: number; profit: number; expenses: number }>();
+    for (const s of periodSales) {
+      const dt = String(s.date ?? s.sale_date ?? s.created_at ?? '').slice(0, 10);
+      const entry = dailyMap.get(dt) ?? { date: dt, invoices: 0, revenue: 0, collected: 0, due: 0, profit: 0, expenses: 0 };
+      entry.invoices += 1;
+      entry.revenue += Number(s.receivable ?? 0);
+      entry.collected += Number(s.paid ?? 0);
+      entry.due += Number(s.due ?? 0);
+      entry.profit += Number(s.profit ?? 0);
+      dailyMap.set(dt, entry);
+    }
+    for (const e of periodExpenses) {
+      const dt = String(e.expense_date ?? e.created_at ?? '').slice(0, 10);
+      const entry = dailyMap.get(dt) ?? { date: dt, invoices: 0, revenue: 0, collected: 0, due: 0, profit: 0, expenses: 0 };
+      entry.expenses += Number(e.amount ?? 0);
+      dailyMap.set(dt, entry);
+    }
+    const dailyReport = [...dailyMap.values()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 90);
+
+    // 9. Low Stock Report
+    const lowStockReport = store.products
+      .filter((p) => {
+        const active = Number(p.status ?? 1) === 1;
+        const qty = Number(p.stock_quantity ?? p.quantity ?? 0);
+        const alertQty = Number(p.alert_quantity ?? 5);
+        return active && qty <= alertQty;
+      })
+      .map((p) => ({
+        id: Number(p.id),
+        name: String(p.name ?? 'Product'),
+        sku: String(p.sku ?? ''),
+        category_name: p.category_id ? (categoryMap.get(Number(p.category_id)) ?? 'Uncategorized') : 'Uncategorized',
+        quantity: Number(p.stock_quantity ?? p.quantity ?? 0),
+        alert_quantity: Number(p.alert_quantity ?? 5),
+        purchase_price: Number(p.purchase_price ?? 0),
+        selling_price: Number(p.selling_price ?? 0),
+      }))
+      .sort((a, b) => a.quantity - b.quantity);
+
+    // 10. Top Customer
+    const topCustAgg = new Map<string, { id: number; name: string; phone: string; invoices: number; total_spent: number; paid: number; due: number }>();
+    for (const s of periodSales) {
+      const cid = Number(s.customer_id ?? 0);
+      const cObj = cid ? customerMap.get(cid) : null;
+      const key = cid ? `c-${cid}` : `w-${String(s.customer_name || 'Walk-in')}`;
+      const cur = topCustAgg.get(key) ?? {
+        id: cid,
+        name: String(cObj?.name ?? s.customer_name ?? 'Walk-in Customer'),
+        phone: String(cObj?.phone ?? ''),
+        invoices: 0,
+        total_spent: 0,
+        paid: 0,
+        due: 0,
+      };
+      cur.invoices += 1;
+      cur.total_spent += Number(s.receivable ?? 0);
+      cur.paid += Number(s.paid ?? 0);
+      cur.due += Number(s.due ?? 0);
+      topCustAgg.set(key, cur);
+    }
+    const topCustomers = [...topCustAgg.values()].sort((a, b) => b.total_spent - a.total_spent).slice(0, 50);
+
+    // 11 & 12. Top Product (Period) & Top Product (All Time)
+    const buildTopProducts = (targetSales: typeof store.sales) => {
+      const saleIdSet = new Set(targetSales.map((s) => Number(s.id)));
+      const agg = new Map<string, { product_id: number; name: string; sku: string; category_name: string; qty_sold: number; revenue: number; profit: number }>();
+      for (const it of store.sale_items) {
+        if (!saleIdSet.has(Number(it.sale_id))) continue;
+        const pid = Number(it.product_id ?? 0);
+        const prod = pid ? productMap.get(pid) : null;
+        const name = String(it.product_name || prod?.name || 'Product');
+        const key = pid ? `p-${pid}` : `n-${name}`;
+        const qty = Math.max(1, Number(it.quantity ?? 1));
+        const total = Number(it.total ?? (Number(it.price ?? 0) * qty));
+        const cost = Number(it.buying_price ?? it.purchase_cost ?? prod?.purchase_price ?? 0) * qty;
+        const catName = String(it.category_name || (prod?.category_id ? categoryMap.get(Number(prod.category_id)) : '') || 'Uncategorized');
+        const cur = agg.get(key) ?? {
+          product_id: pid,
+          name,
+          sku: String(prod?.sku ?? ''),
+          category_name: catName,
+          qty_sold: 0,
+          revenue: 0,
+          profit: 0,
+        };
+        cur.qty_sold += qty;
+        cur.revenue += total;
+        cur.profit += total - cost;
+        agg.set(key, cur);
+      }
+      return [...agg.values()].sort((a, b) => b.qty_sold - a.qty_sold || b.revenue - a.revenue).slice(0, 50);
+    };
+    const topProducts = buildTopProducts(periodSales);
+    const topProductsAllTime = buildTopProducts(completedSales);
+
+    // 13. Category Wise Report
+    const periodSaleIdSet = new Set(periodSales.map((s) => Number(s.id)));
+    const catAgg = new Map<string, { category: string; product_count: number; stock_qty: number; qty_sold: number; sales_revenue: number; estimated_profit: number }>();
+    for (const p of store.products) {
+      if (Number(p.status ?? 1) !== 1) continue;
+      const catName = p.category_id ? (categoryMap.get(Number(p.category_id)) ?? 'Uncategorized') : 'Uncategorized';
+      const entry = catAgg.get(catName) ?? { category: catName, product_count: 0, stock_qty: 0, qty_sold: 0, sales_revenue: 0, estimated_profit: 0 };
+      entry.product_count += 1;
+      entry.stock_qty += Math.max(0, Number(p.stock_quantity ?? p.quantity ?? 0));
+      catAgg.set(catName, entry);
+    }
+    for (const it of store.sale_items) {
+      if (!periodSaleIdSet.has(Number(it.sale_id))) continue;
+      const prod = it.product_id ? productMap.get(Number(it.product_id)) : null;
+      const catName = String(it.category_name || (prod?.category_id ? categoryMap.get(Number(prod.category_id)) : '') || 'Uncategorized');
+      const qty = Math.max(1, Number(it.quantity ?? 1));
+      const rev = Number(it.total ?? (Number(it.price ?? 0) * qty));
+      const cost = Number(it.buying_price ?? it.purchase_cost ?? prod?.purchase_price ?? 0) * qty;
+      const entry = catAgg.get(catName) ?? { category: catName, product_count: 0, stock_qty: 0, qty_sold: 0, sales_revenue: 0, estimated_profit: 0 };
+      entry.qty_sold += qty;
+      entry.sales_revenue += rev;
+      entry.estimated_profit += rev - cost;
+      catAgg.set(catName, entry);
+    }
+    const categoryWiseReport = [...catAgg.values()].sort((a, b) => b.sales_revenue - a.sales_revenue || b.product_count - a.product_count);
 
     res.json({
       from,
       to,
       summary,
       expensesTotal,
-      netProfit: summary.profit - expensesTotal,
+      damagesTotal,
+      returnsTotal,
+      netProfit: summary.profit - expensesTotal - damagesTotal,
+      expenseBreakdown,
       customerDues,
       supplierDues,
+      purchaseReport: purchaseReportRows,
+      purchaseSummary,
+      todayReport,
+      currentMonthReport,
+      summaryReport,
+      dailyReport,
+      lowStockReport,
+      topCustomers,
+      topProducts,
+      topProductsAllTime,
+      categoryWiseReport,
     });
   });
 
@@ -3164,13 +3669,41 @@ async function startServer() {
   // ---- Owners ----
   app.get('/api/owners', (_req: Request, res: Response) => {
     const store = getStore();
-    res.json([...store.owners].sort((a, b) => Number(b.id ?? 0) - Number(a.id ?? 0)));
+    const list = [...store.owners]
+      .sort((a, b) => Number(a.id ?? 0) - Number(b.id ?? 0))
+      .map((o) => {
+        const invested = Number(o.invested ?? 0);
+        const withdrawn = Number(o.withdrawn ?? 0);
+        return {
+          ...o,
+          invested,
+          withdrawn,
+          balance: Number((invested - withdrawn).toFixed(2)),
+        };
+      });
+    res.json(list);
   });
 
-  app.post('/api/owners', (req: Request, res: Response) => {
+  app.get('/api/owners/:id/history', (req: Request, res: Response) => {
+    const store = getStore();
+    const ownerId = Number(req.params.id);
+    const owner = store.owners.find((o) => Number(o.id) === ownerId);
+    if (!owner) {
+      res.status(404).json({ error: 'Owner not found.' });
+      return;
+    }
+    const transactions = (store.owner_transactions ?? [])
+      .filter((t) => Number(t.owner_id) === ownerId)
+      .sort((a, b) => String(b.transaction_date ?? '').localeCompare(String(a.transaction_date ?? '')) || Number(b.id ?? 0) - Number(a.id ?? 0));
+    res.json({ owner, transactions });
+  });
+
+  app.post('/api/owners', (req: AuthedRequest, res: Response) => {
     const store = getStore();
     const name = String(req.body?.name ?? '').trim();
     const sharePercent = Number(req.body?.share_percent ?? 0);
+    const invested = Math.max(0, Number(req.body?.invested ?? 0) || 0);
+    const withdrawn = Math.max(0, Number(req.body?.withdrawn ?? 0) || 0);
     if (!name) {
       res.status(400).json({ error: 'Owner name is required.' });
       return;
@@ -3179,19 +3712,120 @@ async function startServer() {
       res.status(400).json({ error: 'Share percentage must be between 0 and 100.' });
       return;
     }
+    const nowDt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const ownerId = nextId(store.owners);
     const owner = {
-      id: nextId(store.owners),
+      id: ownerId,
       name,
       phone: String(req.body?.phone ?? '').trim(),
       email: String(req.body?.email ?? '').trim(),
       address: String(req.body?.address ?? '').trim(),
       share_percent: sharePercent,
+      invested: Number(invested.toFixed(2)),
+      withdrawn: Number(withdrawn.toFixed(2)),
       is_active: 1,
-      created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      created_at: nowDt,
     };
-    store.owners.unshift(owner);
+    store.owners.push(owner);
+    if (!Array.isArray(store.owner_transactions)) store.owner_transactions = [];
+    if (invested > 0) {
+      store.owner_transactions.unshift({
+        id: nextId(store.owner_transactions),
+        owner_id: ownerId,
+        type: 'invest',
+        amount: Number(invested.toFixed(2)),
+        note: 'Initial Owner Investment',
+        transaction_date: nowDt.slice(0, 10),
+        created_by: req.authUser?.id ?? 1,
+        created_at: nowDt,
+      });
+    }
+    if (withdrawn > 0) {
+      store.owner_transactions.unshift({
+        id: nextId(store.owner_transactions),
+        owner_id: ownerId,
+        type: 'withdraw',
+        amount: Number(withdrawn.toFixed(2)),
+        note: 'Initial Owner Withdrawal',
+        transaction_date: nowDt.slice(0, 10),
+        created_by: req.authUser?.id ?? 1,
+        created_at: nowDt,
+      });
+    }
     saveStore(store);
-    res.status(201).json(owner);
+    res.status(201).json({ ...owner, balance: Number((invested - withdrawn).toFixed(2)) });
+  });
+
+  app.put('/api/owners/:id', (req: Request, res: Response) => {
+    const store = getStore();
+    const owner = store.owners.find((o) => Number(o.id) === Number(req.params.id));
+    if (!owner) {
+      res.status(404).json({ error: 'Owner not found.' });
+      return;
+    }
+    const name = String(req.body?.name ?? '').trim();
+    if (!name) {
+      res.status(400).json({ error: 'Owner name is required.' });
+      return;
+    }
+    const sharePercent = Number(req.body?.share_percent ?? owner.share_percent ?? 0);
+    if (!Number.isFinite(sharePercent) || sharePercent < 0 || sharePercent > 100) {
+      res.status(400).json({ error: 'Share percentage must be between 0 and 100.' });
+      return;
+    }
+    const invested = Math.max(0, Number(req.body?.invested ?? owner.invested ?? 0) || 0);
+    const withdrawn = Math.max(0, Number(req.body?.withdrawn ?? owner.withdrawn ?? 0) || 0);
+
+    owner.name = name;
+    owner.phone = String(req.body?.phone ?? '').trim();
+    owner.email = String(req.body?.email ?? '').trim();
+    owner.address = String(req.body?.address ?? '').trim();
+    owner.share_percent = sharePercent;
+    owner.invested = Number(invested.toFixed(2));
+    owner.withdrawn = Number(withdrawn.toFixed(2));
+    saveStore(store);
+    res.json({ ...owner, balance: Number((invested - withdrawn).toFixed(2)) });
+  });
+
+  app.post('/api/owners/:id/transaction', (req: AuthedRequest, res: Response) => {
+    const store = getStore();
+    const owner = store.owners.find((o) => Number(o.id) === Number(req.params.id));
+    if (!owner) {
+      res.status(404).json({ error: 'Owner not found.' });
+      return;
+    }
+    const type = String(req.body?.type ?? '');
+    const amount = Number(req.body?.amount ?? 0);
+    if (type !== 'invest' && type !== 'withdraw') {
+      res.status(400).json({ error: 'Transaction type must be invest or withdraw.' });
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      res.status(400).json({ error: 'Amount must be greater than zero.' });
+      return;
+    }
+    const currentInvested = Number(owner.invested ?? 0);
+    const currentWithdrawn = Number(owner.withdrawn ?? 0);
+    if (type === 'invest') {
+      owner.invested = Number((currentInvested + amount).toFixed(2));
+    } else {
+      owner.withdrawn = Number((currentWithdrawn + amount).toFixed(2));
+    }
+    if (!Array.isArray(store.owner_transactions)) store.owner_transactions = [];
+    const nowDt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    store.owner_transactions.unshift({
+      id: nextId(store.owner_transactions),
+      owner_id: Number(owner.id),
+      type,
+      amount: Number(amount.toFixed(2)),
+      note: String(req.body?.note ?? '').trim() || (type === 'invest' ? 'Capital Investment' : 'Owner Withdrawal'),
+      transaction_date: String(req.body?.transaction_date ?? nowDt.slice(0, 10)).slice(0, 10),
+      created_by: req.authUser?.id ?? 1,
+      created_at: nowDt,
+    });
+    saveStore(store);
+    const balance = Number((Number(owner.invested) - Number(owner.withdrawn)).toFixed(2));
+    res.json({ ...owner, balance });
   });
 
   app.patch('/api/owners/:id/toggle', (req: Request, res: Response) => {
@@ -3208,7 +3842,11 @@ async function startServer() {
 
   app.delete('/api/owners/:id', (req: Request, res: Response) => {
     const store = getStore();
-    store.owners = store.owners.filter((o) => Number(o.id) !== Number(req.params.id));
+    const oid = Number(req.params.id);
+    store.owners = store.owners.filter((o) => Number(o.id) !== oid);
+    if (Array.isArray(store.owner_transactions)) {
+      store.owner_transactions = store.owner_transactions.filter((t) => Number(t.owner_id) !== oid);
+    }
     saveStore(store);
     res.json({ ok: true });
   });
@@ -3239,6 +3877,47 @@ async function startServer() {
     store.bank_accounts.push(acc);
     saveStore(store);
     res.status(201).json(acc);
+  });
+
+  app.put('/api/accounts/:id', (req: Request, res: Response) => {
+    const store = getStore();
+    const id = Number(req.params.id);
+    const acc = store.bank_accounts.find((a) => Number(a.id) === id);
+    if (!acc) {
+      res.status(404).json({ error: 'Account not found.' });
+      return;
+    }
+    const accountName = String(req.body?.account_name ?? '').trim();
+    if (!accountName) {
+      res.status(400).json({ error: 'Account name is required.' });
+      return;
+    }
+    const rawOpening = req.body?.opening_balance;
+    const newOpening =
+      rawOpening === undefined || rawOpening === null || rawOpening === ''
+        ? Number(acc.opening_balance ?? 0)
+        : Number(rawOpening);
+    if (!Number.isFinite(newOpening) || newOpening < 0) {
+      res.status(400).json({ error: 'Opening balance cannot be negative.' });
+      return;
+    }
+
+    const oldOpening = Number(acc.opening_balance ?? 0);
+    const delta = newOpening - oldOpening;
+    const bankName = String(req.body?.bank_name ?? '').trim();
+    const branch = String(req.body?.branch ?? '').trim();
+
+    acc.account_name = accountName;
+    if (req.body?.bank_name !== undefined) {
+      acc.bank_name = bankName;
+    }
+    if (req.body?.branch !== undefined) {
+      acc.branch = branch || null;
+    }
+    acc.opening_balance = Number(newOpening.toFixed(2));
+    acc.balance = Number((Number(acc.balance ?? 0) + delta).toFixed(2));
+    saveStore(store);
+    res.json(acc);
   });
 
   // ---- Cash Book ----
@@ -3538,6 +4217,7 @@ async function startServer() {
       customers: Array.isArray(payload.customers) ? payload.customers : [],
       suppliers: Array.isArray(payload.suppliers) ? payload.suppliers : [],
       owners: Array.isArray(payload.owners) ? payload.owners : [],
+      owner_transactions: Array.isArray(payload.owner_transactions) ? payload.owner_transactions : [],
       employees: Array.isArray(payload.employees) ? payload.employees : [],
       bank_accounts: Array.isArray(payload.bank_accounts) ? payload.bank_accounts : [],
       bank_transactions: Array.isArray(payload.bank_transactions) ? payload.bank_transactions : [],
@@ -3611,9 +4291,16 @@ async function startServer() {
       duration: String(w.duration ?? w.name ?? ''),
       status: Number(w.status ?? 1),
     }));
+    const warrantyLabelMap = new Map(warranties.map((w) => [Number(w.id), String(w.duration || w.name || '')]));
 
     const products = rawProducts.map((p) => {
       const qty = Number(p.stock_quantity ?? p.quantity ?? p.stock ?? 0);
+      const wId = p.warranty_id ? Number(p.warranty_id) : null;
+      const wMonths = Number(p.warranty_months ?? 0);
+      const resolvedWarranty =
+        String(p.warranty ?? '').trim() ||
+        (wId ? warrantyLabelMap.get(wId) ?? '' : '') ||
+        (wMonths > 0 ? `${wMonths} Months` : 'No Warranty');
       return {
         ...p,
         id: Number(p.id),
@@ -3622,7 +4309,9 @@ async function startServer() {
         category_id: p.category_id ? Number(p.category_id) : null,
         brand_id: p.brand_id ? Number(p.brand_id) : null,
         unit_id: (p.unit_id ?? p.main_unit_id) ? Number(p.unit_id ?? p.main_unit_id) : null,
-        warranty_id: p.warranty_id ? Number(p.warranty_id) : null,
+        warranty_id: wId,
+        warranty_months: wMonths,
+        warranty: resolvedWarranty,
         purchase_price: Number(p.purchase_price ?? p.purchase_cost ?? p.cost_price ?? 0),
         selling_price: Number(p.selling_price ?? p.sale_price ?? p.price ?? 0),
         quantity: qty,
@@ -3679,6 +4368,9 @@ async function startServer() {
       const receivable = Number(s.receivable ?? s.final_receivable ?? s.total_amount ?? s.total ?? 0);
       const paid = Number(s.paid ?? s.paid_amount ?? 0);
       const due = Number(s.due ?? s.due_amount ?? Math.max(0, receivable - paid));
+      const cost = Number(s.purchase_cost ?? s.total_cost ?? 0);
+      const rawProfit = Number(s.profit ?? 0);
+      const profit = rawProfit !== 0 ? rawProfit : (cost > 0 ? Number((receivable - cost).toFixed(2)) : 0);
       return {
         ...s,
         id: Number(s.id),
@@ -3691,8 +4383,8 @@ async function startServer() {
         receivable,
         paid,
         due,
-        purchase_cost: Number(s.purchase_cost ?? s.total_cost ?? 0),
-        profit: Number(s.profit ?? 0),
+        purchase_cost: cost,
+        profit,
         status: String(s.status ?? 'completed'),
         payment_status: String(
           s.payment_status ?? (due <= 0 ? 'paid' : paid > 0 ? 'partial' : 'due')
@@ -3787,6 +4479,7 @@ async function startServer() {
       customers,
       suppliers,
       owners: tables.owners ?? [],
+      owner_transactions: tables.owner_transactions ?? [],
       employees: tables.employees ?? [],
       bank_accounts,
       bank_transactions: [...(tables.bank_transactions ?? []), ...a2aTransactions],
@@ -3837,6 +4530,7 @@ async function startServer() {
       customers: [],
       suppliers: [],
       owners: [],
+      owner_transactions: [],
       employees: [],
       bank_accounts: [],
       bank_transactions: [],
@@ -3887,28 +4581,47 @@ async function startServer() {
     const seen = new Set<string>();
 
     for (const rel of files) {
-      if (rel === 'database/sql/youthits_pos.sql' || rel === 'database/youthit_pos_database.sql') {
+      if (
+        rel === 'database/sql/youthits_pos.sql' ||
+        rel === 'database/youthit_pos_database.sql' ||
+        rel === 'database/pos-store.json' ||
+        rel === 'database/database.sqlite'
+      ) {
         continue;
       }
       const full = path.join(laravelRoot, rel);
-      zip.file(`youthit-pos-laravel/${rel}`, fs.readFileSync(full));
+      zip.file(rel, fs.readFileSync(full));
       seen.add(rel);
     }
 
-    // Mirror any uploaded/public assets from root /public into laravel/public
+    // Mirror any uploaded/public assets from root /public into public/
     const rootPublic = path.resolve(process.cwd(), 'public');
     for (const publicRel of collectFiles(rootPublic, rootPublic)) {
       const targetRel = `public/${publicRel}`;
       if (!seen.has(targetRel)) {
-        zip.file(`youthit-pos-laravel/${targetRel}`, fs.readFileSync(path.join(rootPublic, publicRel)));
+        zip.file(targetRel, fs.readFileSync(path.join(rootPublic, publicRel)));
         seen.add(targetRel);
       }
     }
 
-    const sqlDump = generateMysqlDumpSql(getStore());
-    zip.file('youthit-pos-laravel/database/sql/youthits_pos.sql', sqlDump);
-    zip.file('youthit-pos-laravel/database/youthit_pos_database.sql', sqlDump);
-    zip.file('youthit-pos-laravel/HOSTING_UPLOAD_GUIDE.md', buildHostingUploadGuide());
+    const store = getStore();
+    const sqlDump = generateMysqlDumpSql(store);
+    const storeJson = JSON.stringify(
+      {
+        ...store,
+        products: store.products.map((p) => ({
+          ...p,
+          image: resolveProductImage(p.image, p.name),
+        })),
+      },
+      null,
+      2
+    );
+
+    zip.file('database/sql/youthits_pos.sql', sqlDump);
+    zip.file('database/youthit_pos_database.sql', sqlDump);
+    zip.file('database/pos-store.json', storeJson);
+    zip.file('HOSTING_UPLOAD_GUIDE.md', buildHostingUploadGuide());
 
     const buffer = await zip.generateAsync({
       type: 'nodebuffer',

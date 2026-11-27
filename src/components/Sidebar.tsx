@@ -83,8 +83,9 @@ const ICON_MAP: Record<string, typeof Circle> = {
 };
 
 const GROUP_ICONS: Record<string, typeof Circle> = {
+  'Product Management': Package,
   'Sales & Purchase': Receipt,
-  'Product Information': Package,
+  'Product Information': Tag,
   'Expenses & Payment': Wallet,
   Peoples: Users,
   Reports: BarChart3,
@@ -286,8 +287,8 @@ export function Sidebar({
           <div className="space-y-1 pt-1">
             {dropdownGroups.map((grp) => {
               const GroupIcon = GROUP_ICONS[grp.label] ?? FolderTree;
-              const isOpen = Boolean(openGroups[grp.label]);
               const hasActiveChild = grp.items.some((m) => m.route_key === activeRoute);
+              const isOpen = openGroups[grp.label] ?? hasActiveChild;
 
               return (
                 <div key={grp.label}>

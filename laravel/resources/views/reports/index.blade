@@ -1,72 +1,501 @@
 @extends('layouts.app')
 
 @section('title', 'Reports — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
-@section('breadcrumb', 'Analytics / Reports')
+@section('breadcrumb', 'Reports & Analytics')
 
 @section('content')
-@php $cur = $appSettings['currency'] ?? '৳'; @endphp
+@php
+    $cur = $appSettings['currency'] ?? '৳';
+    $reportTabs = [
+        ['key' => 'customer_due', 'label' => 'Customer Due Report', 'icon' => 'fa-user-clock'],
+        ['key' => 'supplier_due', 'label' => 'Supplier Due Report', 'icon' => 'fa-truck-loading'],
+        ['key' => 'purchase', 'label' => 'Purchase Report', 'icon' => 'fa-shopping-bag'],
+        ['key' => 'profit_loss', 'label' => 'Profit Loss Report', 'icon' => 'fa-chart-line'],
+        ['key' => 'today', 'label' => 'Today Report', 'icon' => 'fa-calendar-day'],
+        ['key' => 'current_month', 'label' => 'Current Month Report', 'icon' => 'fa-calendar-alt'],
+        ['key' => 'summary', 'label' => 'Summary Report', 'icon' => 'fa-clipboard-list'],
+        ['key' => 'daily', 'label' => 'Daily Report', 'icon' => 'fa-calendar-week'],
+        ['key' => 'low_stock', 'label' => 'Low Stock Report', 'icon' => 'fa-exclamation-triangle'],
+        ['key' => 'top_customer', 'label' => 'Top Customer', 'icon' => 'fa-crown'],
+        ['key' => 'top_product', 'label' => 'Top Product', 'icon' => 'fa-award'],
+        ['key' => 'top_product_all', 'label' => 'Top Product (All Time)', 'icon' => 'fa-trophy'],
+        ['key' => 'category_wise', 'label' => 'Category Wise Report', 'icon' => 'fa-tags'],
+    ];
+    $currentTabMeta = collect($reportTabs)->firstWhere('key', $activeReport) ?? $reportTabs[3];
+@endphp
 
-<form method="GET" action="{{ route('reports.index') }}" class="bg-white border border-slate-200 rounded-lg p-4 mb-6 flex flex-wrap gap-3 items-end text-sm">
-    <div>
-        <label class="block text-xs text-slate-600 mb-1">From Date</label>
-        <input type="date" name="from" value="{{ $from }}" class="px-3 py-1.5 border border-slate-300 rounded-md">
+<div class="space-y-5">
+    {{-- Header + Print / CSV Actions --}}
+    <div class="no-print flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div class="w-11 h-11 sm:w-[50px] sm:h-[50px] shrink-0 rounded-xl flex items-center justify-center text-white text-xl shadow-[0_8px_24px_rgba(79,70,229,0.28)]"
+                 style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                <i class="fas fa-chart-bar"></i>
+            </div>
+            <div class="min-w-0">
+                <h1 class="text-xl sm:text-2xl font-bold text-[#0f172a] truncate">Business Reports</h1>
+                <p class="text-[12px] text-[#64748b] mt-0.5">{{ $currentTabMeta['label'] }} &bull; {{ $from }} to {{ $to }}</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+            <button type="button" onclick="exportActiveReportCsv()"
+                    class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] border border-slate-200 bg-white text-slate-700 hover:border-indigo-500 hover:text-indigo-600 text-xs font-semibold cursor-pointer shadow-xs">
+                <i class="fas fa-file-csv text-emerald-600"></i> Export CSV
+            </button>
+            <button type="button" onclick="window.print()"
+                    style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
+                    class="inline-flex items-center gap-1.5 px-4 py-2 rounded-[10px] text-white text-xs font-semibold shadow-sm cursor-pointer">
+                <i class="fas fa-print"></i> Print Report
+            </button>
+        </div>
     </div>
-    <div>
-        <label class="block text-xs text-slate-600 mb-1">To Date</label>
-        <input type="date" name="to" value="{{ $to }}" class="px-3 py-1.5 border border-slate-300 rounded-md">
-    </div>
-    <button type="submit" class="px-4 py-1.5 bg-slate-900 text-white rounded-md font-medium">Apply Range</button>
-</form>
 
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-4">
-        <div class="text-xs text-slate-500">Period Revenue</div>
-        <div class="mt-1 text-xl font-bold tabular-nums truncate">{{ $cur }}{{ number_format((float) $salesSummary->revenue, 2) }}</div>
+    {{-- Date Filter Card --}}
+    <div class="no-print bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs p-4 flex flex-wrap items-end justify-between gap-3">
+        <form method="GET" action="{{ route('reports.index') }}" class="flex flex-wrap items-end gap-3 w-full sm:w-auto">
+            <input type="hidden" name="report" value="{{ $activeReport }}">
+            <div>
+                <label class="block text-[11px] font-semibold text-[#64748b] mb-1">From Date</label>
+                <input type="date" name="from" value="{{ $from }}" class="px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px] text-xs text-[#334155] focus:outline-none focus:border-[#4f46e5]">
+            </div>
+            <div>
+                <label class="block text-[11px] font-semibold text-[#64748b] mb-1">To Date</label>
+                <input type="date" name="to" value="{{ $to }}" class="px-3 py-2 border-2 border-[#e2e8f0] rounded-[10px] text-xs text-[#334155] focus:outline-none focus:border-[#4f46e5]">
+            </div>
+            <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" class="px-4 py-2 rounded-[10px] text-xs font-semibold text-white cursor-pointer">
+                Apply Range
+            </button>
+        </form>
+        <div class="text-xs text-[#64748b] tabular-nums">
+            Showing <strong class="text-[#0f172a]">{{ $currentTabMeta['label'] }}</strong>
+        </div>
     </div>
-    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-4">
-        <div class="text-xs text-slate-500">Gross Profit</div>
-        <div class="mt-1 text-xl font-bold tabular-nums text-emerald-700 truncate">{{ $cur }}{{ number_format((float) $salesSummary->gross_profit, 2) }}</div>
-    </div>
-    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-4">
-        <div class="text-xs text-slate-500">Stock Cost Value</div>
-        <div class="mt-1 text-xl font-bold tabular-nums truncate">{{ $cur }}{{ number_format((float) $stockValuation->cost_value, 2) }}</div>
-    </div>
-    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-4">
-        <div class="text-xs text-slate-500">Stock Retail Value</div>
-        <div class="mt-1 text-xl font-bold tabular-nums truncate">{{ $cur }}{{ number_format((float) $stockValuation->retail_value, 2) }}</div>
-    </div>
-</div>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <div class="min-w-0 bg-white border border-slate-200 rounded-lg overflow-hidden">
-        <div class="px-4 py-3 border-b border-slate-200 font-display text-sm font-semibold">Top Customer Dues</div>
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-                <tbody class="divide-y divide-slate-100">
-                    @foreach($customerDues as $c)
+    {{-- All 13 Report Tabs --}}
+    <div class="no-print bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs p-2.5 flex flex-wrap gap-1.5">
+        @foreach($reportTabs as $rt)
+            @php $isSel = $rt['key'] === $activeReport; @endphp
+            <a href="{{ route('reports.index', ['report' => $rt['key'], 'from' => $from, 'to' => $to]) }}"
+               @if($isSel) style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" @endif
+               class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-semibold transition-all {{ $isSel ? 'text-white shadow-[0_4px_12px_rgba(79,70,229,0.28)]' : 'text-[#475569] bg-slate-50/70 hover:bg-indigo-50 hover:text-indigo-700' }}">
+                <i class="fas {{ $rt['icon'] }} text-[11px]"></i>
+                <span>{{ $rt['label'] }}</span>
+            </a>
+        @endforeach
+    </div>
+
+    {{-- Active Report Body --}}
+    @if($activeReport === 'customer_due')
+        <div class="bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] flex flex-wrap items-center justify-between gap-2">
+                <h3 class="text-sm font-bold text-[#1e293b]">Customer Due Report ({{ $customerDues->count() }} Customers)</h3>
+                <span class="text-xs font-bold text-red-600 tabular-nums">Total Receivable Due: {{ $cur }}{{ number_format($customerDues->sum('due'), 2) }}</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table id="activeReportTable" class="w-full text-[12.5px]">
+                    <thead class="bg-[#f8fafc] text-[10px] uppercase text-[#64748b] border-b border-[#e2e8f0]">
                         <tr>
-                            <td class="px-4 py-2">{{ $c->name }}</td>
-                            <td class="px-4 py-2 text-right tabular-nums text-red-600 font-medium whitespace-nowrap">{{ $cur }}{{ number_format((float) $c->total_due, 2) }}</td>
+                            <th class="py-2.5 px-4 text-left">#</th>
+                            <th class="py-2.5 px-4 text-left">Customer</th>
+                            <th class="py-2.5 px-4 text-left">Phone</th>
+                            <th class="py-2.5 px-4 text-center">Invoices</th>
+                            <th class="py-2.5 px-4 text-right">Billed</th>
+                            <th class="py-2.5 px-4 text-right">Paid</th>
+                            <th class="py-2.5 px-4 text-right">Due Amount</th>
                         </tr>
-                    @endforeach
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse($customerDues as $i => $row)
+                            <tr class="hover:bg-[#f8fafc]">
+                                <td class="py-2.5 px-4 text-slate-500 tabular-nums">{{ $i + 1 }}</td>
+                                <td class="py-2.5 px-4 font-semibold text-slate-800">{{ $row['name'] }}</td>
+                                <td class="py-2.5 px-4 text-slate-500 tabular-nums">{{ $row['phone'] ?: '—' }}</td>
+                                <td class="py-2.5 px-4 text-center tabular-nums">{{ number_format($row['invoices']) }}</td>
+                                <td class="py-2.5 px-4 text-right tabular-nums">{{ $cur }}{{ number_format($row['total_billed'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right text-emerald-600 tabular-nums">{{ $cur }}{{ number_format($row['paid'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right font-bold text-red-600 tabular-nums">{{ $cur }}{{ number_format($row['due'], 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="7" class="py-10 text-center text-slate-400">No outstanding customer dues.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    @elseif($activeReport === 'supplier_due')
+        <div class="bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] flex flex-wrap items-center justify-between gap-2">
+                <h3 class="text-sm font-bold text-[#1e293b]">Supplier Due Report ({{ $supplierDues->count() }} Suppliers)</h3>
+                <span class="text-xs font-bold text-amber-700 tabular-nums">Total Payable Due: {{ $cur }}{{ number_format($supplierDues->sum('due'), 2) }}</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table id="activeReportTable" class="w-full text-[12.5px]">
+                    <thead class="bg-[#f8fafc] text-[10px] uppercase text-[#64748b] border-b border-[#e2e8f0]">
+                        <tr>
+                            <th class="py-2.5 px-4 text-left">#</th>
+                            <th class="py-2.5 px-4 text-left">Supplier</th>
+                            <th class="py-2.5 px-4 text-left">Phone</th>
+                            <th class="py-2.5 px-4 text-center">Purchases</th>
+                            <th class="py-2.5 px-4 text-right">Total Billed</th>
+                            <th class="py-2.5 px-4 text-right">Paid</th>
+                            <th class="py-2.5 px-4 text-right">Due Payable</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse($supplierDues as $i => $row)
+                            <tr class="hover:bg-[#f8fafc]">
+                                <td class="py-2.5 px-4 text-slate-500 tabular-nums">{{ $i + 1 }}</td>
+                                <td class="py-2.5 px-4 font-semibold text-slate-800">{{ $row['name'] }}</td>
+                                <td class="py-2.5 px-4 text-slate-500 tabular-nums">{{ $row['phone'] ?: '—' }}</td>
+                                <td class="py-2.5 px-4 text-center tabular-nums">{{ number_format($row['purchases']) }}</td>
+                                <td class="py-2.5 px-4 text-right tabular-nums">{{ $cur }}{{ number_format($row['total_billed'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right text-emerald-600 tabular-nums">{{ $cur }}{{ number_format($row['paid'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right font-bold text-amber-700 tabular-nums">{{ $cur }}{{ number_format($row['due'], 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="7" class="py-10 text-center text-slate-400">No outstanding supplier payables.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    @elseif($activeReport === 'purchase')
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Total Purchases</div><div class="text-lg font-bold text-slate-900 mt-1 tabular-nums">{{ number_format($purchaseSummary['count']) }} Invoices</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Purchase Amount</div><div class="text-lg font-bold text-indigo-700 mt-1 tabular-nums">{{ $cur }}{{ number_format($purchaseSummary['total'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Paid to Suppliers</div><div class="text-lg font-bold text-emerald-600 mt-1 tabular-nums">{{ $cur }}{{ number_format($purchaseSummary['paid'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Supplier Due</div><div class="text-lg font-bold text-red-600 mt-1 tabular-nums">{{ $cur }}{{ number_format($purchaseSummary['due'], 2) }}</div></div>
+        </div>
+        <div class="bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] font-bold text-sm text-[#1e293b]">Purchase Ledger ({{ $from }} – {{ $to }})</div>
+            <div class="overflow-x-auto">
+                <table id="activeReportTable" class="w-full text-[12.5px]">
+                    <thead class="bg-[#f8fafc] text-[10px] uppercase text-[#64748b] border-b border-[#e2e8f0]">
+                        <tr>
+                            <th class="py-2.5 px-4 text-left">#</th>
+                            <th class="py-2.5 px-4 text-left">Invoice No</th>
+                            <th class="py-2.5 px-4 text-left">Date</th>
+                            <th class="py-2.5 px-4 text-left">Supplier</th>
+                            <th class="py-2.5 px-4 text-right">Total</th>
+                            <th class="py-2.5 px-4 text-right">Paid</th>
+                            <th class="py-2.5 px-4 text-right">Due</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse($purchaseReport as $i => $row)
+                            <tr class="hover:bg-[#f8fafc]">
+                                <td class="py-2.5 px-4 text-slate-500 tabular-nums">{{ $i + 1 }}</td>
+                                <td class="py-2.5 px-4 font-semibold text-indigo-700">{{ $row['invoice_no'] }}</td>
+                                <td class="py-2.5 px-4 text-slate-600 tabular-nums">{{ $row['date'] }}</td>
+                                <td class="py-2.5 px-4 font-medium text-slate-800">{{ $row['supplier_name'] }}</td>
+                                <td class="py-2.5 px-4 text-right font-semibold tabular-nums">{{ $cur }}{{ number_format($row['total'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right text-emerald-600 tabular-nums">{{ $cur }}{{ number_format($row['paid'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right font-semibold tabular-nums {{ $row['due'] > 0 ? 'text-red-600' : 'text-emerald-600' }}">{{ $cur }}{{ number_format($row['due'], 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="7" class="py-10 text-center text-slate-400">No purchases found in this date range.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    @elseif($activeReport === 'profit_loss')
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Sales Revenue ({{ $summary['invoiceCount'] }})</div><div class="text-lg font-bold text-slate-900 mt-1 tabular-nums">{{ $cur }}{{ number_format($summary['revenue'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Purchase COGS</div><div class="text-lg font-bold text-slate-700 mt-1 tabular-nums">{{ $cur }}{{ number_format($summary['purchaseCost'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Gross Profit</div><div class="text-lg font-bold text-emerald-600 mt-1 tabular-nums">{{ $cur }}{{ number_format($summary['profit'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Expenses &amp; Damages</div><div class="text-lg font-bold text-amber-600 mt-1 tabular-nums">{{ $cur }}{{ number_format($expensesTotal + $damagesTotal, 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Net Profit</div><div class="text-lg font-bold mt-1 tabular-nums {{ $netProfit >= 0 ? 'text-indigo-700' : 'text-red-600' }}">{{ $cur }}{{ number_format($netProfit, 2) }}</div></div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div class="bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
+                <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] font-bold text-sm text-[#1e293b]">Profit &amp; Loss Statement</div>
+                <table id="activeReportTable" class="w-full text-[13px]">
+                    <tbody class="divide-y divide-slate-100">
+                        <tr><td class="py-3 px-5 text-slate-600">Total Sales Revenue</td><td class="py-3 px-5 text-right font-semibold tabular-nums">{{ $cur }}{{ number_format($summary['revenue'], 2) }}</td></tr>
+                        <tr><td class="py-3 px-5 text-slate-600">Cost of Goods Sold (COGS)</td><td class="py-3 px-5 text-right font-semibold text-slate-700 tabular-nums">{{ $cur }}{{ number_format($summary['purchaseCost'], 2) }}</td></tr>
+                        <tr><td class="py-3 px-5 text-slate-600">Discounts Given</td><td class="py-3 px-5 text-right font-semibold text-slate-500 tabular-nums">{{ $cur }}{{ number_format($summary['discount'], 2) }}</td></tr>
+                        <tr class="bg-emerald-50/50"><td class="py-3 px-5 font-bold text-emerald-800">Gross Profit</td><td class="py-3 px-5 text-right font-bold text-emerald-700 tabular-nums">{{ $cur }}{{ number_format($summary['profit'], 2) }}</td></tr>
+                        <tr><td class="py-3 px-5 text-slate-600">Operating Expenses</td><td class="py-3 px-5 text-right font-semibold text-amber-700 tabular-nums">- {{ $cur }}{{ number_format($expensesTotal, 2) }}</td></tr>
+                        <tr><td class="py-3 px-5 text-slate-600">Damaged Stock Loss</td><td class="py-3 px-5 text-right font-semibold text-red-600 tabular-nums">- {{ $cur }}{{ number_format($damagesTotal, 2) }}</td></tr>
+                        <tr><td class="py-3 px-5 text-slate-600">Sales Returns (Reference)</td><td class="py-3 px-5 text-right font-medium text-slate-500 tabular-nums">{{ $cur }}{{ number_format($returnsTotal, 2) }}</td></tr>
+                        <tr class="bg-indigo-50/60"><td class="py-3.5 px-5 font-bold text-slate-900">Net Profit</td><td class="py-3.5 px-5 text-right text-base font-extrabold tabular-nums {{ $netProfit >= 0 ? 'text-indigo-700' : 'text-red-600' }}">{{ $cur }}{{ number_format($netProfit, 2) }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
+                <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] font-bold text-sm text-[#1e293b]">Expense Breakdown by Category</div>
+                <table class="w-full text-[13px]">
+                    <thead class="bg-[#f8fafc] text-[10px] uppercase text-[#64748b] border-b border-[#e2e8f0]">
+                        <tr><th class="py-2.5 px-5 text-left">Category</th><th class="py-2.5 px-5 text-right">Amount</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse($expenseBreakdown as $ex)
+                            <tr><td class="py-2.5 px-5 font-medium text-slate-700">{{ $ex['category'] }}</td><td class="py-2.5 px-5 text-right font-semibold text-amber-700 tabular-nums">{{ $cur }}{{ number_format($ex['amount'], 2) }}</td></tr>
+                        @empty
+                            <tr><td colspan="2" class="py-8 text-center text-slate-400">No expenses recorded in this period.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    @elseif($activeReport === 'today')
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Invoices Today</div><div class="text-lg font-bold text-slate-900 mt-1 tabular-nums">{{ number_format($todayReport['sales_count']) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Today Sales</div><div class="text-lg font-bold text-indigo-700 mt-1 tabular-nums">{{ $cur }}{{ number_format($todayReport['revenue'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Collected</div><div class="text-lg font-bold text-emerald-600 mt-1 tabular-nums">{{ $cur }}{{ number_format($todayReport['collected'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Today Due</div><div class="text-lg font-bold text-red-600 mt-1 tabular-nums">{{ $cur }}{{ number_format($todayReport['due'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Today Profit</div><div class="text-lg font-bold text-emerald-700 mt-1 tabular-nums">{{ $cur }}{{ number_format($todayReport['profit'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Today Expense</div><div class="text-lg font-bold text-amber-700 mt-1 tabular-nums">{{ $cur }}{{ number_format($todayReport['expenses'], 2) }}</div></div>
+        </div>
+        <div class="bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] font-bold text-sm text-[#1e293b]">Today's Invoices ({{ $todayReport['date'] }})</div>
+            <div class="overflow-x-auto">
+                <table id="activeReportTable" class="w-full text-[12.5px]">
+                    <thead class="bg-[#f8fafc] text-[10px] uppercase text-[#64748b] border-b border-[#e2e8f0]">
+                        <tr><th class="py-2.5 px-4 text-left">#</th><th class="py-2.5 px-4 text-left">Invoice</th><th class="py-2.5 px-4 text-left">Customer</th><th class="py-2.5 px-4 text-right">Amount</th><th class="py-2.5 px-4 text-right">Paid</th><th class="py-2.5 px-4 text-right">Due</th><th class="py-2.5 px-4 text-right">Profit</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse($todayReport['invoices'] as $i => $inv)
+                            <tr class="hover:bg-[#f8fafc]">
+                                <td class="py-2.5 px-4 text-slate-500 tabular-nums">{{ $i + 1 }}</td>
+                                <td class="py-2.5 px-4 font-semibold text-indigo-700">{{ $inv['invoice_no'] }}</td>
+                                <td class="py-2.5 px-4 font-medium text-slate-800">{{ $inv['customer_name'] }}</td>
+                                <td class="py-2.5 px-4 text-right tabular-nums">{{ $cur }}{{ number_format($inv['receivable'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right text-emerald-600 tabular-nums">{{ $cur }}{{ number_format($inv['paid'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right tabular-nums {{ $inv['due'] > 0 ? 'text-red-600' : 'text-emerald-600' }}">{{ $cur }}{{ number_format($inv['due'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right font-semibold text-emerald-700 tabular-nums">{{ $cur }}{{ number_format($inv['profit'], 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="7" class="py-10 text-center text-slate-400">No sales invoices recorded today.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    @elseif($activeReport === 'current_month')
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Invoices ({{ $currentMonthReport['month'] }})</div><div class="text-lg font-bold text-slate-900 mt-1 tabular-nums">{{ number_format($currentMonthReport['sales_count']) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Month Revenue</div><div class="text-lg font-bold text-indigo-700 mt-1 tabular-nums">{{ $cur }}{{ number_format($currentMonthReport['revenue'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Collected</div><div class="text-lg font-bold text-emerald-600 mt-1 tabular-nums">{{ $cur }}{{ number_format($currentMonthReport['collected'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Month Profit</div><div class="text-lg font-bold text-emerald-700 mt-1 tabular-nums">{{ $cur }}{{ number_format($currentMonthReport['profit'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Purchases</div><div class="text-lg font-bold text-slate-700 mt-1 tabular-nums">{{ $cur }}{{ number_format($currentMonthReport['purchases'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Expenses</div><div class="text-lg font-bold text-amber-700 mt-1 tabular-nums">{{ $cur }}{{ number_format($currentMonthReport['expenses'], 2) }}</div></div>
+        </div>
+        <div class="bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] font-bold text-sm text-[#1e293b]">Daily Breakdown — {{ $currentMonthReport['month'] }}</div>
+            <div class="overflow-x-auto">
+                <table id="activeReportTable" class="w-full text-[12.5px]">
+                    <thead class="bg-[#f8fafc] text-[10px] uppercase text-[#64748b] border-b border-[#e2e8f0]">
+                        <tr><th class="py-2.5 px-4 text-left">Date</th><th class="py-2.5 px-4 text-center">Invoices</th><th class="py-2.5 px-4 text-right">Revenue</th><th class="py-2.5 px-4 text-right">Collected</th><th class="py-2.5 px-4 text-right">Due</th><th class="py-2.5 px-4 text-right">Profit</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse($currentMonthReport['daily_rows'] as $row)
+                            <tr class="hover:bg-[#f8fafc]">
+                                <td class="py-2.5 px-4 font-semibold text-slate-800 tabular-nums">{{ $row['date'] }}</td>
+                                <td class="py-2.5 px-4 text-center tabular-nums">{{ $row['invoices'] }}</td>
+                                <td class="py-2.5 px-4 text-right font-semibold tabular-nums">{{ $cur }}{{ number_format($row['revenue'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right text-emerald-600 tabular-nums">{{ $cur }}{{ number_format($row['collected'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right text-red-600 tabular-nums">{{ $cur }}{{ number_format($row['due'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right font-bold text-emerald-700 tabular-nums">{{ $cur }}{{ number_format($row['profit'], 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="6" class="py-10 text-center text-slate-400">No sales found in current month.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    @elseif($activeReport === 'summary')
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">All-Time Revenue</div><div class="text-lg font-bold text-slate-900 mt-1 tabular-nums">{{ $cur }}{{ number_format($summaryReport['total_revenue'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">All-Time Gross Profit</div><div class="text-lg font-bold text-emerald-600 mt-1 tabular-nums">{{ $cur }}{{ number_format($summaryReport['total_profit'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Stock Valuation (Cost)</div><div class="text-lg font-bold text-indigo-700 mt-1 tabular-nums">{{ $cur }}{{ number_format($summaryReport['stock_cost_value'], 2) }}</div></div>
+            <div class="bg-white rounded-xl border border-[#f1f5f9] p-4 shadow-xs"><div class="text-[11px] font-bold uppercase text-slate-500">Stock Valuation (Retail)</div><div class="text-lg font-bold text-violet-700 mt-1 tabular-nums">{{ $cur }}{{ number_format($summaryReport['stock_retail_value'], 2) }}</div></div>
+        </div>
+        <div class="bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] font-bold text-sm text-[#1e293b]">Overall Business Summary</div>
+            <table id="activeReportTable" class="w-full text-[13px]">
+                <tbody class="divide-y divide-slate-100">
+                    <tr><td class="py-3 px-5 text-slate-600">Total All-Time Sales Revenue</td><td class="py-3 px-5 text-right font-bold tabular-nums">{{ $cur }}{{ number_format($summaryReport['total_revenue'], 2) }}</td></tr>
+                    <tr><td class="py-3 px-5 text-slate-600">Total All-Time Gross Profit</td><td class="py-3 px-5 text-right font-bold text-emerald-600 tabular-nums">{{ $cur }}{{ number_format($summaryReport['total_profit'], 2) }}</td></tr>
+                    <tr><td class="py-3 px-5 text-slate-600">Total Purchases</td><td class="py-3 px-5 text-right font-semibold tabular-nums">{{ $cur }}{{ number_format($summaryReport['total_purchases'], 2) }}</td></tr>
+                    <tr><td class="py-3 px-5 text-slate-600">Total Expenses</td><td class="py-3 px-5 text-right font-semibold text-amber-700 tabular-nums">{{ $cur }}{{ number_format($summaryReport['total_expenses'], 2) }}</td></tr>
+                    <tr><td class="py-3 px-5 text-slate-600">Total Customer Due Receivable</td><td class="py-3 px-5 text-right font-bold text-red-600 tabular-nums">{{ $cur }}{{ number_format($summaryReport['customer_due_total'], 2) }}</td></tr>
+                    <tr><td class="py-3 px-5 text-slate-600">Total Supplier Due Payable</td><td class="py-3 px-5 text-right font-bold text-amber-700 tabular-nums">{{ $cur }}{{ number_format($summaryReport['supplier_due_total'], 2) }}</td></tr>
+                    <tr><td class="py-3 px-5 text-slate-600">Bank Accounts Balance</td><td class="py-3 px-5 text-right font-bold text-indigo-700 tabular-nums">{{ $cur }}{{ number_format($summaryReport['bank_balance'], 2) }}</td></tr>
+                    <tr><td class="py-3 px-5 text-slate-600">Cash Book Net Balance</td><td class="py-3 px-5 text-right font-bold text-emerald-700 tabular-nums">{{ $cur }}{{ number_format($summaryReport['cash_balance'], 2) }}</td></tr>
+                    <tr><td class="py-3 px-5 text-slate-600">Active Products / Customers / Suppliers</td><td class="py-3 px-5 text-right font-semibold tabular-nums">{{ number_format($summaryReport['active_products']) }} SKUs / {{ number_format($summaryReport['total_customers']) }} Customers / {{ number_format($summaryReport['total_suppliers']) }} Suppliers</td></tr>
                 </tbody>
             </table>
         </div>
-    </div>
-    <div class="min-w-0 bg-white border border-slate-200 rounded-lg overflow-hidden">
-        <div class="px-4 py-3 border-b border-slate-200 font-display text-sm font-semibold">Top Supplier Dues</div>
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-                <tbody class="divide-y divide-slate-100">
-                    @foreach($supplierDues as $s)
-                        <tr>
-                            <td class="px-4 py-2">{{ $s->name }}</td>
-                            <td class="px-4 py-2 text-right tabular-nums text-amber-700 font-medium whitespace-nowrap">{{ $cur }}{{ number_format((float) $s->total_due, 2) }}</td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
+
+    @elseif($activeReport === 'daily')
+        <div class="bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] font-bold text-sm text-[#1e293b]">Daily Report ({{ $from }} to {{ $to }})</div>
+            <div class="overflow-x-auto">
+                <table id="activeReportTable" class="w-full text-[12.5px]">
+                    <thead class="bg-[#f8fafc] text-[10px] uppercase text-[#64748b] border-b border-[#e2e8f0]">
+                        <tr><th class="py-2.5 px-4 text-left">Date</th><th class="py-2.5 px-4 text-center">Invoices</th><th class="py-2.5 px-4 text-right">Sales</th><th class="py-2.5 px-4 text-right">Collected</th><th class="py-2.5 px-4 text-right">Due</th><th class="py-2.5 px-4 text-right">Profit</th><th class="py-2.5 px-4 text-right">Expenses</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse($dailyReport as $row)
+                            <tr class="hover:bg-[#f8fafc]">
+                                <td class="py-2.5 px-4 font-semibold text-slate-800 tabular-nums">{{ $row['date'] }}</td>
+                                <td class="py-2.5 px-4 text-center tabular-nums">{{ $row['invoices'] }}</td>
+                                <td class="py-2.5 px-4 text-right font-semibold tabular-nums">{{ $cur }}{{ number_format($row['revenue'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right text-emerald-600 tabular-nums">{{ $cur }}{{ number_format($row['collected'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right text-red-600 tabular-nums">{{ $cur }}{{ number_format($row['due'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right font-bold text-emerald-700 tabular-nums">{{ $cur }}{{ number_format($row['profit'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right text-amber-700 tabular-nums">{{ $cur }}{{ number_format($row['expenses'], 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="7" class="py-10 text-center text-slate-400">No daily records in selected range.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </div>
+
+    @elseif($activeReport === 'low_stock')
+        <div class="bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] flex items-center justify-between">
+                <h3 class="text-sm font-bold text-[#1e293b]">Low Stock &amp; Out of Stock Products ({{ $lowStockReport->count() }})</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table id="activeReportTable" class="w-full text-[12.5px]">
+                    <thead class="bg-[#f8fafc] text-[10px] uppercase text-[#64748b] border-b border-[#e2e8f0]">
+                        <tr><th class="py-2.5 px-4 text-left">#</th><th class="py-2.5 px-4 text-left">Product</th><th class="py-2.5 px-4 text-left">SKU</th><th class="py-2.5 px-4 text-left">Category</th><th class="py-2.5 px-4 text-center">Stock</th><th class="py-2.5 px-4 text-center">Alert Qty</th><th class="py-2.5 px-4 text-right">Purchase Price</th><th class="py-2.5 px-4 text-right">Sale Price</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse($lowStockReport as $i => $row)
+                            <tr class="hover:bg-[#f8fafc]">
+                                <td class="py-2.5 px-4 text-slate-500 tabular-nums">{{ $i + 1 }}</td>
+                                <td class="py-2.5 px-4 font-semibold text-slate-800">{{ $row['name'] }}</td>
+                                <td class="py-2.5 px-4 text-slate-500 font-mono text-xs">{{ $row['sku'] ?: 'N/A' }}</td>
+                                <td class="py-2.5 px-4 text-slate-600">{{ $row['category_name'] }}</td>
+                                <td class="py-2.5 px-4 text-center"><span class="px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums {{ $row['quantity'] <= 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700' }}">{{ $row['quantity'] }}</span></td>
+                                <td class="py-2.5 px-4 text-center text-slate-500 tabular-nums">{{ $row['alert_quantity'] }}</td>
+                                <td class="py-2.5 px-4 text-right tabular-nums">{{ $cur }}{{ number_format($row['purchase_price'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right font-semibold tabular-nums">{{ $cur }}{{ number_format($row['selling_price'], 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="8" class="py-10 text-center text-emerald-600 font-medium">All active products are well stocked!</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    @elseif($activeReport === 'top_customer')
+        <div class="bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] font-bold text-sm text-[#1e293b]">Top Customers ({{ $from }} to {{ $to }})</div>
+            <div class="overflow-x-auto">
+                <table id="activeReportTable" class="w-full text-[12.5px]">
+                    <thead class="bg-[#f8fafc] text-[10px] uppercase text-[#64748b] border-b border-[#e2e8f0]">
+                        <tr><th class="py-2.5 px-4 text-left">#</th><th class="py-2.5 px-4 text-left">Customer</th><th class="py-2.5 px-4 text-left">Phone</th><th class="py-2.5 px-4 text-center">Invoices</th><th class="py-2.5 px-4 text-right">Total Spent</th><th class="py-2.5 px-4 text-right">Paid</th><th class="py-2.5 px-4 text-right">Due</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse($topCustomers as $i => $row)
+                            <tr class="hover:bg-[#f8fafc]">
+                                <td class="py-2.5 px-4 text-slate-500 tabular-nums">{{ $i + 1 }}</td>
+                                <td class="py-2.5 px-4 font-semibold text-slate-800">{{ $row['name'] }}</td>
+                                <td class="py-2.5 px-4 text-slate-500 tabular-nums">{{ $row['phone'] ?: '—' }}</td>
+                                <td class="py-2.5 px-4 text-center tabular-nums">{{ number_format($row['invoices']) }}</td>
+                                <td class="py-2.5 px-4 text-right font-bold text-indigo-700 tabular-nums">{{ $cur }}{{ number_format($row['total_spent'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right text-emerald-600 tabular-nums">{{ $cur }}{{ number_format($row['paid'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right tabular-nums {{ $row['due'] > 0 ? 'text-red-600' : 'text-emerald-600' }}">{{ $cur }}{{ number_format($row['due'], 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="7" class="py-10 text-center text-slate-400">No customer sales in selected period.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    @elseif($activeReport === 'top_product' || $activeReport === 'top_product_all')
+        @php $prodRows = $activeReport === 'top_product_all' ? $topProductsAllTime : $topProducts; @endphp
+        <div class="bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] font-bold text-sm text-[#1e293b]">
+                {{ $activeReport === 'top_product_all' ? 'Top Selling Products (All Time)' : "Top Selling Products ($from to $to)" }}
+            </div>
+            <div class="overflow-x-auto">
+                <table id="activeReportTable" class="w-full text-[12.5px]">
+                    <thead class="bg-[#f8fafc] text-[10px] uppercase text-[#64748b] border-b border-[#e2e8f0]">
+                        <tr><th class="py-2.5 px-4 text-left">#</th><th class="py-2.5 px-4 text-left">Product</th><th class="py-2.5 px-4 text-left">SKU</th><th class="py-2.5 px-4 text-left">Category</th><th class="py-2.5 px-4 text-center">Qty Sold</th><th class="py-2.5 px-4 text-right">Revenue</th><th class="py-2.5 px-4 text-right">Est. Profit</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse($prodRows as $i => $row)
+                            <tr class="hover:bg-[#f8fafc]">
+                                <td class="py-2.5 px-4 text-slate-500 tabular-nums">{{ $i + 1 }}</td>
+                                <td class="py-2.5 px-4 font-semibold text-slate-800">{{ $row['name'] }}</td>
+                                <td class="py-2.5 px-4 text-slate-500 font-mono text-xs">{{ $row['sku'] ?: 'N/A' }}</td>
+                                <td class="py-2.5 px-4 text-slate-600">{{ $row['category_name'] }}</td>
+                                <td class="py-2.5 px-4 text-center"><span class="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold text-xs tabular-nums">{{ number_format($row['qty_sold']) }}</span></td>
+                                <td class="py-2.5 px-4 text-right font-semibold tabular-nums">{{ $cur }}{{ number_format($row['revenue'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right font-bold text-emerald-700 tabular-nums">{{ $cur }}{{ number_format($row['profit'], 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="7" class="py-10 text-center text-slate-400">No product sales recorded for this view.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    @elseif($activeReport === 'category_wise')
+        <div class="bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] font-bold text-sm text-[#1e293b]">Category Wise Sales &amp; Stock Report ({{ $from }} to {{ $to }})</div>
+            <div class="overflow-x-auto">
+                <table id="activeReportTable" class="w-full text-[12.5px]">
+                    <thead class="bg-[#f8fafc] text-[10px] uppercase text-[#64748b] border-b border-[#e2e8f0]">
+                        <tr><th class="py-2.5 px-4 text-left">#</th><th class="py-2.5 px-4 text-left">Category</th><th class="py-2.5 px-4 text-center">Active SKUs</th><th class="py-2.5 px-4 text-center">Current Stock</th><th class="py-2.5 px-4 text-center">Qty Sold</th><th class="py-2.5 px-4 text-right">Sales Revenue</th><th class="py-2.5 px-4 text-right">Est. Profit</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse($categoryWiseReport as $i => $row)
+                            <tr class="hover:bg-[#f8fafc]">
+                                <td class="py-2.5 px-4 text-slate-500 tabular-nums">{{ $i + 1 }}</td>
+                                <td class="py-2.5 px-4 font-semibold text-slate-800">{{ $row['category'] }}</td>
+                                <td class="py-2.5 px-4 text-center tabular-nums">{{ number_format($row['product_count']) }}</td>
+                                <td class="py-2.5 px-4 text-center tabular-nums">{{ number_format($row['stock_qty']) }}</td>
+                                <td class="py-2.5 px-4 text-center font-semibold text-indigo-700 tabular-nums">{{ number_format($row['qty_sold']) }}</td>
+                                <td class="py-2.5 px-4 text-right font-semibold tabular-nums">{{ $cur }}{{ number_format($row['sales_revenue'], 2) }}</td>
+                                <td class="py-2.5 px-4 text-right font-bold text-emerald-700 tabular-nums">{{ $cur }}{{ number_format($row['estimated_profit'], 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="7" class="py-10 text-center text-slate-400">No categories available.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @endif
 </div>
+
+<script>
+window.exportActiveReportCsv = function () {
+    var table = document.getElementById('activeReportTable');
+    if (!table) return;
+    var rows = Array.from(table.querySelectorAll('tr')).map(function (tr) {
+        return Array.from(tr.querySelectorAll('th, td')).map(function (cell) {
+            var txt = (cell.innerText || '').replace(/\s+/g, ' ').trim();
+            return '"' + txt.replace(/"/g, '""') + '"';
+        }).join(',');
+    });
+    var blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'youthit-{{ $activeReport }}-{{ $from }}-to-{{ $to }}.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+</script>
 @endsection

@@ -48,8 +48,36 @@ class Menu extends Model
 
     public function resolvedUrl(): string
     {
-        if ($this->route_name && app('router')->has($this->route_name)) {
-            return route($this->route_name);
+        $aliases = [
+            'owners' => 'owners.index',
+            'accounts' => 'accounts.index',
+            'cashbook' => 'cashbook.index',
+            'pos' => 'pos.index',
+            'sales' => 'sales.index',
+            'products' => 'products.index',
+            'returns' => 'returns.index',
+            'estimates' => 'estimates.index',
+            'purchases' => 'purchases.index',
+            'stock' => 'stock.index',
+            'damages' => 'damages.index',
+            'add-product' => 'products.create',
+            'categories' => 'categories.index',
+            'brands' => 'brands.index',
+            'units' => 'units.index',
+            'expenses' => 'expenses.index',
+            'payments' => 'payments.index',
+            'customers' => 'customers.index',
+            'suppliers' => 'suppliers.index',
+            'employees' => 'employees.index',
+            'reports' => 'reports.index',
+            'settings' => 'settings.index',
+            'users' => 'users.index',
+            'backup' => 'backup.index',
+        ];
+        $routeName = $aliases[$this->route_name ?? ''] ?? $this->route_name;
+
+        if ($routeName && app('router')->has($routeName)) {
+            return route($routeName);
         }
 
         return url($this->url ?: '/');

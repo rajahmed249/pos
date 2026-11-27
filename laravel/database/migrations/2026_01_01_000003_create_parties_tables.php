@@ -59,6 +59,8 @@ return new class extends Migration
             $table->string('email')->nullable();
             $table->text('address')->nullable();
             $table->decimal('share_percent', 5, 2)->default(0.00);
+            $table->decimal('invested', 15, 2)->default(0.00);
+            $table->decimal('withdrawn', 15, 2)->default(0.00);
             $table->boolean('is_active')->default(true);
             $table->timestamp('created_at')->nullable()->useCurrent();
         });

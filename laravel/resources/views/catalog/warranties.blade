@@ -1,36 +1,81 @@
 @extends('layouts.app')
 
 @section('title', 'Units & Warranties — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
-@section('breadcrumb', 'Inventory / Units & Warranties')
+@section('breadcrumb', 'Product Information / Units & Warranties')
 
 @section('content')
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-5">
-        <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">Units</h2>
-        <form method="POST" action="{{ route('units.store') }}" class="flex flex-wrap gap-2 mb-4 text-sm">
-            @csrf
-            <input type="text" name="name" required placeholder="e.g. pcs, box, mtr" class="flex-1 min-w-0 px-3 py-1.5 border border-slate-300 rounded-md">
-            <button type="submit" class="px-4 py-1.5 bg-slate-900 text-white rounded-md font-medium shrink-0">Add</button>
-        </form>
-        <div class="divide-y divide-slate-100 text-sm">
-            @foreach($units as $unit)
-                <div class="py-2 flex justify-between gap-2"><span class="truncate">{{ $unit->name }}</span><span class="text-xs text-emerald-700 shrink-0">Active</span></div>
-            @endforeach
+<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3 min-w-0">
+            <div class="w-11 h-11 shrink-0 rounded-2xl flex items-center justify-center text-white shadow-[0_6px_18px_rgba(79,70,229,0.3)]"
+                 style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <div class="min-w-0">
+                <h1 class="text-xl sm:text-2xl font-display font-extrabold text-slate-900 truncate">
+                    Units &amp; <span class="bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] bg-clip-text text-transparent">Warranties</span>
+                </h1>
+                <p class="text-xs text-slate-500">Define measurement units and standard product warranty plans</p>
+            </div>
         </div>
+        <a href="{{ route('products.create') }}" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
+           class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)] hover:opacity-95 transition-all shrink-0">
+            + Add Product
+        </a>
     </div>
 
-    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-5">
-        <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">Warranties</h2>
-        <form method="POST" action="{{ route('warranties.store') }}" class="flex flex-wrap gap-2 mb-4 text-sm">
-            @csrf
-            <input type="text" name="name" required placeholder="e.g. 2 Years" class="flex-1 min-w-[140px] px-3 py-1.5 border border-slate-300 rounded-md">
-            <input type="text" name="duration" placeholder="Duration" class="w-full sm:w-32 px-3 py-1.5 border border-slate-300 rounded-md">
-            <button type="submit" class="px-4 py-1.5 bg-slate-900 text-white rounded-md font-medium shrink-0">Add</button>
-        </form>
-        <div class="divide-y divide-slate-100 text-sm">
-            @foreach($warranties as $w)
-                <div class="py-2 flex justify-between gap-2"><span class="truncate">{{ $w->name }}</span><span class="text-xs text-slate-500 shrink-0">{{ $w->duration }}</span></div>
-            @endforeach
+    @include('products._tabs', ['activeTab' => 'units'])
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {{-- Units Card --}}
+        <div class="min-w-0 bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r from-indigo-50/70 via-white to-violet-50/60 flex items-center justify-between">
+                <h2 class="font-display text-sm sm:text-base font-bold text-slate-900">Units</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">{{ $units->count() }}</span>
+            </div>
+            <div class="p-5">
+                <form method="POST" action="{{ route('units.store') }}" class="flex flex-wrap gap-2 mb-4 text-sm">
+                    @csrf
+                    <input type="text" name="name" required placeholder="e.g. pcs, box, mtr" class="flex-1 min-w-0 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-indigo-500 outline-none">
+                    <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" class="px-4 py-2 text-white rounded-xl font-semibold shrink-0 cursor-pointer">Add</button>
+                </form>
+                <div class="divide-y divide-slate-100 text-sm">
+                    @forelse($units as $unit)
+                        <div class="py-2.5 flex justify-between items-center gap-2">
+                            <span class="font-medium text-slate-800 truncate">{{ $unit->name }}</span>
+                            <span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold shrink-0">Active</span>
+                        </div>
+                    @empty
+                        <div class="py-6 text-center text-xs text-slate-400">No units found.</div>
+                    @endforelse
+                </div>
+            </div>
+        </div>
+
+        {{-- Warranties Card --}}
+        <div class="min-w-0 bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r from-indigo-50/70 via-white to-violet-50/60 flex items-center justify-between">
+                <h2 class="font-display text-sm sm:text-base font-bold text-slate-900">Warranties</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">{{ $warranties->count() }}</span>
+            </div>
+            <div class="p-5">
+                <form method="POST" action="{{ route('warranties.store') }}" class="flex flex-wrap gap-2 mb-4 text-sm">
+                    @csrf
+                    <input type="text" name="name" required placeholder="e.g. 2 Years Replacement" class="flex-1 min-w-[140px] px-3 py-2 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-indigo-500 outline-none">
+                    <input type="text" name="duration" placeholder="Duration (e.g. 24 Months)" class="w-full sm:w-44 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-indigo-500 outline-none">
+                    <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" class="px-4 py-2 text-white rounded-xl font-semibold shrink-0 cursor-pointer">Add</button>
+                </form>
+                <div class="divide-y divide-slate-100 text-sm">
+                    @forelse($warranties as $w)
+                        <div class="py-2.5 flex justify-between items-center gap-2">
+                            <span class="font-medium text-slate-800 truncate">{{ $w->name }}</span>
+                            <span class="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-semibold shrink-0">{{ $w->duration }}</span>
+                        </div>
+                    @empty
+                        <div class="py-6 text-center text-xs text-slate-400">No warranties configured yet.</div>
+                    @endforelse
+                </div>
+            </div>
         </div>
     </div>
 </div>

@@ -1701,41 +1701,35 @@ function collectFiles(dir, baseDir) {
   return results.sort();
 }
 function buildHostingUploadGuide() {
-  return `# Youth IT POS \u2014 Easy Hosting & Local Setup Guide
+  return `# Youth IT POS \u2014 Easy Local & Hosting Setup Guide
 
-## Included Files & Database
-- \`database/youthit_pos_database.sql\` (and \`laravel/database/sql/youthits_pos.sql\`): Complete MySQL 8 / MariaDB schema + all live POS data.
-- \`data/pos-store.json\`: Live JSON database used by the Node.js + React server.
-- \`public/\`: Shop logos, favicon, QR code, and all uploaded product & avatar images.
-- \`.env.example\`: Safe environment template (\`.env\` with fresh \`APP_KEY\` is auto-created on first run for Laravel).
-
----
-
-## Option 1: cPanel Shared Hosting or Local XAMPP / Laragon (\`youthit-pos-laravel-13.zip\`)
-1. **Create an empty MySQL Database** (in cPanel -> *MySQL Databases* or locally in *phpMyAdmin*).
-2. **Upload & Extract** \`youthit-pos-laravel-13.zip\` into your domain folder (or \`C:\\xampp\\htdocs\\youthit-pos\` / \`C:\\laragon\\www\\youthit-pos\` locally).
-3. **Install PHP Vendor Packages** (only if \`vendor/\` folder is not already present):
-   \`\`\`bash
-   composer install --no-dev --optimize-autoloader
-   \`\`\`
-4. **Open Your Site in Browser** (e.g. \`https://yourdomain.com\` or \`http://localhost/youthit-pos\`):
-   - No manual \`.env\`, \`APP_KEY\`, or SQL import needed!
-   - The built-in **1-Click Setup Wizard (\`/setup\`)** opens automatically, creates \`.env\` + \`APP_KEY\`, connects your MySQL database, imports \`youthits_pos.sql\`, sets your admin login password, and redirects to \`/login\`.
-5. **Email & SMS Recovery (Optional)**: Update \`MAIL_*\` and \`SMS_*\` inside \`.env\`.
+## Included Inside This Single Package
+- \`artisan\`, \`app/\`, \`config/\`, \`routes/\`, \`resources/\`, \`public/\`: Complete Laravel 13 application with prebuilt CSS/JS and all shop & product images.
+- \`database/sql/youthits_pos.sql\` & \`database/pos-store.json\`: Complete database + all live store data.
+- \`.env.example\`: Automatically copied to \`.env\` with a fresh \`APP_KEY\` on first run.
 
 ---
 
-## Option 2: Node.js Hosting (VPS / cPanel Setup Node.js App) or Local PC (\`youthit-pos-full-project.zip\`)
-Prebuilt \`dist/\` frontend and compiled \`server.js\` are already bundled inside the ZIP!
-1. Extract \`youthit-pos-full-project.zip\`.
-2. Copy \`.env.example\` to \`.env\` (optional: add \`SMTP_*\` / \`SMS_*\` settings).
-3. Install runtime packages and start immediately (Node 18 / 20 / 22+):
+## Option 1: Run Locally With 1 Command (Even Without Composer!)
+1. Extract this ZIP into a folder (e.g. \`youthit-pos\`).
+2. Open Terminal / PowerShell inside that folder and run:
    \`\`\`bash
-   npm install --omit=dev
-   npm start
+   php artisan serve
    \`\`\`
-   *(For cPanel Setup Node.js App, set **Application startup file** to \`server.js\`.)*
-4. Open \`http://localhost:3000\` (or your domain) in the browser and sign in.
+   - **No Composer?** \`artisan\` automatically downloads \`composer.phar\` and installs \`vendor/\` on the first run.
+   - **No manual \`.env\` or \`key:generate\` needed.**
+3. Open **http://127.0.0.1:8000** in your browser.
+4. The **1-Click Setup Wizard (\`/setup\`)** opens automatically:
+   - Choose **Local SQLite** (zero config, no MySQL required) OR **MySQL** (XAMPP/Laragon).
+   - Set your Admin login password and click **Connect Database & Launch POS**.
+
+---
+
+## Option 2: cPanel Shared Hosting
+1. Upload & extract this ZIP into your domain folder (set Document Root to \`public/\` or keep root with \`.htaccess\`).
+2. If \`vendor/\` is not yet installed and you have Terminal/SSH, run \`php artisan serve\` (or \`composer install --no-dev --optimize-autoloader\`). *(If your shared hosting has no SSH, run \`php artisan serve\` once on your PC to generate \`vendor/\` before zipping & uploading.)*
+3. Create a MySQL database in cPanel -> **MySQL Databases**.
+4. Visit your domain in the browser \u2014 \`/setup\` connects MySQL, imports \`youthits_pos.sql\`, sets your password, and opens \`/login\`.
 `;
 }
 async function startServer() {
@@ -4750,25 +4744,38 @@ This code expires in 10 minutes. If you did not request this, ignore this email.
     const files = collectFiles(laravelRoot, laravelRoot);
     const seen = /* @__PURE__ */ new Set();
     for (const rel of files) {
-      if (rel === "database/sql/youthits_pos.sql" || rel === "database/youthit_pos_database.sql") {
+      if (rel === "database/sql/youthits_pos.sql" || rel === "database/youthit_pos_database.sql" || rel === "database/pos-store.json" || rel === "database/database.sqlite") {
         continue;
       }
       const full = path2.join(laravelRoot, rel);
-      zip.file(`youthit-pos-laravel/${rel}`, fs2.readFileSync(full));
+      zip.file(rel, fs2.readFileSync(full));
       seen.add(rel);
     }
     const rootPublic = path2.resolve(process.cwd(), "public");
     for (const publicRel of collectFiles(rootPublic, rootPublic)) {
       const targetRel = `public/${publicRel}`;
       if (!seen.has(targetRel)) {
-        zip.file(`youthit-pos-laravel/${targetRel}`, fs2.readFileSync(path2.join(rootPublic, publicRel)));
+        zip.file(targetRel, fs2.readFileSync(path2.join(rootPublic, publicRel)));
         seen.add(targetRel);
       }
     }
-    const sqlDump = generateMysqlDumpSql(getStore());
-    zip.file("youthit-pos-laravel/database/sql/youthits_pos.sql", sqlDump);
-    zip.file("youthit-pos-laravel/database/youthit_pos_database.sql", sqlDump);
-    zip.file("youthit-pos-laravel/HOSTING_UPLOAD_GUIDE.md", buildHostingUploadGuide());
+    const store = getStore();
+    const sqlDump = generateMysqlDumpSql(store);
+    const storeJson = JSON.stringify(
+      {
+        ...store,
+        products: store.products.map((p) => ({
+          ...p,
+          image: resolveProductImage(p.image, p.name)
+        }))
+      },
+      null,
+      2
+    );
+    zip.file("database/sql/youthits_pos.sql", sqlDump);
+    zip.file("database/youthit_pos_database.sql", sqlDump);
+    zip.file("database/pos-store.json", storeJson);
+    zip.file("HOSTING_UPLOAD_GUIDE.md", buildHostingUploadGuide());
     const buffer = await zip.generateAsync({
       type: "nodebuffer",
       compression: "DEFLATE",

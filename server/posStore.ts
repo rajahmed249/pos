@@ -39,6 +39,7 @@ export interface PosStoreData {
   customers: SqlRow[];
   suppliers: SqlRow[];
   owners: SqlRow[];
+  owner_transactions: SqlRow[];
   employees: SqlRow[];
   bank_accounts: SqlRow[];
   bank_transactions: SqlRow[];
@@ -65,15 +66,16 @@ const DEFAULT_MENUS: DynamicMenu[] = [
 
   { id: 5, parent_id: null, title: 'POS', group_label: 'Main', route_key: 'pos', url: '/pos', icon: 'shopping-cart', sort_order: 5, roles: ['admin', 'manager', 'staff'], is_active: true },
   { id: 6, parent_id: null, title: 'Sales', group_label: 'Main', route_key: 'sales', url: '/sales', icon: 'receipt', sort_order: 6, roles: ['admin', 'manager', 'staff'], is_active: true },
-  { id: 12, parent_id: null, title: 'Products', group_label: 'Main', route_key: 'products', url: '/products', icon: 'package', sort_order: 7, roles: ['admin', 'manager', 'staff'], is_active: true },
+  { id: 9, parent_id: null, title: 'Purchase', group_label: 'Main', route_key: 'purchases', url: '/purchases', icon: 'truck', sort_order: 7, roles: ['admin', 'manager'], is_active: true },
 
-  { id: 7, parent_id: null, title: 'Returns', group_label: 'Sales & Purchase', route_key: 'returns', url: '/returns', icon: 'rotate-ccw', sort_order: 8, roles: ['admin', 'manager'], is_active: true },
-  { id: 8, parent_id: null, title: 'Estimate', group_label: 'Sales & Purchase', route_key: 'estimates', url: '/estimates', icon: 'file-text', sort_order: 9, roles: ['admin', 'manager', 'staff'], is_active: true },
-  { id: 9, parent_id: null, title: 'Purchase', group_label: 'Sales & Purchase', route_key: 'purchases', url: '/purchases', icon: 'truck', sort_order: 10, roles: ['admin', 'manager'], is_active: true },
-  { id: 10, parent_id: null, title: 'Stock', group_label: 'Sales & Purchase', route_key: 'stock', url: '/stock', icon: 'boxes', sort_order: 11, roles: ['admin', 'manager', 'staff'], is_active: true },
-  { id: 11, parent_id: null, title: 'Damages', group_label: 'Sales & Purchase', route_key: 'damages', url: '/damages', icon: 'alert-triangle', sort_order: 12, roles: ['admin', 'manager'], is_active: true },
+  { id: 12, parent_id: null, title: 'Product Manage', group_label: 'Product Management', route_key: 'products', url: '/products', icon: 'package', sort_order: 8, roles: ['admin', 'manager', 'staff'], is_active: true },
+  { id: 13, parent_id: null, title: 'Add Product', group_label: 'Product Management', route_key: 'add-product', url: '/add-product', icon: 'plus-circle', sort_order: 9, roles: ['admin', 'manager', 'staff'], is_active: true },
 
-  { id: 13, parent_id: null, title: 'Add Product', group_label: 'Product Information', route_key: 'add-product', url: '/add-product', icon: 'plus-circle', sort_order: 13, roles: ['admin', 'manager', 'staff'], is_active: true },
+  { id: 7, parent_id: null, title: 'Returns', group_label: 'Sales & Purchase', route_key: 'returns', url: '/returns', icon: 'rotate-ccw', sort_order: 10, roles: ['admin', 'manager'], is_active: true },
+  { id: 8, parent_id: null, title: 'Estimate', group_label: 'Sales & Purchase', route_key: 'estimates', url: '/estimates', icon: 'file-text', sort_order: 11, roles: ['admin', 'manager', 'staff'], is_active: true },
+  { id: 10, parent_id: null, title: 'Stock', group_label: 'Sales & Purchase', route_key: 'stock', url: '/stock', icon: 'boxes', sort_order: 12, roles: ['admin', 'manager', 'staff'], is_active: true },
+  { id: 11, parent_id: null, title: 'Damages', group_label: 'Sales & Purchase', route_key: 'damages', url: '/damages', icon: 'alert-triangle', sort_order: 13, roles: ['admin', 'manager'], is_active: true },
+
   { id: 14, parent_id: null, title: 'Categories', group_label: 'Product Information', route_key: 'categories', url: '/categories', icon: 'folder-tree', sort_order: 14, roles: ['admin', 'manager'], is_active: true },
   { id: 15, parent_id: null, title: 'Brand', group_label: 'Product Information', route_key: 'brands', url: '/brands', icon: 'tag', sort_order: 15, roles: ['admin', 'manager'], is_active: true },
   { id: 16, parent_id: null, title: 'Unit', group_label: 'Product Information', route_key: 'units', url: '/units', icon: 'ruler', sort_order: 16, roles: ['admin', 'manager'], is_active: true },
@@ -139,6 +141,7 @@ function buildInitialStore(): PosStoreData {
     customers: [],
     suppliers: [],
     owners: [],
+    owner_transactions: [],
     employees: [],
     bank_accounts: [],
     bank_transactions: [],
@@ -166,6 +169,7 @@ export function getStore(): PosStoreData {
     const raw = fs.readFileSync(STORE_PATH, 'utf8');
     const loaded = JSON.parse(raw) as PosStoreData;
     if (!Array.isArray(loaded.owners)) loaded.owners = [];
+    if (!Array.isArray(loaded.owner_transactions)) loaded.owner_transactions = [];
     if (!Array.isArray(loaded.employees)) loaded.employees = [];
     if (!Array.isArray(loaded.cash_transactions)) loaded.cash_transactions = [];
     if (!loaded.settings.shop_qr || loaded.settings.shop_qr.includes('uploads/')) {
@@ -176,20 +180,24 @@ export function getStore(): PosStoreData {
       loaded.menus = DEFAULT_MENUS;
       menusChanged = true;
     } else {
-      const hasAddProduct = loaded.menus.some((m) => m.route_key === 'add-product');
+      const addProductMenu = loaded.menus.find((m) => m.route_key === 'add-product');
       const productsMenu = loaded.menus.find((m) => m.route_key === 'products');
-      const prodGroup = loaded.menus
-        .filter((m) => m.group_label === 'Product Information')
+      const purchaseMenu = loaded.menus.find((m) => m.route_key === 'purchases');
+      const prodMgmtGroup = loaded.menus
+        .filter((m) => m.group_label === 'Product Management')
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((m) => m.route_key);
-      const expectedStart = ['add-product', 'categories', 'brands', 'units'];
-      const needsProductReorder =
-        !hasAddProduct ||
+      const expectedMgmt = ['products', 'add-product'];
+      const needsMenuSync =
+        !addProductMenu ||
         !productsMenu ||
-        productsMenu.group_label !== 'Main' ||
-        expectedStart.some((key, idx) => prodGroup[idx] !== key);
+        !purchaseMenu ||
+        purchaseMenu.group_label !== 'Main' ||
+        productsMenu.group_label !== 'Product Management' ||
+        addProductMenu.group_label !== 'Product Management' ||
+        expectedMgmt.some((key, idx) => prodMgmtGroup[idx] !== key);
 
-      if (needsProductReorder) {
+      if (needsMenuSync) {
         const customMenus = loaded.menus.filter(
           (m) => !DEFAULT_MENUS.some((d) => d.route_key === m.route_key)
         );

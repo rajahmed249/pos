@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Support\LegacyScrypt;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -116,7 +117,19 @@ class UserController extends Controller
             'new_password' => ['required', 'string', 'min:6', 'confirmed'],
         ]);
 
-        if (!$user || !Hash::check($data['current_password'], (string) $user->password)) {
+        $matches = false;
+        $storedHash = $user ? (string) ($user->password ?? '') : '';
+        if ($storedHash !== '' && str_starts_with($storedHash, '$')) {
+            try {
+                $matches = Hash::check($data['current_password'], $storedHash);
+            } catch (\Throwable) {
+                $matches = false;
+            }
+        } elseif ($storedHash !== '' && LegacyScrypt::isLegacyHash($storedHash)) {
+            $matches = LegacyScrypt::verify($data['current_password'], $storedHash);
+        }
+
+        if (!$matches) {
             return back()->withErrors(['current_password' => 'Current password is incorrect.']);
         }
 

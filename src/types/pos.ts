@@ -153,6 +153,16 @@ export interface Purchase {
   paid: number;
   due: number;
   payment_method: string;
+  note?: string;
+  items_count?: number;
+  items_summary?: string;
+  items?: Array<{
+    product_id: number;
+    product_name: string;
+    quantity: number;
+    price: number;
+    total: number;
+  }>;
 }
 
 export interface BootstrapPayload {
@@ -168,6 +178,8 @@ export interface BootstrapPayload {
   metrics: {
     todaySales: number;
     todayProfit: number;
+    todayExpense: number;
+    todayMargin: number;
     totalRevenue: number;
     totalProfit: number;
     customerDue: number;
@@ -176,6 +188,8 @@ export interface BootstrapPayload {
     productCount: number;
     customerCount: number;
     supplierCount: number;
+    lowStockCount: number;
+    outOfStockCount: number;
     saleCount: number;
     purchaseCount: number;
     stockCostValue: number;

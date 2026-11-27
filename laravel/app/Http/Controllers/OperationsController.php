@@ -11,6 +11,7 @@ use App\Models\Damage;
 use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\Owner;
+use App\Models\OwnerTransaction;
 use App\Models\Payment;
 use App\Models\Product;
 use App\Models\Purchase;
@@ -20,36 +21,218 @@ use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\SupplierPayment;
 use App\Models\Unit;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class OperationsController extends Controller
 {
+    private function ensureOwnerColumns(): void
+    {
+        try {
+            if (!Schema::hasTable('owners')) {
+                return;
+            }
+            $needInvested = !Schema::hasColumn('owners', 'invested');
+            $needWithdrawn = !Schema::hasColumn('owners', 'withdrawn');
+            if ($needInvested || $needWithdrawn) {
+                Schema::table('owners', function (Blueprint $table) use ($needInvested, $needWithdrawn) {
+                    if ($needInvested) {
+                        $table->decimal('invested', 15, 2)->default(0.00);
+                    }
+                    if ($needWithdrawn) {
+                        $table->decimal('withdrawn', 15, 2)->default(0.00);
+                    }
+                });
+            }
+            if (!Schema::hasTable('owner_transactions')) {
+                Schema::create('owner_transactions', function (Blueprint $table) {
+                    $table->id();
+                    $table->foreignId('owner_id')->constrained('owners')->cascadeOnDelete();
+                    $table->string('type', 20)->default('invest');
+                    $table->decimal('amount', 15, 2)->default(0.00);
+                    $table->text('note')->nullable();
+                    $table->date('transaction_date')->nullable();
+                    $table->unsignedBigInteger('created_by')->nullable();
+                    $table->timestamps();
+                });
+            }
+        } catch (\Throwable) {
+            // Safe fallback if schema alterations are restricted
+        }
+    }
+
     public function owners(): View
     {
-        $owners = Owner::query()->orderBy('id')->get();
+        $this->ensureOwnerColumns();
+        $owners = Owner::query()
+            ->with(['transactions' => fn ($q) => $q->orderByDesc('transaction_date')->orderByDesc('id')])
+            ->orderBy('id')
+            ->get();
         $totalShare = (float) $owners->where('is_active', true)->sum('share_percent');
+        $totalInvested = (float) $owners->sum(fn ($o) => (float) ($o->invested ?? 0));
+        $totalWithdrawn = (float) $owners->sum(fn ($o) => (float) ($o->withdrawn ?? 0));
+        $netBalance = round($totalInvested - $totalWithdrawn, 2);
+        $activeCount = (int) $owners->where('is_active', true)->count();
 
-        return view('operations.owners', compact('owners', 'totalShare'));
+        return view('operations.owners', compact(
+            'owners',
+            'totalShare',
+            'totalInvested',
+            'totalWithdrawn',
+            'netBalance',
+            'activeCount'
+        ));
+    }
+
+    public function ownerHistory(Owner $owner): JsonResponse
+    {
+        $this->ensureOwnerColumns();
+        $transactions = OwnerTransaction::query()
+            ->where('owner_id', $owner->id)
+            ->orderByDesc('transaction_date')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn ($t) => [
+                'id' => $t->id,
+                'type' => $t->type,
+                'amount' => (float) $t->amount,
+                'note' => $t->note ?: ($t->type === 'invest' ? 'Capital Investment' : 'Capital Withdrawal'),
+                'transaction_date' => $t->transaction_date?->format('Y-m-d') ?? $t->created_at?->format('Y-m-d') ?? date('Y-m-d'),
+            ]);
+
+        return response()->json([
+            'owner' => [
+                'id' => $owner->id,
+                'name' => $owner->name,
+                'invested' => (float) ($owner->invested ?? 0),
+                'withdrawn' => (float) ($owner->withdrawn ?? 0),
+                'balance' => round((float) ($owner->invested ?? 0) - (float) ($owner->withdrawn ?? 0), 2),
+            ],
+            'transactions' => $transactions,
+        ]);
     }
 
     public function storeOwner(Request $request): RedirectResponse
     {
+        $this->ensureOwnerColumns();
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'phone' => ['nullable', 'string', 'max:40'],
             'email' => ['nullable', 'email', 'max:120'],
             'address' => ['nullable', 'string', 'max:255'],
-            'share_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'share_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'invested' => ['nullable', 'numeric', 'min:0'],
+            'withdrawn' => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        Owner::query()->create($data + ['is_active' => true]);
+        $invested = round((float) ($data['invested'] ?? 0), 2);
+        $withdrawn = round((float) ($data['withdrawn'] ?? 0), 2);
+
+        DB::transaction(function () use ($data, $invested, $withdrawn) {
+            $owner = Owner::query()->create([
+                'name' => $data['name'],
+                'phone' => $data['phone'] ?? null,
+                'email' => $data['email'] ?? null,
+                'address' => $data['address'] ?? null,
+                'share_percent' => (float) ($data['share_percent'] ?? 0),
+                'invested' => $invested,
+                'withdrawn' => $withdrawn,
+                'is_active' => true,
+            ]);
+
+            if ($invested > 0) {
+                OwnerTransaction::query()->create([
+                    'owner_id' => $owner->id,
+                    'type' => 'invest',
+                    'amount' => $invested,
+                    'note' => 'Opening Investment',
+                    'transaction_date' => now()->toDateString(),
+                    'created_by' => Auth::id(),
+                ]);
+            }
+            if ($withdrawn > 0) {
+                OwnerTransaction::query()->create([
+                    'owner_id' => $owner->id,
+                    'type' => 'withdraw',
+                    'amount' => $withdrawn,
+                    'note' => 'Opening Withdrawal',
+                    'transaction_date' => now()->toDateString(),
+                    'created_by' => Auth::id(),
+                ]);
+            }
+        });
 
         return back()->with('success', 'Owner added successfully.');
+    }
+
+    public function updateOwner(Request $request, Owner $owner): RedirectResponse
+    {
+        $this->ensureOwnerColumns();
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'phone' => ['nullable', 'string', 'max:40'],
+            'email' => ['nullable', 'email', 'max:120'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'share_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'invested' => ['nullable', 'numeric', 'min:0'],
+            'withdrawn' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $owner->update([
+            'name' => $data['name'],
+            'phone' => $data['phone'] ?? null,
+            'email' => $data['email'] ?? null,
+            'address' => $data['address'] ?? null,
+            'share_percent' => (float) ($data['share_percent'] ?? $owner->share_percent ?? 0),
+            'invested' => (float) ($data['invested'] ?? $owner->invested ?? 0),
+            'withdrawn' => (float) ($data['withdrawn'] ?? $owner->withdrawn ?? 0),
+        ]);
+
+        return back()->with('success', 'Owner updated successfully.');
+    }
+
+    public function ownerTransaction(Request $request, Owner $owner): RedirectResponse
+    {
+        $this->ensureOwnerColumns();
+        $data = $request->validate([
+            'type' => ['required', 'in:invest,withdraw'],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'transaction_date' => ['nullable', 'date'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $amount = round((float) $data['amount'], 2);
+        $txDate = !empty($data['transaction_date']) ? $data['transaction_date'] : now()->toDateString();
+        $note = trim((string) ($data['note'] ?? '')) ?: ($data['type'] === 'invest' ? 'Capital Investment' : 'Capital Withdrawal');
+
+        DB::transaction(function () use ($owner, $data, $amount, $txDate, $note) {
+            $locked = Owner::query()->lockForUpdate()->findOrFail($owner->id);
+            if ($data['type'] === 'invest') {
+                $locked->invested = round((float) ($locked->invested ?? 0) + $amount, 2);
+            } else {
+                $locked->withdrawn = round((float) ($locked->withdrawn ?? 0) + $amount, 2);
+            }
+            $locked->save();
+
+            OwnerTransaction::query()->create([
+                'owner_id' => $locked->id,
+                'type' => $data['type'],
+                'amount' => $amount,
+                'note' => $note,
+                'transaction_date' => $txDate,
+                'created_by' => Auth::id(),
+            ]);
+        });
+
+        $label = $data['type'] === 'invest' ? 'Investment added for ' : 'Withdrawal recorded for ';
+        return back()->with('success', $label . $owner->name . '.');
     }
 
     public function toggleOwner(Owner $owner): RedirectResponse
@@ -280,23 +463,48 @@ class OperationsController extends Controller
 
     public function downloadBackup(): StreamedResponse
     {
+        $tables = [
+            'categories',
+            'brands',
+            'units',
+            'warranties',
+            'products',
+            'stock_movements',
+            'customers',
+            'suppliers',
+            'employees',
+            'owners',
+            'owner_transactions',
+            'bank_accounts',
+            'bank_transactions',
+            'cash_transactions',
+            'expense_categories',
+            'expenses',
+            'sales',
+            'sale_items',
+            'payments',
+            'purchases',
+            'purchase_items',
+            'supplier_payments',
+            'estimates',
+            'estimate_items',
+            'returns',
+            'damages',
+            'menus',
+        ];
+
         $payload = [
             'exported_at' => now()->toIso8601String(),
             'settings' => Setting::allKeyed(),
-            'categories' => Category::all()->toArray(),
-            'brands' => Brand::all()->toArray(),
-            'units' => Unit::all()->toArray(),
-            'products' => Product::all()->toArray(),
-            'customers' => Customer::all()->toArray(),
-            'suppliers' => Supplier::all()->toArray(),
-            'sales' => Sale::with('items')->get()->toArray(),
-            'purchases' => Purchase::with('items')->get()->toArray(),
-            'expenses' => Expense::all()->toArray(),
-            'bank_accounts' => BankAccount::all()->toArray(),
-            'cash_transactions' => CashTransaction::all()->toArray(),
-            'owners' => Owner::all()->toArray(),
-            'employees' => Employee::all()->toArray(),
         ];
+
+        foreach ($tables as $tbl) {
+            if (Schema::hasTable($tbl)) {
+                $payload[$tbl] = DB::table($tbl)->get()->map(fn ($r) => (array) $r)->all();
+            } else {
+                $payload[$tbl] = [];
+            }
+        }
 
         $filename = 'youthit_pos_backup_' . now()->format('Ymd_His') . '.json';
 
@@ -305,25 +513,158 @@ class OperationsController extends Controller
         }, $filename, ['Content-Type' => 'application/json']);
     }
 
+    public function downloadSql(): StreamedResponse
+    {
+        $tables = [
+            'settings',
+            'menus',
+            'categories',
+            'brands',
+            'units',
+            'warranties',
+            'products',
+            'stock_movements',
+            'customers',
+            'suppliers',
+            'employees',
+            'owners',
+            'owner_transactions',
+            'bank_accounts',
+            'bank_transactions',
+            'cash_transactions',
+            'expense_categories',
+            'expenses',
+            'sales',
+            'sale_items',
+            'payments',
+            'purchases',
+            'purchase_items',
+            'supplier_payments',
+            'estimates',
+            'estimate_items',
+            'returns',
+            'damages',
+        ];
+
+        $filename = 'youthit-pos-database-' . now()->format('Y-m-d') . '.sql';
+
+        return response()->streamDownload(function () use ($tables) {
+            echo "-- Youth IT POS Database Backup\n";
+            echo '-- Generated: ' . now()->toIso8601String() . "\n";
+            echo "SET FOREIGN_KEY_CHECKS=0;\n\n";
+
+            $esc = static function ($val): string {
+                if ($val === null) {
+                    return 'NULL';
+                }
+                if (is_bool($val)) {
+                    return $val ? '1' : '0';
+                }
+                if (is_int($val) || is_float($val)) {
+                    return (string) $val;
+                }
+                $s = (string) $val;
+                $s = str_replace(
+                    ['\\', "\0", "\n", "\r", "'", '"', "\x1a"],
+                    ['\\\\', '\\0', '\\n', '\\r', "\\'", '\\"', '\\Z'],
+                    $s
+                );
+                return "'" . $s . "'";
+            };
+
+            foreach ($tables as $tbl) {
+                if (!Schema::hasTable($tbl)) {
+                    continue;
+                }
+                $rows = DB::table($tbl)->get();
+                echo "-- Table: {$tbl}\n";
+                echo "TRUNCATE TABLE `{$tbl}`;\n";
+                if ($rows->isEmpty()) {
+                    echo "\n";
+                    continue;
+                }
+
+                $firstArr = (array) $rows->first();
+                $cols = array_keys($firstArr);
+                $colSql = implode(', ', array_map(fn ($c) => "`{$c}`", $cols));
+
+                foreach ($rows->chunk(100) as $chunk) {
+                    $tuples = [];
+                    foreach ($chunk as $rowObj) {
+                        $arr = (array) $rowObj;
+                        $vals = [];
+                        foreach ($cols as $c) {
+                            $vals[] = $esc($arr[$c] ?? null);
+                        }
+                        $tuples[] = '(' . implode(', ', $vals) . ')';
+                    }
+                    echo "INSERT INTO `{$tbl}` ({$colSql}) VALUES\n" . implode(",\n", $tuples) . ";\n";
+                }
+                echo "\n";
+            }
+
+            echo "SET FOREIGN_KEY_CHECKS=1;\n";
+        }, $filename, ['Content-Type' => 'application/sql; charset=utf-8']);
+    }
+
     public function restoreBackup(Request $request): RedirectResponse
     {
         $request->validate([
-            'backup_file' => ['required', 'file', 'mimes:json,txt', 'max:10240'],
+            'backup_file' => ['required', 'file', 'mimes:json,txt', 'max:20480'],
         ]);
 
         $raw = file_get_contents($request->file('backup_file')->getRealPath());
         $decoded = json_decode((string) $raw, true);
 
-        if (!is_array($decoded) || !isset($decoded['settings'])) {
+        if (!is_array($decoded) || (!isset($decoded['settings']) && !isset($decoded['products']) && !isset($decoded['sales']))) {
             return back()->withErrors(['backup_file' => 'Invalid POS JSON backup format.']);
         }
 
-        DB::transaction(function () use ($decoded) {
-            foreach ($decoded['settings'] as $key => $value) {
-                Setting::setValue((string) $key, (string) $value);
-            }
-        });
+        $tmpPath = storage_path('app/tmp_restore_' . uniqid() . '.json');
+        file_put_contents($tmpPath, (string) $raw);
 
-        return back()->with('success', 'Settings restored cleanly from JSON backup.');
+        try {
+            \Illuminate\Support\Facades\Artisan::call('pos:import', [
+                '--path' => $tmpPath,
+                '--fresh' => true,
+            ]);
+        } finally {
+            @unlink($tmpPath);
+        }
+
+        $prodCount = is_array($decoded['products'] ?? null) ? count($decoded['products']) : Product::query()->count();
+        $saleCount = is_array($decoded['sales'] ?? null) ? count($decoded['sales']) : Sale::query()->count();
+
+        return back()->with('success', "Backup restored successfully! ({$prodCount} products, {$saleCount} sales loaded)");
+    }
+
+    public function importSql(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'sql_file' => ['required', 'file', 'max:51200'],
+        ]);
+
+        $file = $request->file('sql_file');
+        $ext = strtolower($file->getClientOriginalExtension());
+        if (!in_array($ext, ['sql', 'txt'], true)) {
+            return back()->withErrors(['sql_file' => 'Please upload a valid .sql database dump file.']);
+        }
+
+        $tmpPath = storage_path('app/tmp_import_' . uniqid() . '.sql');
+        file_put_contents($tmpPath, (string) file_get_contents($file->getRealPath()));
+
+        try {
+            \Illuminate\Support\Facades\Artisan::call('pos:import', [
+                '--path' => $tmpPath,
+                '--fresh' => true,
+            ]);
+        } finally {
+            @unlink($tmpPath);
+        }
+
+        return back()->with(
+            'success',
+            'MySQL database imported successfully! (' . Product::query()->count() . ' products, ' . Customer::query()->count() . ' customers, ' . Sale::query()->count() . ' sales)'
+        );
     }
 }

@@ -20,8 +20,11 @@ class RedirectIfSetupRequired
         try {
             DB::connection()->getPdo();
             $hasUsersTable = Schema::hasTable('users');
-            if (!$hasUsersTable || DB::table('users')->count() === 0) {
+            if (!$hasUsersTable || !SetupController::hasConfiguredLoginUser()) {
                 return redirect()->route('setup.index');
+            }
+            if (!Schema::hasTable('sales') || !Schema::hasTable('bank_accounts') || !Schema::hasTable('settings') || !Schema::hasTable('menus')) {
+                SetupController::ensureMissingTables();
             }
         } catch (\Throwable) {
             if (!SetupController::isSetupComplete()) {

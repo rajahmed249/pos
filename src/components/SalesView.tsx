@@ -2,10 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   Calendar,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   Clock,
   CreditCard,
   Eye,
@@ -20,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { apiFetch, formatMoney } from '../lib/api.ts';
+import { PaginationBar } from './PaginationBar.tsx';
 import type { BankAccount, Sale } from '../types/pos.ts';
 
 interface SalesViewProps {
@@ -52,10 +49,10 @@ export function SalesView({
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
-  const [gotoInput, setGotoInput] = useState('1');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [expandedSales, setExpandedSales] = useState<Record<number, boolean>>({});
   const [openMenu, setOpenMenu] = useState<{ id: number; top: number; left: number } | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -88,7 +85,6 @@ export function SalesView({
         }
         setSales(res.items);
         setTotal(res.total);
-        setGotoInput(String(page));
       })
       .catch((err) => {
         setToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to load sales.' });
@@ -178,12 +174,7 @@ export function SalesView({
     }
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / limit));
   const offset = (page - 1) * limit;
-  const pageNumbers: number[] = [];
-  const startPage = Math.max(1, page - 2);
-  const endPage = Math.min(totalPages, page + 2);
-  for (let i = startPage; i <= endPage; i++) pageNumbers.push(i);
 
   const now = new Date();
   const dateDisplay = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -283,37 +274,37 @@ export function SalesView({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-[13px] border-collapse">
+          <table className="w-full text-[12px] border-collapse">
             <thead className="bg-[#f8fafc]">
               <tr>
-                <th className="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] w-12">
+                <th className="py-2.5 px-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] w-9">
                   #
                 </th>
-                <th className="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">
-                  Invoice
+                <th className="py-2.5 px-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] whitespace-nowrap">
+                  Invoice &amp; Date
                 </th>
-                <th className="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">
+                <th className="py-2.5 px-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">
                   Customer
                 </th>
-                <th className="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] min-w-[200px]">
+                <th className="py-2.5 px-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] min-w-[175px]">
                   Products
                 </th>
-                <th className="py-3 px-4 text-left text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">
-                  Date
-                </th>
-                <th className="py-3 px-4 text-right text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">
+                <th className="py-2.5 px-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] whitespace-nowrap">
                   Amount
                 </th>
-                <th className="py-3 px-4 text-right text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">
+                <th className="py-2.5 px-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] whitespace-nowrap">
                   Paid
                 </th>
-                <th className="py-3 px-4 text-right text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">
+                <th className="py-2.5 px-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] whitespace-nowrap">
                   Due
                 </th>
-                <th className="py-3 px-4 text-center text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">
+                <th className="py-2.5 px-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] whitespace-nowrap">
+                  Profit
+                </th>
+                <th className="py-2.5 px-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] whitespace-nowrap">
                   Status
                 </th>
-                <th className="py-3 px-4 text-center text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">
+                <th className="py-2.5 px-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] whitespace-nowrap">
                   Actions
                 </th>
               </tr>
@@ -322,7 +313,7 @@ export function SalesView({
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i} className="border-b border-[#f1f5f9]">
-                    <td colSpan={10} className="px-4 py-3.5">
+                    <td colSpan={10} className="px-3 py-3">
                       <div className="h-5 bg-slate-100 rounded animate-pulse" />
                     </td>
                   </tr>
@@ -330,69 +321,95 @@ export function SalesView({
               ) : sales.length > 0 ? (
                 sales.map((sale, idx) => {
                   const due = Number(sale.due ?? 0);
+                  const receivable = Number(sale.receivable ?? 0);
+                  const purchaseCost = Number(sale.purchase_cost ?? 0);
+                  const profitVal =
+                    Math.abs(Number(sale.profit ?? 0)) > 0.001
+                      ? Number(sale.profit ?? 0)
+                      : purchaseCost > 0
+                        ? receivable - purchaseCost
+                        : 0;
                   const completed = due <= 0;
                   const dt = formatSaleDate(sale.created_at || sale.date);
                   const productsList = sale.products ?? [];
+                  const isExpanded = Boolean(expandedSales[sale.id]);
+                  const visibleProducts = isExpanded ? productsList : productsList.slice(0, 3);
 
                   return (
-                    <tr key={sale.id} className="border-b border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
-                      <td className="py-3 px-4 text-[#64748b] tabular-nums">{offset + idx + 1}</td>
-                      <td className="py-3 px-4 whitespace-nowrap">
+                    <tr key={sale.id} className="border-b border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors align-top">
+                      <td className="py-2.5 px-2.5 text-[#64748b] tabular-nums">{offset + idx + 1}</td>
+                      <td className="py-2.5 px-2.5 whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => onOpenInvoice(sale.id)}
-                          className="text-[#4f46e5] font-semibold text-sm hover:underline cursor-pointer"
+                          className="text-[#4f46e5] font-bold text-[12px] hover:underline cursor-pointer block leading-tight text-left"
                         >
                           {sale.invoice_no}
                         </button>
+                        <div className="text-[10.5px] text-[#64748b] tabular-nums mt-0.5">
+                          {dt.date}{dt.time ? ` · ${dt.time}` : ''}
+                        </div>
                       </td>
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-[#1e293b]">{sale.customer_name || 'Walk-in Customer'}</div>
+                      <td className="py-2.5 px-2.5">
+                        <div className="font-semibold text-[#1e293b] leading-tight max-w-[155px] truncate" title={sale.customer_name || 'Walk-in Customer'}>
+                          {sale.customer_name || 'Walk-in Customer'}
+                        </div>
                         {sale.customer_phone && (
-                          <div className="text-[11px] text-[#94a3b8] inline-flex items-center gap-1 mt-0.5">
+                          <div className="text-[10.5px] text-[#94a3b8] inline-flex items-center gap-1 mt-0.5 tabular-nums">
                             <Phone className="w-2.5 h-2.5" /> {sale.customer_phone}
                           </div>
                         )}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-2.5 px-2.5">
                         {productsList.length > 0 ? (
-                          <ul className="list-disc pl-4 space-y-0.5 m-0">
-                            {productsList.slice(0, 4).map((it, i) => (
-                              <li key={i} className="text-xs text-[#475569]">
-                                {it.product_name}{' '}
-                                <span className="text-[#94a3b8] font-medium">×{it.quantity}</span>
-                              </li>
-                            ))}
-                            {productsList.length > 4 && (
-                              <li className="text-[11px] text-[#4f46e5] font-medium">
-                                +{productsList.length - 4} more items
-                              </li>
+                          <div>
+                            <ul className="list-disc pl-3.5 space-y-0.5 m-0">
+                              {visibleProducts.map((it, i) => (
+                                <li key={i} className="text-[11px] text-[#475569] leading-snug">
+                                  {it.product_name}{' '}
+                                  <span className="text-[#94a3b8] font-medium">×{it.quantity}</span>
+                                </li>
+                              ))}
+                            </ul>
+                            {productsList.length > 3 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedSales((prev) => ({ ...prev, [sale.id]: !prev[sale.id] }))
+                                }
+                                className="mt-1 text-[11px] text-[#4f46e5] hover:text-[#4338ca] font-semibold hover:underline cursor-pointer"
+                              >
+                                {isExpanded ? 'Show less' : `+${productsList.length - 3} more items`}
+                              </button>
                             )}
-                          </ul>
+                          </div>
                         ) : (
-                          <span className="text-xs text-slate-400">—</span>
+                          <span className="text-[11px] text-slate-400">—</span>
                         )}
                       </td>
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <div className="text-slate-700 font-medium tabular-nums">{dt.date}</div>
-                        {dt.time && <div className="text-[11px] text-[#94a3b8] tabular-nums">{dt.time}</div>}
+                      <td className="py-2.5 px-2.5 text-right font-semibold text-slate-800 tabular-nums whitespace-nowrap">
+                        {formatMoney(receivable, currency)}
                       </td>
-                      <td className="py-3 px-4 text-right font-semibold text-slate-800 tabular-nums whitespace-nowrap">
-                        {formatMoney(sale.receivable, currency)}
-                      </td>
-                      <td className="py-3 px-4 text-right font-semibold text-[#10b981] tabular-nums whitespace-nowrap">
+                      <td className="py-2.5 px-2.5 text-right font-semibold text-[#10b981] tabular-nums whitespace-nowrap">
                         {formatMoney(sale.paid, currency)}
                       </td>
                       <td
-                        className={`py-3 px-4 text-right font-semibold tabular-nums whitespace-nowrap ${
+                        className={`py-2.5 px-2.5 text-right font-semibold tabular-nums whitespace-nowrap ${
                           due > 0 ? 'text-[#ef4444]' : 'text-[#10b981]'
                         }`}
                       >
                         {formatMoney(due, currency)}
                       </td>
-                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                      <td
+                        className={`py-2.5 px-2.5 text-right font-bold tabular-nums whitespace-nowrap ${
+                          profitVal >= 0 ? 'text-[#059669]' : 'text-[#ef4444]'
+                        }`}
+                      >
+                        {formatMoney(profitVal, currency)}
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[11px] font-semibold ${
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-semibold ${
                             completed
                               ? 'bg-[#d1fae5] text-[#065f46]'
                               : 'bg-[#fee2e2] text-[#991b1b]'
@@ -502,138 +519,13 @@ export function SalesView({
           </table>
         </div>
 
-        {/* Full Pagination Bar */}
-        <div className="px-5 py-4 border-t border-[#f1f5f9] bg-[#f8fafc] rounded-b-[20px] flex flex-wrap items-center justify-between gap-3.5 text-[13px]">
-          <div className="text-[#64748b] tabular-nums">
-            <strong>{total === 0 ? 0 : offset + 1}</strong> – <strong>{Math.min(offset + limit, total)}</strong> of{' '}
-            <strong>{total.toLocaleString()}</strong>
-          </div>
-
-          <div className="flex items-center gap-1 flex-wrap">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage(1)}
-              className="min-w-[36px] h-9 px-2.5 border border-[#e2e8f0] rounded-lg bg-white text-[#334155] hover:bg-slate-50 disabled:opacity-40 cursor-pointer flex items-center justify-center"
-            >
-              <ChevronsLeft className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="min-w-[36px] h-9 px-2.5 border border-[#e2e8f0] rounded-lg bg-white text-[#334155] hover:bg-slate-50 disabled:opacity-40 cursor-pointer flex items-center justify-center"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-
-            {startPage > 1 && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setPage(1)}
-                  className="min-w-[36px] h-9 px-3 border border-[#e2e8f0] rounded-lg bg-white text-[#334155] cursor-pointer"
-                >
-                  1
-                </button>
-                {startPage > 2 && <span className="px-1 text-[#94a3b8]">…</span>}
-              </>
-            )}
-
-            {pageNumbers.map((num) => (
-              <button
-                key={num}
-                type="button"
-                onClick={() => setPage(num)}
-                style={num === page ? { background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' } : undefined}
-                className={`min-w-[36px] h-9 px-3 border rounded-lg font-medium cursor-pointer ${
-                  num === page
-                    ? 'text-white border-[#4f46e5]'
-                    : 'border-[#e2e8f0] bg-white text-[#334155] hover:bg-slate-50'
-                }`}
-              >
-                {num}
-              </button>
-            ))}
-
-            {endPage < totalPages && (
-              <>
-                {endPage < totalPages - 1 && <span className="px-1 text-[#94a3b8]">…</span>}
-                <button
-                  type="button"
-                  onClick={() => setPage(totalPages)}
-                  className="min-w-[36px] h-9 px-3 border border-[#e2e8f0] rounded-lg bg-white text-[#334155] cursor-pointer"
-                >
-                  {totalPages}
-                </button>
-              </>
-            )}
-
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="min-w-[36px] h-9 px-2.5 border border-[#e2e8f0] rounded-lg bg-white text-[#334155] hover:bg-slate-50 disabled:opacity-40 cursor-pointer flex items-center justify-center"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => setPage(totalPages)}
-              className="min-w-[36px] h-9 px-2.5 border border-[#e2e8f0] rounded-lg bg-white text-[#334155] hover:bg-slate-50 disabled:opacity-40 cursor-pointer flex items-center justify-center"
-            >
-              <ChevronsRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1.5 text-[#64748b]">
-              <span>Show:</span>
-              <select
-                value={limit}
-                onChange={(e) => {
-                  setPage(1);
-                  setLimit(Number(e.target.value));
-                }}
-                className="px-2.5 py-1.5 border border-[#e2e8f0] rounded-md bg-white text-[#334155]"
-              >
-                {[10, 20, 50, 100].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-1.5 text-[#64748b]">
-              <span>Go:</span>
-              <input
-                type="number"
-                min={1}
-                max={totalPages}
-                value={gotoInput}
-                onChange={(e) => setGotoInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const target = Math.min(totalPages, Math.max(1, Number(gotoInput) || 1));
-                    setPage(target);
-                  }
-                }}
-                className="w-14 px-2 py-1.5 border border-[#e2e8f0] rounded-md text-center bg-white tabular-nums"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  const target = Math.min(totalPages, Math.max(1, Number(gotoInput) || 1));
-                  setPage(target);
-                }}
-                className="px-3 py-1.5 bg-[#4f46e5] hover:bg-[#4338ca] text-white rounded-md font-medium cursor-pointer"
-              >
-                Go
-              </button>
-            </div>
-          </div>
-        </div>
+        <PaginationBar
+          total={total}
+          page={page}
+          limit={limit}
+          onPageChange={setPage}
+          onLimitChange={setLimit}
+        />
       </div>
 
       {/* Add Payment Modal */}

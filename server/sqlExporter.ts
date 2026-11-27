@@ -102,6 +102,18 @@ export function generateMysqlDumpSql(store: PosStoreData): string {
   const validSaleIds = new Set(store.sales.map((s) => Number(s.id)));
   const validPurchaseIds = new Set(store.purchases.map((p) => Number(p.id)));
   const validEstimateIds = new Set(store.estimates.map((e) => Number(e.id)));
+  const validOwnerIds = new Set((store.owners ?? []).map((o) => Number(o.id)));
+
+  const warrantyMap = new Map<number, string>();
+  for (const w of store.warranties ?? []) {
+    const label = String(w.duration || w.name || '').trim();
+    if (label) warrantyMap.set(Number(w.id), label);
+  }
+  const productNameMap = new Map<number, string>();
+  for (const p of store.products ?? []) {
+    const name = String(p.name || '').trim();
+    if (name) productNameMap.set(Number(p.id), name);
+  }
 
   const fkOrNull = (val: unknown, validSet: Set<number>): number | null => {
     const id = toNullableId(val);
@@ -323,9 +335,25 @@ CREATE TABLE IF NOT EXISTS \`owners\` (
   \`email\` varchar(255) DEFAULT NULL,
   \`address\` text,
   \`share_percent\` decimal(5,2) NOT NULL DEFAULT '0.00',
+  \`invested\` decimal(15,2) NOT NULL DEFAULT '0.00',
+  \`withdrawn\` decimal(15,2) NOT NULL DEFAULT '0.00',
   \`is_active\` tinyint(1) NOT NULL DEFAULT '1',
   \`created_at\` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (\`id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS \`owner_transactions\` (
+  \`id\` bigint unsigned NOT NULL AUTO_INCREMENT,
+  \`owner_id\` bigint unsigned NOT NULL,
+  \`type\` enum('invest','withdraw') NOT NULL DEFAULT 'invest',
+  \`amount\` decimal(15,2) NOT NULL DEFAULT '0.00',
+  \`note\` text,
+  \`transaction_date\` date NOT NULL,
+  \`created_by\` bigint unsigned DEFAULT NULL,
+  \`created_at\` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (\`id\`),
+  KEY \`owner_transactions_owner_id_foreign\` (\`owner_id\`),
+  CONSTRAINT \`owner_transactions_owner_id_foreign\` FOREIGN KEY (\`owner_id\`) REFERENCES \`owners\` (\`id\`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS \`bank_accounts\` (
@@ -689,17 +717,25 @@ CREATE TABLE IF NOT EXISTS \`supplier_payments\` (
     ['id', 'name', 'sku', 'category_id', 'brand_id', 'warranty_id', 'unit_id', 'purchase_price', 'selling_price', 'warranty_months', 'quantity', 'stock_quantity', 'alert_quantity', 'description', 'barcode', 'image', 'status', 'warranty', 'created_at'],
     (store.products ?? []).map((p: SqlRow) => {
       const qty = Math.trunc(toNum(p.stock_quantity ?? p.quantity, 0));
+      const wId = fkOrNull(p.warranty_id, validWarrantyIds);
+      const wMonths = Math.trunc(toNum(p.warranty_months, 0));
+      const explicitWarranty = toStr(p.warranty, null);
+      const mappedWarranty = wId !== null ? warrantyMap.get(wId) : null;
+      const resolvedWarranty =
+        (explicitWarranty && explicitWarranty.trim() !== '' ? explicitWarranty.trim() : '') ||
+        (mappedWarranty && String(mappedWarranty).trim() !== '' ? String(mappedWarranty).trim() : '') ||
+        (wMonths > 0 ? `${wMonths} Months` : 'No Warranty');
       return [
         toNum(p.id),
         toStr(p.name, 'Product'),
         toStr(p.sku, null),
         fkOrNull(p.category_id, validCategoryIds),
         fkOrNull(p.brand_id, validBrandIds),
-        fkOrNull(p.warranty_id, validWarrantyIds),
+        wId,
         fkOrNull(p.unit_id, validUnitIds),
         toNum(p.purchase_price, 0),
         toNum(p.selling_price, 0),
-        Math.trunc(toNum(p.warranty_months, 0)),
+        wMonths,
         qty,
         qty,
         Math.trunc(toNum(p.alert_quantity, 5)),
@@ -707,7 +743,7 @@ CREATE TABLE IF NOT EXISTS \`supplier_payments\` (
         toStr(p.barcode, null),
         toStr(p.image, null),
         toBoolInt(p.status, 1),
-        toStr(p.warranty, null),
+        resolvedWarranty,
         toDateTimeStr(p.created_at, nowDt),
       ];
     })
@@ -788,7 +824,7 @@ CREATE TABLE IF NOT EXISTS \`supplier_payments\` (
 
   const ownersBlock = buildInsertBlock(
     'owners',
-    ['id', 'name', 'phone', 'email', 'address', 'share_percent', 'is_active', 'created_at'],
+    ['id', 'name', 'phone', 'email', 'address', 'share_percent', 'invested', 'withdrawn', 'is_active', 'created_at'],
     (store.owners ?? []).map((o: SqlRow) => [
       toNum(o.id),
       toStr(o.name, 'Owner'),
@@ -796,9 +832,28 @@ CREATE TABLE IF NOT EXISTS \`supplier_payments\` (
       toStr(o.email, null),
       toStr(o.address, null),
       toNum(o.share_percent, 0),
+      toNum(o.invested, 0),
+      toNum(o.withdrawn, 0),
       toBoolInt(o.is_active ?? o.status, 1),
       toDateTimeStr(o.created_at, nowDt),
     ])
+  );
+
+  const ownerTransactionsBlock = buildInsertBlock(
+    'owner_transactions',
+    ['id', 'owner_id', 'type', 'amount', 'note', 'transaction_date', 'created_by', 'created_at'],
+    (store.owner_transactions ?? [])
+      .filter((t: SqlRow) => fkOrNull(t.owner_id, validOwnerIds) !== null)
+      .map((t: SqlRow) => [
+        toNum(t.id),
+        toNum(t.owner_id),
+        String(t.type ?? '') === 'withdraw' ? 'withdraw' : 'invest',
+        toNum(t.amount, 0),
+        toStr(t.note, null),
+        toDateStr(t.transaction_date ?? t.created_at, todayDt),
+        toNullableId(t.created_by),
+        toDateTimeStr(t.created_at, nowDt),
+      ])
   );
 
   const bankAccountsBlock = buildInsertBlock(
@@ -877,6 +932,10 @@ CREATE TABLE IF NOT EXISTS \`supplier_payments\` (
     ['id', 'invoice_no', 'customer_id', 'customer_name', 'date', 'discount', 'receivable', 'paid', 'due', 'purchase_cost', 'profit', 'status', 'sale_date', 'subtotal', 'account_id', 'account_name', 'payment_status', 'created_at'],
     (store.sales ?? []).map((s: SqlRow) => {
       const status = String(s.status ?? 'completed').toLowerCase();
+      const receivable = toNum(s.receivable, 0);
+      const purchaseCost = toNum(s.purchase_cost, 0);
+      const rawProfit = toNum(s.profit, 0);
+      const computedProfit = rawProfit !== 0 ? rawProfit : (purchaseCost > 0 ? Math.round((receivable - purchaseCost) * 100) / 100 : 0);
       return [
         toNum(s.id),
         toStr(s.invoice_no, `INV-${s.id}`),
@@ -884,11 +943,11 @@ CREATE TABLE IF NOT EXISTS \`supplier_payments\` (
         toStr(s.customer_name, 'Walk-in Customer'),
         toDateStr(s.date ?? s.sale_date ?? s.created_at, todayDt),
         toNum(s.discount, 0),
-        toNum(s.receivable, 0),
+        receivable,
         toNum(s.paid, 0),
         toNum(s.due, 0),
-        toNum(s.purchase_cost, 0),
-        toNum(s.profit, 0),
+        purchaseCost,
+        computedProfit,
         validSaleStatuses.has(status) ? status : 'completed',
         toDateTimeStr(s.sale_date ?? s.date ?? s.created_at, null),
         toNum(s.subtotal ?? s.receivable, 0),
@@ -905,22 +964,26 @@ CREATE TABLE IF NOT EXISTS \`supplier_payments\` (
     ['id', 'product_id', 'sale_id', 'product_name', 'category_name', 'quantity', 'price', 'total', 'purchase_cost', 'serial_no', 'warranty', 'buying_price', 'warranty_id', 'warranty_name'],
     (store.sale_items ?? [])
       .filter((it: SqlRow) => fkOrNull(it.sale_id, validSaleIds) !== null)
-      .map((it: SqlRow) => [
-        toNum(it.id),
-        fkOrNull(it.product_id, validProductIds),
-        toNum(it.sale_id),
-        toStr(it.product_name, 'Product'),
-        toStr(it.category_name, null),
-        Math.trunc(toNum(it.quantity, 1)),
-        toNum(it.price, 0),
-        toNum(it.total, 0),
-        toNum(it.purchase_cost, 0),
-        toStr(it.serial_no, null),
-        toStr(it.warranty, null),
-        toNum(it.buying_price ?? it.purchase_cost, 0),
-        fkOrNull(it.warranty_id, validWarrantyIds),
-        toStr(it.warranty_name, null),
-      ])
+      .map((it: SqlRow) => {
+        const pid = fkOrNull(it.product_id, validProductIds);
+        const pName = toStr(it.product_name, null) ?? (pid !== null ? productNameMap.get(pid) ?? 'Product' : 'Product');
+        return [
+          toNum(it.id),
+          pid,
+          toNum(it.sale_id),
+          pName,
+          toStr(it.category_name, null),
+          Math.trunc(toNum(it.quantity, 1)),
+          toNum(it.price, 0),
+          toNum(it.total, 0),
+          toNum(it.purchase_cost, 0),
+          toStr(it.serial_no, null),
+          toStr(it.warranty, null),
+          toNum(it.buying_price ?? it.purchase_cost, 0),
+          fkOrNull(it.warranty_id, validWarrantyIds),
+          toStr(it.warranty_name, null),
+        ];
+      })
   );
 
   const paymentsBlock = buildInsertBlock(
@@ -1100,6 +1163,7 @@ CREATE TABLE IF NOT EXISTS \`supplier_payments\` (
     suppliersBlock,
     employeesBlock,
     ownersBlock,
+    ownerTransactionsBlock,
     bankAccountsBlock,
     bankTransactionsBlock,
     cashTransactionsBlock,

@@ -1,46 +1,215 @@
 @extends('layouts.app')
 
 @section('title', 'Suppliers — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
-@section('breadcrumb', 'Parties / Suppliers')
+@section('breadcrumb', 'Peoples / Suppliers')
 
 @section('content')
-@php $cur = $appSettings['currency'] ?? '৳'; @endphp
-<div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-4 h-fit">
-        <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">Add Supplier</h2>
-        <form method="POST" action="{{ route('suppliers.store') }}" class="space-y-3 text-sm">
+@php
+    $cur = $appSettings['currency'] ?? '৳';
+    $pagePurchased = (float) $suppliers->getCollection()->sum('total_purchased');
+    $pageDue = (float) $suppliers->getCollection()->sum('total_due');
+@endphp
+
+<div class="w-full space-y-5">
+    {{-- Page Header --}}
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+            <div class="w-11 h-11 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-[0_6px_18px_rgba(8,145,178,0.28)]"
+                 style="background: linear-gradient(135deg, #0891b2, #0d9488);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+            </div>
+            <div class="min-w-0">
+                <h1 class="text-xl sm:text-2xl font-display font-extrabold text-slate-900 truncate">
+                    Supplier <span class="bg-gradient-to-r from-[#0891b2] to-[#0d9488] bg-clip-text text-transparent">Directory</span>
+                </h1>
+                <p class="text-xs text-slate-500">Full-width supplier registration on top &amp; supplier directory below</p>
+            </div>
+        </div>
+        <span class="px-3.5 py-1.5 rounded-xl bg-cyan-50 text-cyan-700 border border-cyan-100 text-xs font-semibold tabular-nums">
+            {{ number_format($suppliers->total()) }} Suppliers
+        </span>
+    </div>
+
+    {{-- Compact KPI Strip --}}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+        <div style="background: linear-gradient(135deg, #0891b2 0%, #0d9488 100%);"
+             class="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(8,145,178,0.20)]">
+            <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Total Suppliers</div>
+            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ number_format($suppliers->total()) }}</div>
+            <div class="mt-0.5 text-[10px] text-white/80">Registered Vendor Accounts</div>
+        </div>
+        <div style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);"
+             class="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(5,150,105,0.20)]">
+            <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Page Purchased Total</div>
+            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ $cur }}{{ number_format($pagePurchased, 2) }}</div>
+            <div class="mt-0.5 text-[10px] text-white/80">{{ $suppliers->count() }} entries shown</div>
+        </div>
+        <div style="background: linear-gradient(135deg, #e11d48 0%, #f43f5e 100%);"
+             class="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(225,29,72,0.20)]">
+            <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Page Payable Due</div>
+            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ $cur }}{{ number_format($pageDue, 2) }}</div>
+            <div class="mt-0.5 text-[10px] text-white/80">Outstanding Vendor Dues</div>
+        </div>
+    </div>
+
+    {{-- TOP FULL-WIDTH: Add Supplier Form --}}
+    <div class="w-full bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r from-cyan-50/80 via-white to-teal-50/60 flex items-center gap-2.5">
+            <span class="w-8 h-8 rounded-lg text-white flex items-center justify-center shrink-0"
+                  style="background: linear-gradient(135deg, #0891b2, #0d9488);">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+            </span>
+            <div>
+                <h2 class="font-display text-sm font-bold text-slate-900">Add Supplier</h2>
+                <p class="text-[11px] text-slate-500">Register a vendor or distributor across full workspace width</p>
+            </div>
+        </div>
+        <form method="POST" action="{{ route('suppliers.store') }}" class="p-5 grid grid-cols-1 md:grid-cols-12 gap-3.5 text-sm items-end">
             @csrf
-            <input type="text" name="name" required placeholder="Supplier name" class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
-            <input type="text" name="phone" placeholder="Phone number" class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
-            <input type="email" name="email" placeholder="Email" class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
-            <textarea name="address" rows="2" placeholder="Address" class="w-full px-3 py-1.5 border border-slate-300 rounded-md"></textarea>
-            <button type="submit" class="w-full py-2 bg-slate-900 text-white rounded-md font-medium">Save Supplier</button>
+            <div class="md:col-span-3">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Supplier Name *</label>
+                <input type="text" name="name" required placeholder="Company or vendor name" class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-cyan-600 outline-none">
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Phone Number</label>
+                <input type="text" name="phone" placeholder="01XXXXXXXXX" class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-cyan-600 outline-none">
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Email</label>
+                <input type="email" name="email" placeholder="vendor@example.com" class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-cyan-600 outline-none">
+            </div>
+            <div class="md:col-span-3">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Address</label>
+                <input type="text" name="address" placeholder="Office or warehouse address" class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-cyan-600 outline-none">
+            </div>
+            <div class="md:col-span-2">
+                <button type="submit" style="background: linear-gradient(135deg, #0891b2, #0d9488);" class="w-full py-2.5 text-white rounded-xl font-semibold shadow-[0_6px_16px_rgba(8,145,178,0.28)] hover:opacity-95 transition cursor-pointer">
+                    Save Supplier
+                </button>
+            </div>
         </form>
     </div>
-    <div class="lg:col-span-3 min-w-0 bg-white border border-slate-200 rounded-lg overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-                <thead class="bg-slate-50 text-xs text-slate-500 border-b border-slate-200">
+
+    {{-- Search Bar --}}
+    <div class="w-full bg-white border border-slate-200/90 rounded-[20px] p-3.5 shadow-[0_4px_20px_rgba(15,23,42,0.04)]">
+        <form method="GET" action="{{ route('suppliers.index') }}" class="flex flex-wrap items-center gap-2.5 text-sm">
+            <input type="hidden" name="limit" value="{{ $limit ?? 10 }}">
+            <input type="text" name="q" value="{{ request('q') }}" placeholder="Search supplier name, phone, or email..."
+                   class="flex-1 min-w-[220px] px-3.5 py-2 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-cyan-600 outline-none">
+            <button type="submit" style="background: linear-gradient(135deg, #0891b2, #0d9488);" class="px-4 py-2 rounded-xl text-white text-xs font-semibold cursor-pointer">Search</button>
+            @if(request('q'))
+                <a href="{{ route('suppliers.index') }}" class="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50">Reset</a>
+            @endif
+        </form>
+    </div>
+
+    {{-- BOTTOM FULL-WIDTH: Suppliers Table --}}
+    <div class="w-full bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden flex flex-col">
+        <div class="px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+            <div>
+                <h2 class="font-display text-sm sm:text-base font-bold text-slate-900">Suppliers List</h2>
+                <p class="text-[11px] text-slate-500">Page Purchased: <strong class="tabular-nums">{{ $cur }}{{ number_format($pagePurchased, 2) }}</strong></p>
+            </div>
+        </div>
+        <div class="overflow-x-auto flex-1">
+            <table class="w-full text-sm text-left">
+                <thead class="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
                     <tr>
-                        <th class="px-4 py-2.5 text-left">Supplier</th>
-                        <th class="px-4 py-2.5 text-left">Phone</th>
-                        <th class="px-4 py-2.5 text-right">Purchased</th>
-                        <th class="px-4 py-2.5 text-right">Payable Due</th>
+                        <th class="px-4 py-3 font-semibold">Supplier</th>
+                        <th class="px-4 py-3 font-semibold">Contact</th>
+                        <th class="px-4 py-3 font-semibold text-right whitespace-nowrap">Purchased</th>
+                        <th class="px-4 py-3 font-semibold text-right whitespace-nowrap">Payable Due</th>
+                        <th class="px-4 py-3 font-semibold text-center whitespace-nowrap">Action</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                    @foreach($suppliers as $supplier)
-                        <tr>
-                            <td class="px-4 py-2.5 font-medium text-slate-900">{{ $supplier->name }}</td>
-                            <td class="px-4 py-2.5 text-xs text-slate-600 font-mono whitespace-nowrap">{{ $supplier->phone ?: '-' }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums whitespace-nowrap">{{ $cur }}{{ number_format((float) $supplier->total_purchased, 2) }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums whitespace-nowrap {{ ($supplier->total_due ?? 0) > 0 ? 'text-red-600 font-medium' : 'text-slate-400' }}">{{ $cur }}{{ number_format((float) $supplier->total_due, 2) }}</td>
+                    @forelse($suppliers as $supplier)
+                        <tr class="hover:bg-slate-50/80 transition-colors">
+                            <td class="px-4 py-2.5">
+                                <div class="font-semibold text-slate-900">{{ $supplier->name }}</div>
+                                @if($supplier->address)
+                                    <div class="text-[11px] text-slate-400 truncate max-w-[320px]">{{ $supplier->address }}</div>
+                                @endif
+                            </td>
+                            <td class="px-4 py-2.5 text-xs">
+                                <div class="font-mono text-slate-700">{{ $supplier->phone ?: '—' }}</div>
+                                @if($supplier->email)
+                                    <div class="text-[11px] text-slate-400">{{ $supplier->email }}</div>
+                                @endif
+                            </td>
+                            <td class="px-4 py-2.5 text-right font-mono text-xs font-semibold text-slate-800 tabular-nums whitespace-nowrap">{{ $cur }}{{ number_format((float) $supplier->total_purchased, 2) }}</td>
+                            <td class="px-4 py-2.5 text-right font-mono text-xs font-bold tabular-nums whitespace-nowrap {{ ($supplier->total_due ?? 0) > 0 ? 'text-rose-600' : 'text-slate-400' }}">
+                                {{ $cur }}{{ number_format((float) $supplier->total_due, 2) }}
+                            </td>
+                            <td class="px-4 py-2.5 text-center whitespace-nowrap">
+                                <button type="button"
+                                        onclick="openEditSupplierModal({{ $supplier->id }}, @json($supplier->name), @json($supplier->phone ?? ''), @json($supplier->email ?? ''), @json($supplier->address ?? ''))"
+                                        class="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-cyan-50 hover:border-cyan-300 hover:text-cyan-700 text-xs font-semibold text-slate-700 cursor-pointer">
+                                    Edit
+                                </button>
+                            </td>
                         </tr>
-                    @endforeach
+                    @empty
+                        <tr><td colspan="5" class="px-4 py-10 text-center text-xs text-slate-500">No suppliers found.</td></tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>
-        <div class="p-4 border-t border-slate-200">{{ $suppliers->links() }}</div>
+        <div class="p-4 border-t border-slate-200 bg-slate-50/70">{{ $suppliers->links('pagination.custom') }}</div>
     </div>
 </div>
+
+{{-- Edit Supplier Modal --}}
+<div id="editSupplierModal" onclick="closeEditSupplierModal()" class="fixed inset-0 z-[120] bg-slate-950/55 backdrop-blur-xs hidden items-center justify-center p-4">
+    <div onclick="event.stopPropagation()" class="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-cyan-50/80 via-white to-teal-50/60 flex items-center justify-between">
+            <h3 class="font-display text-base font-bold text-slate-900">Edit Supplier</h3>
+            <button type="button" onclick="closeEditSupplierModal()" class="text-slate-400 hover:text-slate-700 p-1 text-lg leading-none cursor-pointer">&times;</button>
+        </div>
+        <form id="editSupplierForm" method="POST" action="" class="p-5 space-y-3 text-sm">
+            @csrf
+            @method('PUT')
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Name *</label>
+                <input type="text" name="name" id="editSupName" required class="w-full px-3.5 py-2 border border-slate-300 rounded-xl outline-none focus:border-cyan-600">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Phone</label>
+                <input type="text" name="phone" id="editSupPhone" class="w-full px-3.5 py-2 border border-slate-300 rounded-xl outline-none focus:border-cyan-600">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Email</label>
+                <input type="email" name="email" id="editSupEmail" class="w-full px-3.5 py-2 border border-slate-300 rounded-xl outline-none focus:border-cyan-600">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Address</label>
+                <textarea name="address" id="editSupAddress" rows="2" class="w-full px-3.5 py-2 border border-slate-300 rounded-xl outline-none focus:border-cyan-600"></textarea>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="closeEditSupplierModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">Cancel</button>
+                <button type="submit" style="background: linear-gradient(135deg, #0891b2, #0d9488);" class="px-5 py-2 rounded-xl text-xs font-semibold text-white cursor-pointer">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+window.openEditSupplierModal = function(id, name, phone, email, address) {
+    document.getElementById('editSupplierForm').action = '{{ url('/suppliers') }}/' + id;
+    document.getElementById('editSupName').value = name || '';
+    document.getElementById('editSupPhone').value = phone || '';
+    document.getElementById('editSupEmail').value = email || '';
+    document.getElementById('editSupAddress').value = address || '';
+    var m = document.getElementById('editSupplierModal');
+    m.classList.remove('hidden');
+    m.classList.add('flex');
+};
+window.closeEditSupplierModal = function() {
+    var m = document.getElementById('editSupplierModal');
+    if (m) {
+        m.classList.add('hidden');
+        m.classList.remove('flex');
+    }
+};
+</script>
 @endsection

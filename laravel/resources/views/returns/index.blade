@@ -1,66 +1,226 @@
 @extends('layouts.app')
 
 @section('title', 'Returns & Damages — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
-@section('breadcrumb', 'Finance / Returns & Damages')
+@section('breadcrumb', 'Sales & Purchase / Returns')
 
 @section('content')
-@php $cur = $appSettings['currency'] ?? '৳'; @endphp
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-5">
-        <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">Sales Return</h2>
-        <form method="POST" action="{{ route('returns.store') }}" class="space-y-3 text-sm mb-4">
-            @csrf
-            <select name="sale_id" required class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
-                @foreach($sales as $s)
-                    <option value="{{ $s->id }}">{{ $s->invoice_no }} — {{ $s->customer_name }}</option>
-                @endforeach
-            </select>
-            <select name="product_id" required class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
-                @foreach($products as $p)
-                    <option value="{{ $p->id }}">{{ $p->name }}</option>
-                @endforeach
-            </select>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input type="number" min="1" name="quantity" value="1" required class="w-full min-w-0 px-3 py-1.5 border border-slate-300 rounded-md tabular-nums">
-                <input type="number" step="0.01" min="0" name="price" placeholder="Unit Price" required class="w-full min-w-0 px-3 py-1.5 border border-slate-300 rounded-md tabular-nums">
+@php
+    $cur = $appSettings['currency'] ?? '৳';
+    $totalReturnAmt = (float) $returns->sum('total_amount');
+    $totalDamageLoss = (float) $damages->sum('loss_amount');
+@endphp
+
+<div class="w-full space-y-5">
+    {{-- Page Header --}}
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+            <div class="w-11 h-11 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-[0_6px_18px_rgba(2,132,199,0.28)]"
+                 style="background: linear-gradient(135deg, #0284c7, #2563eb);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
             </div>
-            <button type="submit" class="w-full py-2 bg-slate-900 text-white rounded-md font-medium">Process Return</button>
-        </form>
-        <div class="divide-y divide-slate-100 text-xs">
-            @forelse($returns as $ret)
-                <div class="py-2 flex justify-between">
-                    <span>{{ $ret->invoice_no }} · {{ $ret->product?->name }} (x{{ $ret->quantity }})</span>
-                    <span class="tabular-nums font-medium">{{ $cur }}{{ number_format($ret->total_amount, 2) }}</span>
-                </div>
-            @empty
-                <div class="py-3 text-slate-500">No returns recorded.</div>
-            @endforelse
+            <div class="min-w-0">
+                <h1 class="text-xl sm:text-2xl font-display font-extrabold text-slate-900 truncate">
+                    Sales Returns &amp; <span class="bg-gradient-to-r from-[#0284c7] to-[#2563eb] bg-clip-text text-transparent">Damages</span>
+                </h1>
+                <p class="text-xs text-slate-500">Full-width return &amp; damage entry forms above detailed logs</p>
+            </div>
         </div>
     </div>
 
-    <div class="min-w-0 bg-white border border-slate-200 rounded-lg p-5">
-        <h2 class="font-display text-sm font-semibold text-slate-900 mb-3">Damaged Stock</h2>
-        <form method="POST" action="{{ route('damages.store') }}" class="space-y-3 text-sm mb-4">
+    {{-- Compact KPI Strip --}}
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div style="background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);"
+             class="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(2,132,199,0.22)] flex items-center justify-between">
+            <div>
+                <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Total Returned Value</div>
+                <div class="mt-0.5 text-lg font-display font-bold tabular-nums">{{ $cur }}{{ number_format($totalReturnAmt, 2) }}</div>
+            </div>
+            <span class="px-2.5 py-1 rounded-lg bg-white/15 text-xs font-semibold tabular-nums">{{ $returns->count() }} entries</span>
+        </div>
+        <div style="background: linear-gradient(135deg, #e11d48 0%, #f59e0b 100%);"
+             class="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(225,29,72,0.22)] flex items-center justify-between">
+            <div>
+                <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Damaged Write-Off Loss</div>
+                <div class="mt-0.5 text-lg font-display font-bold tabular-nums">{{ $cur }}{{ number_format($totalDamageLoss, 2) }}</div>
+            </div>
+            <span class="px-2.5 py-1 rounded-lg bg-white/15 text-xs font-semibold tabular-nums">{{ $damages->count() }} entries</span>
+        </div>
+    </div>
+
+    {{-- TOP FULL-WIDTH: Process Sales Return --}}
+    <div class="w-full bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r from-sky-50/80 via-white to-blue-50/60 flex items-center gap-2.5">
+            <span class="w-8 h-8 rounded-lg text-white flex items-center justify-center shrink-0"
+                  style="background: linear-gradient(135deg, #0284c7, #2563eb);">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+            </span>
+            <div>
+                <h2 class="font-display text-sm font-bold text-slate-900">Process Sales Return</h2>
+                <p class="text-[11px] text-slate-500">Restores returned quantity to product stock</p>
+            </div>
+        </div>
+        <form method="POST" action="{{ route('returns.store') }}" class="p-5 grid grid-cols-1 md:grid-cols-12 gap-3.5 text-sm items-end">
             @csrf
-            <select name="product_id" required class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
-                @foreach($products as $p)
-                    <option value="{{ $p->id }}">{{ $p->name }} (Stock: {{ $p->quantity }})</option>
-                @endforeach
-            </select>
-            <input type="number" min="1" name="quantity" value="1" required class="w-full px-3 py-1.5 border border-slate-300 rounded-md tabular-nums">
-            <input type="text" name="reason" placeholder="Damage reason" class="w-full px-3 py-1.5 border border-slate-300 rounded-md">
-            <button type="submit" class="w-full py-2 bg-red-600 text-white rounded-md font-medium">Record Damage</button>
-        </form>
-        <div class="divide-y divide-slate-100 text-xs">
-            @forelse($damages as $dmg)
-                <div class="py-2 flex justify-between">
-                    <span>{{ $dmg->product?->name }} (x{{ $dmg->quantity }})</span>
-                    <span class="tabular-nums text-red-600 font-medium">{{ $cur }}{{ number_format($dmg->loss_amount, 2) }}</span>
+            <div class="md:col-span-3">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Sale Invoice *</label>
+                <select name="sale_id" required class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-sky-500 outline-none">
+                    @foreach($sales as $s)
+                        <option value="{{ $s->id }}">{{ $s->invoice_no }} — {{ $s->customer_name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="md:col-span-3">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Returned Product *</label>
+                <select name="product_id" id="retProductSelect" onchange="syncReturnPrice()" required class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-sky-500 outline-none">
+                    @foreach($products as $p)
+                        <option value="{{ $p->id }}" data-price="{{ (float) $p->selling_price }}">{{ $p->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="md:col-span-1">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Qty *</label>
+                <input type="number" min="1" name="quantity" value="1" required class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-sky-500 outline-none tabular-nums">
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Refund Rate ({{ $cur }}) *</label>
+                <input type="number" step="0.01" min="0" name="price" id="retPriceInput" placeholder="0.00" required class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-sky-500 outline-none tabular-nums">
+            </div>
+            <div class="md:col-span-3">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Reason</label>
+                <div class="flex gap-2">
+                    <input type="text" name="reason" placeholder="Return reason (optional)" class="flex-1 min-w-0 px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-sky-500 outline-none">
+                    <button type="submit" style="background: linear-gradient(135deg, #0284c7, #2563eb);" class="px-4 py-2.5 text-white rounded-xl font-semibold shadow-[0_6px_16px_rgba(2,132,199,0.24)] hover:opacity-95 transition shrink-0 cursor-pointer">
+                        Return
+                    </button>
                 </div>
-            @empty
-                <div class="py-3 text-slate-500">No damages recorded.</div>
-            @endforelse
+            </div>
+        </form>
+    </div>
+
+    {{-- FULL-WIDTH: Recent Sales Returns History --}}
+    <div class="w-full bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+            <div>
+                <h2 class="font-display text-sm sm:text-base font-bold text-slate-900">Recent Sales Returns</h2>
+                <p class="text-[11px] text-slate-500">{{ $returns->count() }} return records</p>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead class="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-3 font-semibold">Date</th>
+                        <th class="px-4 py-3 font-semibold">Invoice</th>
+                        <th class="px-4 py-3 font-semibold">Product</th>
+                        <th class="px-4 py-3 font-semibold text-right">Qty</th>
+                        <th class="px-4 py-3 font-semibold">Reason</th>
+                        <th class="px-4 py-3 font-semibold text-right">Refund Total</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    @forelse($returns as $ret)
+                        <tr class="hover:bg-slate-50/80 transition-colors">
+                            <td class="px-4 py-2.5 font-mono text-xs text-slate-500 whitespace-nowrap">{{ $ret->return_date ?: '—' }}</td>
+                            <td class="px-4 py-2.5 font-mono text-xs font-bold text-sky-700 whitespace-nowrap">{{ $ret->invoice_no ?: '—' }}</td>
+                            <td class="px-4 py-2.5 font-semibold text-slate-900">{{ $ret->product?->name ?: 'Product' }}</td>
+                            <td class="px-4 py-2.5 text-right font-mono text-xs tabular-nums">{{ $ret->quantity }}</td>
+                            <td class="px-4 py-2.5 text-xs text-slate-600">{{ $ret->reason ?: '—' }}</td>
+                            <td class="px-4 py-2.5 text-right font-mono text-xs font-bold text-sky-700 tabular-nums whitespace-nowrap">{{ $cur }}{{ number_format((float) $ret->total_amount, 2) }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="6" class="px-4 py-8 text-center text-xs text-slate-400">No returns recorded.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {{-- FULL-WIDTH: Record Damaged Stock --}}
+    <div class="w-full bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r from-rose-50/70 via-white to-amber-50/60 flex items-center gap-2.5">
+            <span class="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center shrink-0">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+            </span>
+            <div>
+                <h2 class="font-display text-sm font-bold text-slate-900">Record Damaged Stock</h2>
+                <p class="text-[11px] text-slate-500">Deducts damaged units &amp; computes purchase cost loss</p>
+            </div>
+        </div>
+        <form method="POST" action="{{ route('damages.store') }}" class="p-5 grid grid-cols-1 md:grid-cols-12 gap-3.5 text-sm items-end">
+            @csrf
+            <div class="md:col-span-4">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Product *</label>
+                <select name="product_id" required class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-rose-500 outline-none">
+                    @foreach($products as $p)
+                        <option value="{{ $p->id }}">{{ $p->name }} (Stock: {{ $p->stock_quantity ?? $p->quantity ?? 0 }})</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Damaged Qty *</label>
+                <input type="number" min="1" name="quantity" value="1" required class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-rose-500 outline-none tabular-nums">
+            </div>
+            <div class="md:col-span-4">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Damage Reason</label>
+                <input type="text" name="reason" placeholder="Breakage, expired, defect..." class="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-rose-500 outline-none">
+            </div>
+            <div class="md:col-span-2">
+                <button type="submit" class="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-semibold shadow-[0_6px_16px_rgba(225,29,72,0.22)] transition cursor-pointer">
+                    Record Damage
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {{-- FULL-WIDTH: Recent Damage Log --}}
+    <div class="w-full bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+            <div>
+                <h2 class="font-display text-sm sm:text-base font-bold text-slate-900">Recent Damage Log</h2>
+                <p class="text-[11px] text-slate-500">{{ $damages->count() }} damaged stock write-offs</p>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead class="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-3 font-semibold">Date</th>
+                        <th class="px-4 py-3 font-semibold">Product</th>
+                        <th class="px-4 py-3 font-semibold text-right">Qty</th>
+                        <th class="px-4 py-3 font-semibold">Reason</th>
+                        <th class="px-4 py-3 font-semibold text-right">Loss</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    @forelse($damages as $dmg)
+                        <tr class="hover:bg-slate-50/80 transition-colors">
+                            <td class="px-4 py-2.5 font-mono text-xs text-slate-500 whitespace-nowrap">{{ $dmg->damage_date?->format('Y-m-d') ?: '—' }}</td>
+                            <td class="px-4 py-2.5 font-semibold text-slate-900">{{ $dmg->product?->name ?: 'Product' }}</td>
+                            <td class="px-4 py-2.5 text-right font-mono text-xs tabular-nums">{{ $dmg->quantity }}</td>
+                            <td class="px-4 py-2.5 text-xs text-slate-600">{{ $dmg->reason ?: 'Damaged stock' }}</td>
+                            <td class="px-4 py-2.5 text-right font-mono text-xs font-bold text-rose-600 tabular-nums whitespace-nowrap">-{{ $cur }}{{ number_format((float) $dmg->loss_amount, 2) }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="5" class="px-4 py-8 text-center text-xs text-slate-400">No damages recorded.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
         </div>
     </div>
 </div>
+
+<script>
+(function() {
+    window.syncReturnPrice = function() {
+        var sel = document.getElementById('retProductSelect');
+        var inp = document.getElementById('retPriceInput');
+        if (!sel || !inp) return;
+        var opt = sel.options[sel.selectedIndex];
+        if (opt && opt.dataset.price) {
+            inp.value = Number(opt.dataset.price || 0).toFixed(2);
+        }
+    };
+    window.syncReturnPrice();
+})();
+</script>
 @endsection

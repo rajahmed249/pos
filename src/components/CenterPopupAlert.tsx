@@ -25,6 +25,12 @@ export function CenterPopupAlert() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!popup || (popup.type !== 'success' && popup.type !== 'info')) return;
+    const timer = window.setTimeout(() => setPopup(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [popup]);
+
   if (!popup) return null;
 
   const isError = popup.type === 'error';

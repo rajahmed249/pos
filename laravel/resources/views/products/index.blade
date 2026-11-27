@@ -9,12 +9,12 @@
 <div class="space-y-6">
     <div class="flex flex-wrap items-center justify-between gap-4">
         <div class="flex items-center gap-3 sm:gap-4 min-w-0">
-            <div class="w-11 h-11 sm:w-[56px] sm:h-[56px] shrink-0 rounded-2xl flex items-center justify-center text-white text-xl sm:text-2xl shadow-[0_8px_24px_rgba(79,70,229,0.35)]"
+            <div class="w-11 h-11 sm:w-[54px] sm:h-[54px] shrink-0 rounded-2xl flex items-center justify-center text-white text-xl sm:text-2xl shadow-[0_8px_24px_rgba(79,70,229,0.32)]"
                  style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
                 <i class="fas fa-cubes shrink-0"></i>
             </div>
             <div class="min-w-0">
-                <h1 class="text-xl sm:text-[26px] font-extrabold text-[#0f172a] truncate">
+                <h1 class="text-xl sm:text-[25px] font-extrabold text-[#0f172a] truncate">
                     Product <span class="bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] bg-clip-text text-transparent">Management</span>
                 </h1>
                 <p class="text-[12px] sm:text-[13px] text-[#64748b] mt-0.5"><i class="far fa-calendar-alt mr-1"></i>{{ date('d F, Y') }} &bull; <i class="far fa-clock mr-1"></i>{{ date('h:i A') }}</p>
@@ -28,89 +28,281 @@
 
     @include('products._tabs', ['activeTab' => 'products'])
 
-    <div class="min-w-0 bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-hidden">
-        <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] flex flex-wrap gap-3 justify-between items-center">
+    <div class="min-w-0 bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs overflow-visible">
+        <div class="px-5 py-3.5 border-b border-[#f1f5f9] bg-[#f8fafc] rounded-t-[20px] flex flex-wrap gap-3 justify-between items-center">
             <div class="flex items-center gap-2.5">
                 <i class="fas fa-list-ul text-[#4f46e5] shrink-0"></i>
                 <h3 class="text-base font-semibold text-[#1e293b]">Product List</h3>
-                <span class="px-3 py-0.5 rounded-full text-xs font-medium text-white shrink-0" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                <span class="px-3 py-0.5 rounded-full text-xs font-medium text-white shrink-0 tabular-nums" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
                     {{ number_format($products->total()) }}
                 </span>
             </div>
-            <form method="GET" action="{{ route('products.index') }}" class="flex flex-wrap gap-2 w-full sm:w-auto">
-                <input type="text" name="q" value="{{ request('q') }}" placeholder="Search Name, SKU, Category, Brand..." class="flex-1 min-w-0 sm:w-64 px-3 py-1.5 text-xs border-2 border-[#e2e8f0] rounded-lg bg-white">
+            <form method="GET" action="{{ route('products.index') }}" class="flex flex-wrap gap-2 w-full sm:w-auto items-center">
+                @if(request('limit'))
+                    <input type="hidden" name="limit" value="{{ (int) request('limit') }}">
+                @endif
+                <input type="text" name="q" value="{{ request('q') }}" placeholder="Search Name, SKU, Category, Brand..." class="flex-1 min-w-0 sm:w-64 px-3 py-1.5 text-xs border-2 border-[#e2e8f0] rounded-lg bg-white focus:outline-none focus:border-[#4f46e5]">
+                <select name="category_id" class="px-3 py-1.5 text-xs border-2 border-[#e2e8f0] rounded-lg bg-white text-[#334155]">
+                    <option value="">All Categories</option>
+                    @foreach($categories as $cat)
+                        <option value="{{ $cat->id }}" @selected((int) request('category_id') === (int) $cat->id)>{{ $cat->name }}</option>
+                    @endforeach
+                </select>
                 <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" class="px-3.5 py-1.5 text-xs font-semibold text-white rounded-lg shrink-0 cursor-pointer">Filter</button>
             </form>
         </div>
 
         <div class="overflow-x-auto">
-            <table class="w-full text-[13px] border-collapse">
+            <table class="w-full text-[12.5px] border-collapse">
                 <thead class="bg-[#f8fafc]">
                     <tr>
-                        <th class="py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">#</th>
-                        <th class="py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Image</th>
-                        <th class="py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Product</th>
-                        <th class="py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Category</th>
-                        <th class="py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Brand</th>
-                        <th class="py-3 px-4 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Warranty</th>
-                        <th class="py-3 px-4 text-right text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Price</th>
-                        <th class="py-3 px-4 text-right text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Cost</th>
-                        <th class="py-3 px-4 text-center text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Stock</th>
-                        <th class="py-3 px-4 text-center text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Actions</th>
+                        <th class="py-3 px-3 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] w-10">#</th>
+                        <th class="py-3 px-3 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] w-14">Image</th>
+                        <th class="py-3 px-3 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0] min-w-[180px]">Product</th>
+                        <th class="py-3 px-3 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Category</th>
+                        <th class="py-3 px-3 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Brand</th>
+                        <th class="py-3 px-3 text-left text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Warranty</th>
+                        <th class="py-3 px-3 text-right text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Price</th>
+                        <th class="py-3 px-3 text-right text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Cost</th>
+                        <th class="py-3 px-3 text-center text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Stock</th>
+                        <th class="py-3 px-3 text-center text-[10px] font-bold uppercase tracking-wider text-[#64748b] border-b-2 border-[#e2e8f0]">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach($products as $idx => $product)
+                    @forelse($products as $idx => $product)
                         @php
                             $qty = (int) ($product->stock_quantity ?? $product->quantity ?? 0);
                             $alert = (int) ($product->alert_quantity ?? 5);
-                            $stockClass = $qty <= 0 ? 'bg-[#fee2e2] text-[#dc2626]' : ($qty <= $alert ? 'bg-[#fef3c7] text-[#d97706]' : 'bg-[#d1fae5] text-[#059669]');
+                            $stockClass = $qty <= 0 ? 'bg-[#fee2e2] text-[#dc2626] border border-red-200/70' : ($qty <= $alert ? 'bg-[#fef3c7] text-[#d97706] border border-amber-200/70' : 'bg-[#d1fae5] text-[#059669] border border-emerald-200/70');
                             $dotClass = $qty <= 0 ? 'bg-[#dc2626]' : ($qty <= $alert ? 'bg-[#d97706]' : 'bg-[#059669]');
                             $stockLabel = $qty <= 0 ? 'Out of Stock' : ($qty <= $alert ? 'Low Stock' : 'In Stock');
+                            $rawWarranty = trim((string) ($product->warranty ?? ''));
+                            if ($rawWarranty === '' || strcasecmp($rawWarranty, 'No Warranty') === 0) {
+                                $recDur = trim((string) ($product->warrantyRecord?->duration ?: $product->warrantyRecord?->name ?: ''));
+                                if ($recDur !== '' && strcasecmp($recDur, 'No Warranty') !== 0) {
+                                    $warrantyLabel = $recDur;
+                                } elseif ((int) ($product->warranty_months ?? 0) > 0) {
+                                    $months = (int) $product->warranty_months;
+                                    $warrantyLabel = $months % 12 === 0 ? ($months / 12) . ' Year' . ($months > 12 ? 's' : '') : $months . ' Months';
+                                } else {
+                                    $warrantyLabel = 'No Warranty';
+                                }
+                            } else {
+                                $warrantyLabel = $rawWarranty;
+                            }
+                            $hasWarranty = strcasecmp($warrantyLabel, 'No Warranty') !== 0;
                         @endphp
-                        <tr class="border-b border-[#f1f5f9] hover:bg-[#f8fafc]">
-                            <td class="py-3 px-4 text-[#64748b] tabular-nums">{{ $products->firstItem() + $idx }}</td>
-                            <td class="py-3 px-4">
-                                <div class="w-11 h-11 rounded-[10px] bg-[#f1f5f9] flex items-center justify-center text-[#94a3b8] overflow-hidden border border-slate-200/70">
+                        <tr class="border-b border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
+                            <td class="py-2.5 px-3 text-[#64748b] tabular-nums">{{ ($products->firstItem() ?? 1) + $idx }}</td>
+                            <td class="py-2.5 px-3">
+                                <div class="w-11 h-11 rounded-[10px] bg-[#f1f5f9] flex items-center justify-center text-[#94a3b8] overflow-hidden border border-slate-200/70 shrink-0">
                                     @if($product->image)
-                                        <img src="{{ asset($product->image) }}" alt="{{ $product->name }}" class="w-full h-full object-cover">
+                                        <img src="{{ asset(ltrim($product->image, '/')) }}" alt="{{ $product->name }}" class="w-full h-full object-cover">
                                     @else
                                         <i class="fas fa-box"></i>
                                     @endif
                                 </div>
                             </td>
-                            <td class="py-3 px-4">
-                                <div class="font-semibold text-[#1e293b]">{{ $product->name }}</div>
-                                <div class="text-[11px] text-[#94a3b8]">SKU: {{ $product->sku ?: 'N/A' }}</div>
+                            <td class="py-2.5 px-3">
+                                <div class="font-semibold text-[#1e293b] leading-snug">{{ $product->name }}</div>
+                                <div class="text-[11px] text-[#94a3b8] mt-0.5">
+                                    SKU: {{ $product->sku ?: 'N/A' }}@if($product->barcode) | {{ $product->barcode }}@endif
+                                </div>
                             </td>
-                            <td class="py-3 px-4"><span class="px-3 py-0.5 rounded-full text-[11px] font-medium bg-[#eef2ff] text-[#4f46e5]">{{ $product->category?->name ?: 'Uncategorized' }}</span></td>
-                            <td class="py-3 px-4"><span class="px-3 py-0.5 rounded-full text-[11px] font-medium bg-[#f1f5f9] text-[#475569]">{{ $product->brand?->name ?: 'No Brand' }}</span></td>
-                            <td class="py-3 px-4"><span class="px-3 py-0.5 rounded-full text-[11px] font-medium bg-[#eef2ff] text-[#4f46e5]">{{ $product->warranty ?: 'No Warranty' }}</span></td>
-                            <td class="py-3 px-4 text-right font-semibold tabular-nums">{{ $cur }}{{ number_format($product->selling_price, 2) }}</td>
-                            <td class="py-3 px-4 text-right text-[#64748b] tabular-nums">{{ $cur }}{{ number_format($product->purchase_price, 2) }}</td>
-                            <td class="py-3 px-4 text-center">
-                                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold {{ $stockClass }}">
+                            <td class="py-2.5 px-3 whitespace-nowrap">
+                                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-[#eef2ff] text-[#4f46e5]">{{ $product->category?->name ?: 'Uncategorized' }}</span>
+                            </td>
+                            <td class="py-2.5 px-3 whitespace-nowrap">
+                                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-[#f1f5f9] text-[#475569]">{{ $product->brand?->name ?: 'No Brand' }}</span>
+                            </td>
+                            <td class="py-2.5 px-3 whitespace-nowrap">
+                                @if($hasWarranty)
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eef2ff] text-[#4f46e5]">
+                                        <i class="fas fa-shield-alt text-[10px]"></i> {{ $warrantyLabel }}
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-[#f1f5f9] text-[#94a3b8]">
+                                        <i class="fas fa-ban text-[10px]"></i> No Warranty
+                                    </span>
+                                @endif
+                            </td>
+                            <td class="py-2.5 px-3 text-right font-semibold text-[#1e293b] tabular-nums whitespace-nowrap">{{ $cur }}{{ number_format($product->selling_price, 2) }}</td>
+                            <td class="py-2.5 px-3 text-right text-[#64748b] tabular-nums whitespace-nowrap">{{ $cur }}{{ number_format($product->purchase_price, 2) }}</td>
+                            <td class="py-2.5 px-3 text-center whitespace-nowrap">
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tabular-nums {{ $stockClass }}">
                                     <span class="w-1.5 h-1.5 rounded-full {{ $dotClass }}"></span>
-                                    {{ $stockLabel }} ({{ number_format($qty) }})
+                                    {{ $stockLabel }} <span class="font-bold">({{ number_format($qty) }})</span>
                                 </span>
                             </td>
-                            <td class="py-3 px-4 text-center whitespace-nowrap space-x-1.5">
-                                <a href="{{ route('products.edit', $product) }}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold">
-                                    <i class="fas fa-edit"></i> Edit
-                                </a>
-                                <form method="POST" action="{{ route('products.destroy', $product) }}" class="inline">
-                                    @csrf @method('DELETE')
-                                    <button type="submit" class="px-2.5 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 text-xs font-semibold cursor-pointer">
-                                        Archive
+                            <td class="py-2.5 px-3 text-center whitespace-nowrap">
+                                <button type="button"
+                                        onclick="openProductActionMenu(event, {{ $product->id }})"
+                                        class="w-8 h-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 cursor-pointer"
+                                        aria-label="Product actions">
+                                    <i class="fas fa-ellipsis-v text-xs"></i>
+                                </button>
+
+                                <div id="product-menu-{{ $product->id }}"
+                                     onclick="event.stopPropagation()"
+                                     class="product-floating-menu hidden fixed w-48 bg-white rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.16)] border border-[#e2e8f0] py-1.5 z-[110] text-left">
+                                    <button type="button"
+                                            onclick='openAdjustStockModal({{ $product->id }}, @json($product->name), {{ $qty }})'
+                                            class="w-full px-4 py-2 text-[12.5px] text-[#334155] hover:bg-[#f8fafc] hover:text-[#4f46e5] flex items-center gap-2.5 cursor-pointer">
+                                        <i class="fas fa-boxes w-4 text-center"></i> Adjust Stock
                                     </button>
-                                </form>
+                                    <a href="{{ route('products.edit', $product) }}"
+                                       class="w-full px-4 py-2 text-[12.5px] text-[#334155] hover:bg-[#f8fafc] hover:text-[#4f46e5] flex items-center gap-2.5">
+                                        <i class="fas fa-edit w-4 text-center"></i> Edit Product
+                                    </a>
+                                    <form method="POST" action="{{ route('products.toggle', $product) }}">
+                                        @csrf
+                                        @method('PATCH')
+                                        <button type="submit"
+                                                class="w-full px-4 py-2 text-[12.5px] text-[#f59e0b] hover:bg-[#fef3c7] hover:text-[#d97706] flex items-center gap-2.5 cursor-pointer">
+                                            <i class="fas {{ $product->status ? 'fa-ban' : 'fa-check-circle' }} w-4 text-center"></i> {{ $product->status ? 'Deactivate' : 'Activate' }}
+                                        </button>
+                                    </form>
+                                    <button type="button"
+                                            onclick='openDeleteProductModal({{ $product->id }}, @json($product->name))'
+                                            class="w-full px-4 py-2 text-[12.5px] text-[#ef4444] hover:bg-[#fee2e2] hover:text-[#dc2626] flex items-center gap-2.5 cursor-pointer">
+                                        <i class="fas fa-trash-alt w-4 text-center"></i> Archive
+                                    </button>
+                                </div>
                             </td>
                         </tr>
-                    @endforeach
+                    @empty
+                        <tr>
+                            <td colspan="10" class="py-14 text-center">
+                                <i class="fas fa-box-open text-4xl text-[#cbd5e1] mb-3 block"></i>
+                                <h3 class="text-base font-bold text-[#334155]">No Products Found</h3>
+                                <p class="text-xs text-[#94a3b8] mt-1">Try adjusting your search or filter criteria.</p>
+                            </td>
+                        </tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>
-        <div class="p-4 border-t border-[#f1f5f9] bg-[#f8fafc]">{{ $products->links() }}</div>
+
+        <div class="px-5 py-3.5 border-t border-[#f1f5f9] bg-[#f8fafc] rounded-b-[20px]">
+            {{ $products->links('pagination.custom') }}
+        </div>
     </div>
 </div>
+
+{{-- Adjust Stock Modal --}}
+<div id="adjustStockModal" onclick="closeAdjustStockModal()" class="hidden fixed inset-0 z-[120] bg-slate-900/55 items-center justify-center p-4">
+    <form id="adjustStockForm" method="POST" action="#" onclick="event.stopPropagation()" class="bg-white rounded-[20px] p-6 w-full max-w-sm space-y-4 text-sm shadow-2xl">
+        @csrf
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 class="font-display font-bold text-slate-900 text-base truncate">Adjust Stock &middot; <span id="adjustStockName"></span></h3>
+            <button type="button" onclick="closeAdjustStockModal()" class="text-slate-400 hover:text-slate-700 cursor-pointer"><i class="fas fa-times"></i></button>
+        </div>
+        <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">New Quantity <span class="text-red-500">*</span></label>
+            <input id="adjustStockQty" type="number" name="new_quantity" min="0" required class="w-full px-3.5 py-2.5 border-2 border-[#e2e8f0] rounded-[10px] tabular-nums focus:outline-none focus:border-[#4f46e5]">
+        </div>
+        <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Reason</label>
+            <input type="text" name="reason" placeholder="Physical count correction" class="w-full px-3.5 py-2.5 border-2 border-[#e2e8f0] rounded-[10px] focus:outline-none focus:border-[#4f46e5]">
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+            <button type="button" onclick="closeAdjustStockModal()" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer">Cancel</button>
+            <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" class="px-5 py-2 text-white rounded-lg text-xs font-semibold cursor-pointer">Save Stock</button>
+        </div>
+    </form>
+</div>
+
+{{-- Archive Product Modal --}}
+<div id="deleteProductModal" onclick="closeDeleteProductModal()" class="hidden fixed inset-0 z-[120] bg-slate-900/55 items-center justify-center p-4">
+    <div onclick="event.stopPropagation()" class="bg-white rounded-[20px] p-6 w-full max-w-sm space-y-4 shadow-2xl">
+        <div class="flex items-center gap-3 text-red-600">
+            <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0"><i class="fas fa-trash-alt"></i></div>
+            <div>
+                <h3 class="font-bold text-slate-900 text-base">Archive &ldquo;<span id="deleteProductName"></span>&rdquo;?</h3>
+                <p class="text-xs text-slate-500">This will hide the product from active inventory lists.</p>
+            </div>
+        </div>
+        <form id="deleteProductForm" method="POST" action="#" class="flex justify-end gap-2 pt-2">
+            @csrf
+            @method('DELETE')
+            <button type="button" onclick="closeDeleteProductModal()" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer">Cancel</button>
+            <button type="submit" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold cursor-pointer">Archive Product</button>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    var activeProdMenuId = null;
+
+    window.closeProductActionMenus = function () {
+        document.querySelectorAll('.product-floating-menu').forEach(function (el) {
+            el.classList.add('hidden');
+        });
+        activeProdMenuId = null;
+    };
+
+    window.openProductActionMenu = function (e, productId) {
+        e.stopPropagation();
+        var menu = document.getElementById('product-menu-' + productId);
+        if (!menu) return;
+        if (activeProdMenuId === productId && !menu.classList.contains('hidden')) {
+            window.closeProductActionMenus();
+            return;
+        }
+        window.closeProductActionMenus();
+        menu.classList.remove('hidden');
+        var rect = e.currentTarget.getBoundingClientRect();
+        var menuWidth = 192;
+        var menuHeight = menu.offsetHeight || 168;
+        var left = Math.max(12, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 12));
+        var spaceBelow = window.innerHeight - rect.bottom;
+        var top = spaceBelow >= menuHeight + 8 ? rect.bottom + 6 : Math.max(12, rect.top - menuHeight - 6);
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+        activeProdMenuId = productId;
+    };
+
+    window.openAdjustStockModal = function (productId, name, currentQty) {
+        window.closeProductActionMenus();
+        document.getElementById('adjustStockForm').action = '{{ url("/products") }}/' + productId + '/adjust';
+        document.getElementById('adjustStockName').textContent = name;
+        document.getElementById('adjustStockQty').value = currentQty;
+        var modal = document.getElementById('adjustStockModal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    };
+
+    window.closeAdjustStockModal = function () {
+        var modal = document.getElementById('adjustStockModal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    };
+
+    window.openDeleteProductModal = function (productId, name) {
+        window.closeProductActionMenus();
+        document.getElementById('deleteProductForm').action = '{{ url("/products") }}/' + productId;
+        document.getElementById('deleteProductName').textContent = name;
+        var modal = document.getElementById('deleteProductModal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    };
+
+    window.closeDeleteProductModal = function () {
+        var modal = document.getElementById('deleteProductModal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    };
+
+    document.addEventListener('click', window.closeProductActionMenus);
+    window.addEventListener('scroll', window.closeProductActionMenus, true);
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            window.closeProductActionMenus();
+            window.closeAdjustStockModal();
+            window.closeDeleteProductModal();
+        }
+    });
+})();
+</script>
 @endsection

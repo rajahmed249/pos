@@ -781,16 +781,32 @@ export function PosTerminalView({ bootstrap, onSaleComplete }: PosTerminalViewPr
             <button
               type="button"
               onClick={openPaymentModal}
-              style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
-              className="mt-4 w-full py-3.5 px-5 rounded-xl text-white text-sm sm:text-base font-bold flex items-center justify-between shadow-[0_6px_18px_rgba(16,185,129,0.3)] hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(16,185,129,0.38)] transition-all cursor-pointer"
+              style={{
+                background: 'linear-gradient(135deg, #059669 0%, #0d9488 55%, #0284c7 100%)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.28), 0 12px 26px -6px rgba(5,150,105,0.45)',
+              }}
+              className="group relative overflow-hidden mt-4 w-full py-3.5 px-4 sm:px-5 rounded-2xl text-white flex items-center justify-between gap-3 border border-emerald-400/35 hover:-translate-y-0.5 hover:brightness-105 active:translate-y-0 active:scale-[0.99] transition-all duration-150 cursor-pointer"
             >
-              <span className="inline-flex items-center gap-2">
-                <CreditCard className="w-5 h-5" />
-                Proceed to Payment
+              <span className="flex items-center gap-3 min-w-0">
+                <span className="w-10 h-10 rounded-xl bg-white/18 ring-1 ring-white/25 flex items-center justify-center shrink-0 shadow-xs">
+                  <CreditCard className="w-5 h-5" />
+                </span>
+                <span className="text-left min-w-0">
+                  <span className="block text-sm sm:text-[15px] font-extrabold tracking-tight leading-tight">
+                    Proceed to Payment
+                  </span>
+                  <span className="block text-[11px] font-medium text-emerald-50/85 truncate">
+                    Collect payment &amp; generate invoice
+                  </span>
+                </span>
               </span>
-              <span className="inline-flex items-center gap-1.5 bg-white/20 px-3 py-1 rounded-lg text-xs sm:text-sm font-extrabold tabular-nums">
-                {formatMoney(subtotal, cur)}
-                <ChevronRight className="w-4 h-4" />
+              <span className="inline-flex items-center gap-2 bg-slate-950/20 border border-white/25 pl-3.5 pr-2 py-1.5 rounded-xl shrink-0">
+                <span className="text-xs sm:text-sm font-black tabular-nums tracking-tight">
+                  {formatMoney(subtotal, cur)}
+                </span>
+                <span className="w-6 h-6 rounded-full bg-white text-emerald-700 flex items-center justify-center shadow-xs group-hover:translate-x-0.5 transition-transform">
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </span>
               </span>
             </button>
           </div>

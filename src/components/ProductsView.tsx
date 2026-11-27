@@ -5,9 +5,6 @@ import {
   Boxes,
   Calendar,
   ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   Clock,
   CloudUpload,
   Edit3,
@@ -32,6 +29,7 @@ import {
 } from 'lucide-react';
 import { apiFetch, formatMoney } from '../lib/api.ts';
 import { showCenterPopup } from '../lib/popup.ts';
+import { PaginationBar } from './PaginationBar.tsx';
 import type { BootstrapPayload, Product } from '../types/pos.ts';
 
 interface ProductsViewProps {
@@ -73,7 +71,6 @@ export function ProductsView({
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
-  const [gotoInput, setGotoInput] = useState('1');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [openMenu, setOpenMenu] = useState<{ id: number; top: number; left: number } | null>(null);
@@ -146,7 +143,6 @@ export function ProductsView({
         }
         setProducts(res.items);
         setTotal(res.total);
-        setGotoInput(String(page));
       })
       .catch((err) => {
         setToast({ type: 'error', message: err instanceof Error ? err.message : 'Failed to load products.' });
@@ -431,12 +427,7 @@ export function ProductsView({
     setTab('edit');
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / limit));
   const offset = (page - 1) * limit;
-  const pageNumbers: number[] = [];
-  const startPage = Math.max(1, page - 2);
-  const endPage = Math.min(totalPages, page + 2);
-  for (let i = startPage; i <= endPage; i++) pageNumbers.push(i);
 
   const now = new Date();
   const dateDisplay = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -841,108 +832,13 @@ export function ProductsView({
             </table>
           </div>
 
-          {/* Pagination Bar */}
-          <div className="px-5 py-4 border-t border-[#f1f5f9] bg-[#f8fafc] rounded-b-[20px] flex flex-wrap items-center justify-between gap-3.5 text-[13px]">
-            <div className="text-[#64748b] tabular-nums">
-              <strong>{total === 0 ? 0 : offset + 1}</strong> – <strong>{Math.min(offset + limit, total)}</strong> of{' '}
-              <strong>{total.toLocaleString()}</strong>
-            </div>
-
-            <div className="flex items-center gap-1 flex-wrap">
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage(1)}
-                className="min-w-[38px] h-[38px] px-2.5 border border-[#e2e8f0] rounded-lg bg-white text-[#334155] hover:border-[#4f46e5] hover:text-[#4f46e5] disabled:opacity-40 cursor-pointer flex items-center justify-center"
-              >
-                <ChevronsLeft className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="min-w-[38px] h-[38px] px-2.5 border border-[#e2e8f0] rounded-lg bg-white text-[#334155] hover:border-[#4f46e5] hover:text-[#4f46e5] disabled:opacity-40 cursor-pointer flex items-center justify-center"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-
-              {pageNumbers.map((num) => (
-                <button
-                  key={num}
-                  type="button"
-                  onClick={() => setPage(num)}
-                  style={num === page ? { background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' } : undefined}
-                  className={`min-w-[38px] h-[38px] px-3 border rounded-lg font-medium cursor-pointer ${
-                    num === page
-                      ? 'text-white border-[#4f46e5] shadow-[0_2px_8px_rgba(79,70,229,0.3)]'
-                      : 'border-[#e2e8f0] bg-white text-[#334155] hover:border-[#4f46e5] hover:text-[#4f46e5]'
-                  }`}
-                >
-                  {num}
-                </button>
-              ))}
-
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="min-w-[38px] h-[38px] px-2.5 border border-[#e2e8f0] rounded-lg bg-white text-[#334155] hover:border-[#4f46e5] hover:text-[#4f46e5] disabled:opacity-40 cursor-pointer flex items-center justify-center"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage(totalPages)}
-                className="min-w-[38px] h-[38px] px-2.5 border border-[#e2e8f0] rounded-lg bg-white text-[#334155] hover:border-[#4f46e5] hover:text-[#4f46e5] disabled:opacity-40 cursor-pointer flex items-center justify-center"
-              >
-                <ChevronsRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-1.5 text-[#64748b]">
-                <span>Show:</span>
-                <select
-                  value={limit}
-                  onChange={(e) => {
-                    setPage(1);
-                    setLimit(Number(e.target.value));
-                  }}
-                  className="px-2.5 py-1.5 border border-[#e2e8f0] rounded-md bg-white text-[#334155]"
-                >
-                  {[10, 20, 50, 100].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-1.5 text-[#64748b]">
-                <span>Go:</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={totalPages}
-                  value={gotoInput}
-                  onChange={(e) => setGotoInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      setPage(Math.min(totalPages, Math.max(1, Number(gotoInput) || 1)));
-                    }
-                  }}
-                  className="w-14 px-2 py-1.5 border border-[#e2e8f0] rounded-md text-center bg-white tabular-nums"
-                />
-                <button
-                  type="button"
-                  onClick={() => setPage(Math.min(totalPages, Math.max(1, Number(gotoInput) || 1)))}
-                  className="px-3.5 py-1.5 bg-[#4f46e5] hover:bg-[#4338ca] text-white rounded-md font-medium cursor-pointer"
-                >
-                  Go
-                </button>
-              </div>
-            </div>
-          </div>
+          <PaginationBar
+            total={total}
+            page={page}
+            limit={limit}
+            onPageChange={setPage}
+            onLimitChange={setLimit}
+          />
         </div>
       )}
 

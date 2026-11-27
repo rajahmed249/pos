@@ -1,94 +1,234 @@
 @extends('layouts.app')
 
 @section('title', 'Shop & Layout Settings — ' . ($appSettings['shop_name'] ?? 'Youth IT POS'))
-@section('breadcrumb', 'Administration / Settings')
+@section('breadcrumb', 'Settings & Customize / Shop Settings')
 
 @section('content')
-<div class="max-w-3xl bg-white border border-slate-200 rounded-lg p-6">
-    <h2 class="font-display text-base font-semibold text-slate-900 mb-4">Dynamic Shop & Layout Configuration</h2>
-    <form method="POST" action="{{ route('settings.update') }}" class="space-y-4 text-sm">
+@php
+    $shopLogo = $settings['shop_logo'] ?? 'assets/images/logo.jpg';
+    $shopFavicon = $settings['shop_favicon'] ?? 'assets/images/favicon.png';
+    $shopQr = $settings['shop_qr'] ?? 'assets/images/shop_qr.png';
+    $shopName = $settings['shop_name'] ?? 'YOUTH IT POS';
+    $currencyVal = $settings['currency'] ?? '৳';
+    $taxRateVal = $settings['tax_rate'] ?? '0';
+    $shopPhone = $settings['shop_phone'] ?? '01674297522';
+    $shopEmail = $settings['shop_email'] ?? 'info@youthit.com.bd';
+    $shopAddress = $settings['shop_address'] ?? '';
+    $shopWebsite = $settings['shop_website'] ?? 'www.youthit.com.bd';
+    $sidebarTheme = $settings['sidebar_theme'] ?? 'slate';
+    $primaryColor = $settings['primary_color'] ?? 'emerald';
+    $layoutMode = $settings['layout_mode'] ?? 'comfortable';
+    $invoiceFooter = $settings['invoice_footer'] ?? '';
+@endphp
+
+<div class="w-full space-y-5">
+    {{-- Page Header --}}
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+            <div class="w-11 h-11 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-[0_6px_18px_rgba(79,70,229,0.3)]"
+                 style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            </div>
+            <div class="min-w-0">
+                <h1 class="text-xl sm:text-2xl font-display font-extrabold text-slate-900 truncate">
+                    Shop, Branding &amp; <span class="bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] bg-clip-text text-transparent">Layout Settings</span>
+                </h1>
+                <p class="text-xs text-slate-500">Configure store identity, invoice branding, currency, theme &amp; printable receipt layout across full workspace</p>
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" action="{{ route('settings.update') }}" class="space-y-5 text-sm">
         @csrf
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <img src="{{ asset($settings['shop_logo'] ?? 'assets/images/logo.jpg') }}" alt="Logo" class="w-12 h-12 object-contain bg-white rounded-lg border border-slate-200 p-1 shrink-0">
-                <div class="flex-1 min-w-0">
-                    <label class="block text-xs font-medium text-slate-600 mb-1">Logo Path</label>
-                    <input type="text" name="shop_logo" value="{{ $settings['shop_logo'] ?? 'assets/images/logo.jpg' }}" class="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-md bg-white">
+
+        {{-- Full-Width Brand Visual Assets Row --}}
+        <div class="bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r from-indigo-50/70 via-white to-violet-50/60 flex items-center gap-2.5">
+                <span class="w-8 h-8 rounded-lg text-white flex items-center justify-center shrink-0"
+                      style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                </span>
+                <div>
+                    <h2 class="font-display text-sm font-bold text-slate-900">Brand Visual Assets</h2>
+                    <p class="text-[11px] text-slate-500">Storefront logo, browser tab favicon &amp; receipt QR code</p>
                 </div>
             </div>
-            <div class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <img src="{{ asset($settings['shop_favicon'] ?? 'assets/images/favicon.png') }}" alt="Favicon" class="w-12 h-12 object-contain bg-white rounded-lg border border-slate-200 p-1.5 shrink-0">
-                <div class="flex-1 min-w-0">
-                    <label class="block text-xs font-medium text-slate-600 mb-1">Favicon Path</label>
-                    <input type="text" name="shop_favicon" value="{{ $settings['shop_favicon'] ?? 'assets/images/favicon.png' }}" class="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-md bg-white">
+            <div class="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="flex items-center gap-3.5 p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200/80">
+                    <img src="{{ asset($shopLogo) }}" alt="Logo" class="w-14 h-14 object-contain bg-white rounded-xl border border-slate-200 p-1 shrink-0">
+                    <div class="flex-1 min-w-0">
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Shop Logo Path</label>
+                        <input type="text" name="shop_logo" value="{{ $shopLogo }}" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+                <div class="flex items-center gap-3.5 p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200/80">
+                    <img src="{{ asset($shopFavicon) }}" alt="Favicon" class="w-14 h-14 object-contain bg-white rounded-xl border border-slate-200 p-1.5 shrink-0">
+                    <div class="flex-1 min-w-0">
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Favicon Path</label>
+                        <input type="text" name="shop_favicon" value="{{ $shopFavicon }}" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+                <div class="flex items-center gap-3.5 p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200/80">
+                    <img src="{{ asset($shopQr) }}" alt="Shop QR" class="w-14 h-14 object-contain bg-white rounded-xl border border-slate-200 p-1 shrink-0">
+                    <div class="flex-1 min-w-0">
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Invoice QR Code Path</label>
+                        <input type="text" name="shop_qr" value="{{ $shopQr }}" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500">
+                    </div>
                 </div>
             </div>
-            <div class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <img src="{{ asset($settings['shop_qr'] ?? 'assets/images/shop_qr.png') }}" alt="Shop QR" class="w-12 h-12 object-contain bg-white rounded-lg border border-slate-200 p-1 shrink-0">
-                <div class="flex-1 min-w-0">
-                    <label class="block text-xs font-medium text-slate-600 mb-1">Invoice QR Code Path</label>
-                    <input type="text" name="shop_qr" value="{{ $settings['shop_qr'] ?? 'assets/images/shop_qr.png' }}" class="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-md bg-white">
+        </div>
+
+        {{-- Full-Width 12-Col Settings Workspace --}}
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-5">
+            {{-- Left 7 Cols: Storefront Identity & Contact --}}
+            <div class="xl:col-span-7 bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden">
+                <div class="px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r from-emerald-50/70 via-white to-teal-50/60 flex items-center gap-2.5">
+                    <span class="w-8 h-8 rounded-lg text-white flex items-center justify-center shrink-0"
+                          style="background: linear-gradient(135deg, #059669, #0d9488);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/></svg>
+                    </span>
+                    <div>
+                        <h2 class="font-display text-sm font-bold text-slate-900">Storefront Identity &amp; Invoice Header</h2>
+                        <p class="text-[11px] text-slate-500">Printed across POS invoices, estimates &amp; financial reports</p>
+                    </div>
+                </div>
+
+                <div class="p-5 space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-4">
+                        <div class="sm:col-span-6">
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Shop Name *</label>
+                            <input type="text" name="shop_name" id="setShopName" value="{{ $shopName }}" required oninput="syncSettingsPreview()" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:border-indigo-500 outline-none">
+                        </div>
+                        <div class="sm:col-span-3">
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Currency *</label>
+                            <input type="text" name="currency" id="setCurrency" value="{{ $currencyVal }}" required oninput="syncSettingsPreview()" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:border-indigo-500 outline-none">
+                        </div>
+                        <div class="sm:col-span-3">
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Default VAT (%)</label>
+                            <input type="number" step="0.01" min="0" name="tax_rate" value="{{ $taxRateVal }}" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:border-indigo-500 outline-none tabular-nums">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Phone / Cell Number</label>
+                            <input type="text" name="shop_phone" id="setShopPhone" value="{{ $shopPhone }}" oninput="syncSettingsPreview()" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:border-indigo-500 outline-none font-medium">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Email</label>
+                            <input type="email" name="shop_email" id="setShopEmail" value="{{ $shopEmail }}" oninput="syncSettingsPreview()" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:border-indigo-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Website</label>
+                            <input type="text" name="shop_website" id="setShopWebsite" value="{{ $shopWebsite }}" oninput="syncSettingsPreview()" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:border-indigo-500 outline-none">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Shop Address</label>
+                        <input type="text" name="shop_address" id="setShopAddress" value="{{ $shopAddress }}" oninput="syncSettingsPreview()" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:border-indigo-500 outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Invoice Footer / Warranty Note</label>
+                        <textarea name="invoice_footer" id="setInvoiceFooter" rows="2" oninput="syncSettingsPreview()" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:border-indigo-500 outline-none">{{ $invoiceFooter }}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Right 5 Cols: Appearance Preferences + Live Receipt Header Preview --}}
+            <div class="xl:col-span-5 flex flex-col gap-5">
+                <div class="bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden">
+                    <div class="px-5 py-3.5 border-b border-slate-100 bg-gradient-to-r from-indigo-50/70 via-white to-violet-50/60 flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-lg text-white flex items-center justify-center shrink-0"
+                              style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                        </span>
+                        <div>
+                            <h2 class="font-display text-sm font-bold text-slate-900">Appearance &amp; Workspace Layout</h2>
+                            <p class="text-[11px] text-slate-500">Customize sidebar palette, accent &amp; density</p>
+                        </div>
+                    </div>
+                    <div class="p-5 grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-1 gap-3.5">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Sidebar Theme</label>
+                            <select name="sidebar_theme" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500">
+                                <option value="slate" @selected($sidebarTheme === 'slate')>Dark Navy &amp; Gold</option>
+                                <option value="light" @selected($sidebarTheme === 'light')>Clean Light</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Primary Accent</label>
+                            <select name="primary_color" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500">
+                                <option value="emerald" @selected($primaryColor === 'emerald')>Indigo / Emerald</option>
+                                <option value="indigo" @selected($primaryColor === 'indigo')>Indigo</option>
+                                <option value="blue" @selected($primaryColor === 'blue')>Blue</option>
+                                <option value="slate" @selected($primaryColor === 'slate')>Slate</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Layout Density</label>
+                            <select name="layout_mode" id="setLayoutMode" onchange="syncSettingsPreview()" class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500">
+                                <option value="comfortable" @selected($layoutMode === 'comfortable')>Comfortable</option>
+                                <option value="compact" @selected($layoutMode === 'compact')>Compact</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Live Invoice Header Preview --}}
+                <div class="bg-white border border-slate-200/90 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.04)] overflow-hidden flex-1 flex flex-col justify-between">
+                    <div class="px-5 py-3 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-800">Live Invoice Header Preview</span>
+                        <span id="prevBadge" class="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10.5px] font-semibold">
+                            {{ $currencyVal }} · {{ $layoutMode }}
+                        </span>
+                    </div>
+                    <div class="p-5 flex items-start gap-3.5 bg-gradient-to-br from-slate-50/60 to-white flex-1">
+                        <img src="{{ asset($shopLogo) }}" alt="Preview Logo" class="w-12 h-12 rounded-xl border border-slate-200 bg-white object-contain p-1 shrink-0">
+                        <div class="min-w-0 flex-1 space-y-1">
+                            <div id="prevShopName" class="font-display text-sm font-extrabold text-slate-900 truncate">{{ $shopName }}</div>
+                            <div id="prevShopAddress" class="text-[11px] text-slate-500">{{ $shopAddress ?: 'Store address' }}</div>
+                            <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-600 pt-0.5">
+                                <span id="prevShopPhone">{{ $shopPhone }}</span>
+                                <span id="prevShopEmail">{{ $shopEmail }}</span>
+                                <span id="prevShopWebsite">{{ $shopWebsite }}</span>
+                            </div>
+                            <div id="prevInvoiceFooter" class="pt-2 mt-2 border-t border-dashed border-slate-200 text-[10.5px] italic text-slate-400">
+                                {{ $invoiceFooter ? '“' . $invoiceFooter . '”' : '' }}
+                            </div>
+                        </div>
+                        <img src="{{ asset($shopQr) }}" alt="QR Preview" class="w-11 h-11 rounded-lg border border-slate-200 bg-white object-contain p-0.5 shrink-0">
+                    </div>
+                    <div class="px-5 py-3.5 border-t border-slate-100 bg-slate-50/70 flex justify-end">
+                        <button type="submit" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);" class="w-full sm:w-auto px-6 py-2.5 rounded-xl text-white text-xs sm:text-sm font-semibold shadow-[0_6px_16px_rgba(79,70,229,0.28)] hover:opacity-95 transition cursor-pointer">
+                            Save Settings
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-                <label class="block text-xs font-medium text-slate-600 mb-1">Shop Name</label>
-                <input type="text" name="shop_name" value="{{ $settings['shop_name'] ?? 'YOUTH IT POS' }}" required class="w-full px-3 py-2 border border-slate-300 rounded-md">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-600 mb-1">Currency Symbol</label>
-                <input type="text" name="currency" value="{{ $settings['currency'] ?? '৳' }}" required class="w-full px-3 py-2 border border-slate-300 rounded-md">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-600 mb-1">Phone</label>
-                <input type="text" name="shop_phone" value="{{ $settings['shop_phone'] ?? '01674297522' }}" class="w-full px-3 py-2 border border-slate-300 rounded-md">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-600 mb-1">Email</label>
-                <input type="email" name="shop_email" value="{{ $settings['shop_email'] ?? 'info@youthit.com.bd' }}" class="w-full px-3 py-2 border border-slate-300 rounded-md">
-            </div>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-                <label class="block text-xs font-medium text-slate-600 mb-1">Shop Address</label>
-                <input type="text" name="shop_address" value="{{ $settings['shop_address'] ?? '' }}" class="w-full px-3 py-2 border border-slate-300 rounded-md">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-600 mb-1">Website</label>
-                <input type="text" name="shop_website" value="{{ $settings['shop_website'] ?? 'www.youthit.com.bd' }}" class="w-full px-3 py-2 border border-slate-300 rounded-md">
-            </div>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-slate-200">
-            <div>
-                <label class="block text-xs font-medium text-slate-600 mb-1">Sidebar Theme</label>
-                <select name="sidebar_theme" class="w-full px-3 py-2 border border-slate-300 rounded-md">
-                    <option value="slate" @selected(($settings['sidebar_theme'] ?? 'slate') === 'slate')>Dark Slate</option>
-                    <option value="light" @selected(($settings['sidebar_theme'] ?? 'slate') === 'light')>Clean Light</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-600 mb-1">Primary Accent</label>
-                <select name="primary_color" class="w-full px-3 py-2 border border-slate-300 rounded-md">
-                    <option value="emerald" @selected(($settings['primary_color'] ?? 'emerald') === 'emerald')>Emerald</option>
-                    <option value="indigo" @selected(($settings['primary_color'] ?? 'emerald') === 'indigo')>Indigo</option>
-                    <option value="blue" @selected(($settings['primary_color'] ?? 'emerald') === 'blue')>Blue</option>
-                    <option value="slate" @selected(($settings['primary_color'] ?? 'emerald') === 'slate')>Slate</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-slate-600 mb-1">Layout Density</label>
-                <select name="layout_mode" class="w-full px-3 py-2 border border-slate-300 rounded-md">
-                    <option value="comfortable" @selected(($settings['layout_mode'] ?? 'comfortable') === 'comfortable')>Comfortable</option>
-                    <option value="compact" @selected(($settings['layout_mode'] ?? 'comfortable') === 'compact')>Compact</option>
-                </select>
-            </div>
-        </div>
-        <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1">Invoice Footer Note</label>
-            <textarea name="invoice_footer" rows="2" class="w-full px-3 py-2 border border-slate-300 rounded-md">{{ $settings['invoice_footer'] ?? '' }}</textarea>
-        </div>
-        <button type="submit" class="px-5 py-2 rounded-md bg-slate-900 text-white text-sm font-medium">Save Settings</button>
     </form>
 </div>
+
+<script>
+window.syncSettingsPreview = function() {
+    var name = document.getElementById('setShopName')?.value || 'YOUTH IT POS';
+    var cur = document.getElementById('setCurrency')?.value || '৳';
+    var phone = document.getElementById('setShopPhone')?.value || '';
+    var email = document.getElementById('setShopEmail')?.value || '';
+    var web = document.getElementById('setShopWebsite')?.value || '';
+    var addr = document.getElementById('setShopAddress')?.value || 'Store address';
+    var foot = document.getElementById('setInvoiceFooter')?.value || '';
+    var layout = document.getElementById('setLayoutMode')?.value || 'comfortable';
+
+    document.getElementById('prevShopName').textContent = name;
+    document.getElementById('prevShopAddress').textContent = addr;
+    document.getElementById('prevShopPhone').textContent = phone;
+    document.getElementById('prevShopEmail').textContent = email;
+    document.getElementById('prevShopWebsite').textContent = web;
+    document.getElementById('prevBadge').textContent = cur + ' · ' + layout;
+    document.getElementById('prevInvoiceFooter').textContent = foot ? ('“' + foot + '”') : '';
+};
+</script>
 @endsection

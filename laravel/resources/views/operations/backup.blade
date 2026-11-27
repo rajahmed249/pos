@@ -4,33 +4,117 @@
 @section('breadcrumb', 'Settings & Customize / Backup & Restore')
 
 @section('content')
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-6 shadow-xs">
-        <h2 class="font-display text-base font-bold text-slate-900 mb-2">Export Full POS Backup</h2>
-        <p class="text-xs text-slate-500 mb-4">Download a complete JSON snapshot of products, customers, suppliers, sales, purchases, expenses, owners, employees, and settings.</p>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-5 text-xs">
+<div class="space-y-6">
+    {{-- Header --}}
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div class="w-11 h-11 sm:w-[50px] sm:h-[50px] shrink-0 rounded-xl flex items-center justify-center text-white text-xl shadow-[0_8px_24px_rgba(79,70,229,0.28)]"
+                 style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                <i class="fas fa-database"></i>
+            </div>
+            <div class="min-w-0">
+                <h1 class="text-xl sm:text-2xl font-bold text-[#0f172a] truncate">Backup &amp; Restore</h1>
+                <p class="text-[12px] text-[#64748b] mt-0.5">Export full MySQL (.sql) or JSON snapshots, and restore or import database dumps anytime</p>
+            </div>
+        </div>
+    </div>
+
+    {{-- Live Database Record Stats --}}
+    <div class="bg-white rounded-[20px] border border-[#f1f5f9] shadow-xs p-5">
+        <div class="text-xs font-bold uppercase tracking-wider text-[#64748b] mb-3">Live Database Overview</div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2.5 text-xs">
             @foreach($stats as $label => $count)
-                <div class="min-w-0 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-                    <div class="text-slate-500 capitalize truncate">{{ $label }}</div>
-                    <div class="font-bold text-slate-900 text-sm tabular-nums">{{ $count }}</div>
+                <div class="min-w-0 px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                    <div class="text-[10.5px] font-semibold uppercase tracking-wide text-slate-500 capitalize truncate">{{ $label }}</div>
+                    <div class="font-bold text-slate-900 text-base mt-0.5 tabular-nums">{{ number_format($count) }}</div>
                 </div>
             @endforeach
         </div>
-        <a href="{{ route('backup.download') }}" class="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold">
-            <i class="fas fa-download"></i> Download JSON Backup
-        </a>
     </div>
 
-    <div class="min-w-0 bg-white border border-slate-200 rounded-xl p-6 shadow-xs">
-        <h2 class="font-display text-base font-bold text-slate-900 mb-2">Restore Configuration Backup</h2>
-        <p class="text-xs text-slate-500 mb-4">Upload a previously exported JSON backup file to restore shop configuration and layout preferences safely.</p>
-        <form method="POST" action="{{ route('backup.restore') }}" enctype="multipart/form-data" class="space-y-4 text-sm">
-            @csrf
-            <input type="file" name="backup_file" accept=".json,application/json" required class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50">
-            <button type="submit" class="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold">
-                <i class="fas fa-upload mr-1.5"></i> Restore From File
-            </button>
-        </form>
+    {{-- 4 Action Cards Matching React BackupRestoreView --}}
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+        {{-- Download SQL --}}
+        <div class="min-w-0 bg-white border border-sky-200/80 rounded-[20px] p-5 shadow-xs flex flex-col justify-between gap-4">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2 text-sky-600">
+                    <i class="fas fa-database text-lg"></i>
+                    <h2 class="font-display text-base font-bold text-slate-900">Download MySQL (.sql)</h2>
+                </div>
+                <p class="text-xs text-slate-500 leading-relaxed">
+                    Download a full phpMyAdmin / MySQL 8 <code class="bg-slate-100 px-1 rounded">.sql</code> dump containing all tables, products, sales, customers, suppliers, accounts, and settings.
+                </p>
+            </div>
+            <a href="{{ route('backup.download_sql') }}"
+               style="background: linear-gradient(135deg, #0284c7, #2563eb);"
+               class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-white shadow-sm hover:opacity-95">
+                <i class="fas fa-download"></i> Download .sql Dump
+            </a>
+        </div>
+
+        {{-- Download JSON --}}
+        <div class="min-w-0 bg-white border border-emerald-200/80 rounded-[20px] p-5 shadow-xs flex flex-col justify-between gap-4">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2 text-emerald-600">
+                    <i class="fas fa-file-code text-lg"></i>
+                    <h2 class="font-display text-base font-bold text-slate-900">Download JSON Backup</h2>
+                </div>
+                <p class="text-xs text-slate-500 leading-relaxed">
+                    Export all products, sales, invoices, customers, suppliers, purchases, accounts, expenses, owners, employees, menus, and settings in one portable JSON file.
+                </p>
+            </div>
+            <a href="{{ route('backup.download') }}"
+               style="background: linear-gradient(135deg, #10b981, #059669);"
+               class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-white shadow-sm hover:opacity-95">
+                <i class="fas fa-download"></i> Download Backup (.json)
+            </a>
+        </div>
+
+        {{-- Restore JSON --}}
+        <div class="min-w-0 bg-white border border-indigo-200/80 rounded-[20px] p-5 shadow-xs flex flex-col justify-between gap-4">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2 text-indigo-600">
+                    <i class="fas fa-upload text-lg"></i>
+                    <h2 class="font-display text-base font-bold text-slate-900">Restore JSON Backup</h2>
+                </div>
+                <p class="text-xs text-slate-500 leading-relaxed">
+                    Upload a previously exported Youth IT POS <code class="bg-slate-100 px-1 rounded">.json</code> backup file to restore all records and settings safely.
+                </p>
+            </div>
+            <form method="POST" action="{{ route('backup.restore') }}" enctype="multipart/form-data" class="space-y-2.5">
+                @csrf
+                <input type="file" name="backup_file" accept=".json,application/json" required
+                       class="w-full px-3 py-2 text-xs border-2 border-[#e2e8f0] rounded-xl bg-slate-50 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700">
+                <button type="submit"
+                        style="background: linear-gradient(135deg, #4f46e5, #7c3aed);"
+                        class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-white shadow-sm cursor-pointer">
+                    <i class="fas fa-upload"></i> Upload &amp; Restore JSON
+                </button>
+            </form>
+        </div>
+
+        {{-- Import .sql --}}
+        <div class="min-w-0 bg-white border border-amber-200/80 rounded-[20px] p-5 shadow-xs flex flex-col justify-between gap-4">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2 text-amber-600">
+                    <i class="fas fa-file-import text-lg"></i>
+                    <h2 class="font-display text-base font-bold text-slate-900">Import MySQL (.sql)</h2>
+                </div>
+                <p class="text-xs text-slate-500 leading-relaxed">
+                    Upload a full MySQL <code class="bg-slate-100 px-1 rounded">.sql</code> dump to import all tables cleanly and normalize SKUs, sales, warranties, and menus.
+                </p>
+            </div>
+            <form method="POST" action="{{ route('backup.import_sql') }}" enctype="multipart/form-data" class="space-y-2.5">
+                @csrf
+                <input type="file" name="sql_file" accept=".sql,text/plain" required
+                       class="w-full px-3 py-2 text-xs border-2 border-[#e2e8f0] rounded-xl bg-slate-50 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700">
+                <button type="submit"
+                        style="background: linear-gradient(135deg, #f59e0b, #ea580c);"
+                        class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-white shadow-sm cursor-pointer">
+                    <i class="fas fa-file-upload"></i> Upload &amp; Import .sql
+                </button>
+            </form>
+        </div>
     </div>
 </div>
 @endsection

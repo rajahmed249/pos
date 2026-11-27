@@ -22,7 +22,7 @@ class SaleController extends Controller
             : 10;
 
         $sales = Sale::query()
-            ->with(['customer', 'items'])
+            ->with(['customer', 'items.product'])
             ->when($request->filled('q'), function ($q) use ($request) {
                 $term = '%' . $request->string('q')->toString() . '%';
                 $q->where(function ($w) use ($term) {

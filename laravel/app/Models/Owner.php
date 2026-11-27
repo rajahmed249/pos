@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Owner extends Model
 {
@@ -14,6 +15,8 @@ class Owner extends Model
         'email',
         'address',
         'share_percent',
+        'invested',
+        'withdrawn',
         'is_active',
     ];
 
@@ -21,7 +24,19 @@ class Owner extends Model
     {
         return [
             'share_percent' => 'decimal:2',
+            'invested' => 'decimal:2',
+            'withdrawn' => 'decimal:2',
             'is_active' => 'boolean',
         ];
+    }
+
+    public function transactions(): HasMany
+    {
+        return $this->hasMany(OwnerTransaction::class)->orderByDesc('transaction_date')->orderByDesc('id');
+    }
+
+    public function getBalanceAttribute(): float
+    {
+        return round((float) ($this->invested ?? 0) - (float) ($this->withdrawn ?? 0), 2);
     }
 }
