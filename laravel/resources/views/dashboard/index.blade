@@ -20,182 +20,152 @@
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
         {{-- Row 1: Today's Sales --}}
         <a href="{{ route('sales.index') }}"
-           style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);"
-           class="group relative min-w-0 overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(37,99,235,0.20)] hover:shadow-[0_10px_22px_rgba(37,99,235,0.28)] hover:-translate-y-0.5 transition-all duration-150 block">
-            <div class="flex items-center justify-between gap-2">
-                <span class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">Today's Sales</span>
-                <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
-                    <svg width="13" height="13" style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
-                </span>
+           style="background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%);"
+           class="group relative min-w-0 overflow-hidden rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(91,33,182,0.22)] hover:shadow-[0_10px_22px_rgba(91,33,182,0.30)] hover:-translate-y-0.5 transition-all duration-150 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <div class="text-lg sm:text-xl font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+                    {{ $cur }}{{ number_format((float) ($metrics['today_sales'] ?? 0), 2) }}
+                </div>
+                <div class="mt-1 text-[10.5px] font-semibold uppercase tracking-wide text-white/90 truncate">TODAY'S SALES</div>
             </div>
-            <div class="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
-                {{ $cur }}{{ number_format((float) ($metrics['today_sales'] ?? 0), 2) }}
-            </div>
-            <div class="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
-                Total Revenue: {{ $cur }}{{ number_format((float) ($metrics['total_revenue'] ?? 0), 0) }}
-            </div>
+            <span class="w-9 h-9 rounded-xl bg-white/18 text-white flex items-center justify-center shrink-0">
+                <svg width="16" height="16" style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
+            </span>
         </a>
 
         {{-- Row 1: Today's Profit --}}
         <a href="{{ route('reports.index') }}"
            style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);"
-           class="group relative min-w-0 overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(5,150,105,0.20)] hover:shadow-[0_10px_22px_rgba(5,150,105,0.28)] hover:-translate-y-0.5 transition-all duration-150 block">
-            <div class="flex items-center justify-between gap-2">
-                <span class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">Today's Profit</span>
-                <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
-                    <svg width="13" height="13" style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-                </span>
+           class="group relative min-w-0 overflow-hidden rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(5,150,105,0.22)] hover:shadow-[0_10px_22px_rgba(5,150,105,0.30)] hover:-translate-y-0.5 transition-all duration-150 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <div class="text-lg sm:text-xl font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+                    {{ $cur }}{{ number_format((float) ($metrics['today_profit'] ?? 0), 2) }}
+                </div>
+                <div class="mt-1 text-[10.5px] font-semibold uppercase tracking-wide text-white/90 truncate">TODAY'S PROFIT</div>
             </div>
-            <div class="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
-                {{ $cur }}{{ number_format((float) ($metrics['today_profit'] ?? 0), 2) }}
-            </div>
-            <div class="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
-                Total Profit: {{ $cur }}{{ number_format((float) ($metrics['total_profit'] ?? 0), 0) }}
-            </div>
+            <span class="w-9 h-9 rounded-xl bg-white/18 text-white flex items-center justify-center shrink-0">
+                <svg width="16" height="16" style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+            </span>
         </a>
 
         {{-- Row 1: Today's Expense --}}
         <a href="{{ route('expenses.index') }}"
-           style="background: linear-gradient(135deg, #e11d48 0%, #f43f5e 100%);"
-           class="group relative min-w-0 overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(225,29,72,0.20)] hover:shadow-[0_10px_22px_rgba(225,29,72,0.28)] hover:-translate-y-0.5 transition-all duration-150 block">
-            <div class="flex items-center justify-between gap-2">
-                <span class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">Today's Expense</span>
-                <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
-                    <svg width="13" height="13" style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>
-                </span>
+           style="background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);"
+           class="group relative min-w-0 overflow-hidden rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(217,119,6,0.22)] hover:shadow-[0_10px_22px_rgba(217,119,6,0.30)] hover:-translate-y-0.5 transition-all duration-150 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <div class="text-lg sm:text-xl font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+                    {{ $cur }}{{ number_format((float) ($metrics['today_expense'] ?? 0), 2) }}
+                </div>
+                <div class="mt-1 text-[10.5px] font-semibold uppercase tracking-wide text-white/90 truncate">TODAY'S EXPENSE</div>
             </div>
-            <div class="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
-                {{ $cur }}{{ number_format((float) ($metrics['today_expense'] ?? 0), 2) }}
-            </div>
-            <div class="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
-                All Expenses: {{ $cur }}{{ number_format((float) ($metrics['total_expenses'] ?? 0), 0) }}
-            </div>
+            <span class="w-9 h-9 rounded-xl bg-white/18 text-white flex items-center justify-center shrink-0">
+                <svg width="16" height="16" style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>
+            </span>
         </a>
 
         {{-- Row 1: Today's Margin --}}
         <a href="{{ route('reports.index') }}"
-           style="background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%);"
-           class="group relative min-w-0 overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(124,58,237,0.20)] hover:shadow-[0_10px_22px_rgba(124,58,237,0.28)] hover:-translate-y-0.5 transition-all duration-150 block">
-            <div class="flex items-center justify-between gap-2">
-                <span class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">Today's Margin</span>
-                <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
-                    <svg width="13" height="13" style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" x2="5" y1="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
-                </span>
+           style="background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);"
+           class="group relative min-w-0 overflow-hidden rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(8,145,178,0.22)] hover:shadow-[0_10px_22px_rgba(8,145,178,0.30)] hover:-translate-y-0.5 transition-all duration-150 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <div class="text-lg sm:text-xl font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+                    {{ rtrim(rtrim(number_format((float) ($metrics['today_margin'] ?? 0), 1), '0'), '.') }}%
+                </div>
+                <div class="mt-1 text-[10.5px] font-semibold uppercase tracking-wide text-white/90 truncate">TODAY'S MARGIN</div>
             </div>
-            <div class="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
-                {{ number_format((float) ($metrics['today_margin'] ?? 0), 1) }}%
-            </div>
-            <div class="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
-                Gross Profit Ratio
-            </div>
+            <span class="w-9 h-9 rounded-xl bg-white/18 text-white flex items-center justify-center shrink-0">
+                <svg width="16" height="16" style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" x2="5" y1="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+            </span>
         </a>
 
-        {{-- Row 1: Customer Due --}}
-        <a href="{{ route('customers.index') }}"
-           style="background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);"
-           class="group relative min-w-0 overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(217,119,6,0.20)] hover:shadow-[0_10px_22px_rgba(217,119,6,0.28)] hover:-translate-y-0.5 transition-all duration-150 block">
-            <div class="flex items-center justify-between gap-2">
-                <span class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">Customer Due</span>
-                <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
-                    <svg width="13" height="13" style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-                </span>
-            </div>
-            <div class="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
-                {{ $cur }}{{ number_format((float) ($metrics['customer_due'] ?? 0), 2) }}
-            </div>
-            <div class="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
-                Supplier Payable: {{ $cur }}{{ number_format((float) ($metrics['supplier_due'] ?? 0), 0) }}
-            </div>
-        </a>
-
-        {{-- Row 2: Total Products --}}
+        {{-- Row 1: Total Products --}}
         <a href="{{ route('products.index') }}"
-           style="background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);"
-           class="group relative min-w-0 overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(2,132,199,0.20)] hover:shadow-[0_10px_22px_rgba(2,132,199,0.28)] hover:-translate-y-0.5 transition-all duration-150 block">
-            <div class="flex items-center justify-between gap-2">
-                <span class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">Total Products</span>
-                <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
-                    <svg width="13" height="13" style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7"/></svg>
-                </span>
+           style="background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%);"
+           class="group relative min-w-0 overflow-hidden rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(29,78,216,0.22)] hover:shadow-[0_10px_22px_rgba(29,78,216,0.30)] hover:-translate-y-0.5 transition-all duration-150 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <div class="text-lg sm:text-xl font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+                    {{ number_format((int) ($metrics['product_count'] ?? 0)) }}
+                </div>
+                <div class="mt-1 text-[10.5px] font-semibold uppercase tracking-wide text-white/90 truncate">TOTAL PRODUCTS</div>
             </div>
-            <div class="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
-                {{ number_format((int) ($metrics['product_count'] ?? 0)) }}
-            </div>
-            <div class="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
-                Active SKUs in Store
-            </div>
+            <span class="w-9 h-9 rounded-xl bg-white/18 text-white flex items-center justify-center shrink-0">
+                <svg width="16" height="16" style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7"/></svg>
+            </span>
         </a>
 
         {{-- Row 2: Total Customers --}}
         <a href="{{ route('customers.index') }}"
-           style="background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%);"
-           class="group relative min-w-0 overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(13,148,136,0.20)] hover:shadow-[0_10px_22px_rgba(13,148,136,0.28)] hover:-translate-y-0.5 transition-all duration-150 block">
-            <div class="flex items-center justify-between gap-2">
-                <span class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">Total Customers</span>
-                <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
-                    <svg width="13" height="13" style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                </span>
+           style="background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);"
+           class="group relative min-w-0 overflow-hidden rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(124,58,237,0.22)] hover:shadow-[0_10px_22px_rgba(124,58,237,0.30)] hover:-translate-y-0.5 transition-all duration-150 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <div class="text-lg sm:text-xl font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+                    {{ number_format((int) ($metrics['customer_count'] ?? 0)) }}
+                </div>
+                <div class="mt-1 text-[10.5px] font-semibold uppercase tracking-wide text-white/90 truncate">TOTAL CUSTOMERS</div>
             </div>
-            <div class="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
-                {{ number_format((int) ($metrics['customer_count'] ?? 0)) }}
-            </div>
-            <div class="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
-                Registered Buyers
-            </div>
+            <span class="w-9 h-9 rounded-xl bg-white/18 text-white flex items-center justify-center shrink-0">
+                <svg width="16" height="16" style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </span>
         </a>
 
         {{-- Row 2: Total Suppliers --}}
         <a href="{{ route('suppliers.index') }}"
-           style="background: linear-gradient(135deg, #334155 0%, #475569 100%);"
-           class="group relative min-w-0 overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(51,65,85,0.20)] hover:shadow-[0_10px_22px_rgba(51,65,85,0.28)] hover:-translate-y-0.5 transition-all duration-150 block">
-            <div class="flex items-center justify-between gap-2">
-                <span class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">Total Suppliers</span>
-                <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
-                    <svg width="13" height="13" style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
-                </span>
+           style="background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);"
+           class="group relative min-w-0 overflow-hidden rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(15,118,110,0.22)] hover:shadow-[0_10px_22px_rgba(15,118,110,0.30)] hover:-translate-y-0.5 transition-all duration-150 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <div class="text-lg sm:text-xl font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+                    {{ number_format((int) ($metrics['supplier_count'] ?? 0)) }}
+                </div>
+                <div class="mt-1 text-[10.5px] font-semibold uppercase tracking-wide text-white/90 truncate">TOTAL SUPPLIERS</div>
             </div>
-            <div class="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
-                {{ number_format((int) ($metrics['supplier_count'] ?? 0)) }}
-            </div>
-            <div class="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
-                Active Vendors
-            </div>
+            <span class="w-9 h-9 rounded-xl bg-white/18 text-white flex items-center justify-center shrink-0">
+                <svg width="16" height="16" style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+            </span>
         </a>
 
         {{-- Row 2: Low Stock --}}
         <a href="{{ route('stock.index', ['filter' => 'low']) }}"
-           style="background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);"
-           class="group relative min-w-0 overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(234,88,12,0.20)] hover:shadow-[0_10px_22px_rgba(234,88,12,0.28)] hover:-translate-y-0.5 transition-all duration-150 block">
-            <div class="flex items-center justify-between gap-2">
-                <span class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">Low Stock</span>
-                <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
-                    <svg width="13" height="13" style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-                </span>
+           style="background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);"
+           class="group relative min-w-0 overflow-hidden rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(217,119,6,0.22)] hover:shadow-[0_10px_22px_rgba(217,119,6,0.30)] hover:-translate-y-0.5 transition-all duration-150 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <div class="text-lg sm:text-xl font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+                    {{ number_format((int) ($metrics['low_stock_count'] ?? 0)) }}
+                </div>
+                <div class="mt-1 text-[10.5px] font-semibold uppercase tracking-wide text-white/90 truncate">LOW STOCK</div>
             </div>
-            <div class="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
-                {{ number_format((int) ($metrics['low_stock_count'] ?? 0)) }}
-            </div>
-            <div class="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
-                Needs Restocking Soon
-            </div>
+            <span class="w-9 h-9 rounded-xl bg-white/18 text-white flex items-center justify-center shrink-0">
+                <svg width="16" height="16" style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+            </span>
         </a>
 
         {{-- Row 2: Out of Stock --}}
         <a href="{{ route('stock.index', ['filter' => 'out']) }}"
-           style="background: linear-gradient(135deg, #991b1b 0%, #dc2626 100%);"
-           class="group relative min-w-0 overflow-hidden rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(185,28,28,0.20)] hover:shadow-[0_10px_22px_rgba(185,28,28,0.28)] hover:-translate-y-0.5 transition-all duration-150 block">
-            <div class="flex items-center justify-between gap-2">
-                <span class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">Out of Stock</span>
-                <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0">
-                    <svg width="13" height="13" style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
-                </span>
+           style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);"
+           class="group relative min-w-0 overflow-hidden rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(220,38,38,0.22)] hover:shadow-[0_10px_22px_rgba(220,38,38,0.30)] hover:-translate-y-0.5 transition-all duration-150 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <div class="text-lg sm:text-xl font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+                    {{ number_format((int) ($metrics['out_of_stock_count'] ?? 0)) }}
+                </div>
+                <div class="mt-1 text-[10.5px] font-semibold uppercase tracking-wide text-white/90 truncate">OUT OF STOCK</div>
             </div>
-            <div class="mt-1.5 text-[15px] sm:text-[17px] font-display font-bold tabular-nums tracking-tight leading-tight truncate">
-                {{ number_format((int) ($metrics['out_of_stock_count'] ?? 0)) }}
+            <span class="w-9 h-9 rounded-xl bg-white/18 text-white flex items-center justify-center shrink-0">
+                <svg width="16" height="16" style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+            </span>
+        </a>
+
+        {{-- Row 2: Customer Due --}}
+        <a href="{{ route('customers.index') }}"
+           style="background: linear-gradient(135deg, #db2777 0%, #ec4899 100%);"
+           class="group relative min-w-0 overflow-hidden rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(219,39,119,0.22)] hover:shadow-[0_10px_22px_rgba(219,39,119,0.30)] hover:-translate-y-0.5 transition-all duration-150 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <div class="text-lg sm:text-xl font-display font-bold tabular-nums tracking-tight leading-tight truncate">
+                    {{ $cur }}{{ number_format((float) ($metrics['customer_due'] ?? 0), 2) }}
+                </div>
+                <div class="mt-1 text-[10.5px] font-semibold uppercase tracking-wide text-white/90 truncate">CUSTOMER DUE</div>
             </div>
-            <div class="mt-0.5 text-[10px] font-medium text-white/80 tabular-nums truncate">
-                Zero Stock SKUs
-            </div>
+            <span class="w-9 h-9 rounded-xl bg-white/18 text-white flex items-center justify-center shrink-0">
+                <svg width="16" height="16" style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+            </span>
         </a>
     </div>
 

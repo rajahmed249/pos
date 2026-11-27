@@ -28,20 +28,17 @@
         <div style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);"
              class="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(5,150,105,0.20)]">
             <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Total Cash In</div>
-            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ $cur }}{{ number_format((float) $totalIn, 2) }}</div>
-            <div class="mt-0.5 text-[10px] text-white/80">Counter Receipts &amp; Deposits</div>
+            <div class="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight">{{ $cur }}{{ number_format((float) $totalIn, 2) }}</div>
         </div>
         <div style="background: linear-gradient(135deg, #e11d48 0%, #f43f5e 100%);"
              class="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(225,29,72,0.20)]">
             <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Total Cash Out</div>
-            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ $cur }}{{ number_format((float) $totalOut, 2) }}</div>
-            <div class="mt-0.5 text-[10px] text-white/80">Payouts &amp; Withdrawals</div>
+            <div class="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight">{{ $cur }}{{ number_format((float) $totalOut, 2) }}</div>
         </div>
         <div style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);"
              class="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(79,70,229,0.22)]">
             <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Net Cash Balance</div>
-            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ $cur }}{{ number_format((float) $balance, 2) }}</div>
-            <div class="mt-0.5 text-[10px] text-white/80">Available Cash in Drawer</div>
+            <div class="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight">{{ $cur }}{{ number_format((float) $balance, 2) }}</div>
         </div>
     </div>
 

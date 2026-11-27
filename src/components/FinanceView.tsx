@@ -568,27 +568,24 @@ export function FinanceView({ section, bootstrap, onRefreshBootstrap }: FinanceV
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
           <div
             style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)' }}
-            className="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(79,70,229,0.20)]"
+            className="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(79,70,229,0.20)]"
           >
             <div className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Total Accounts</div>
-            <div className="mt-1 text-lg font-display font-bold tabular-nums">{accounts.length}</div>
-            <div className="mt-0.5 text-[10px] text-white/80">Cash, Bank &amp; Mobile Wallets</div>
+            <div className="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight">{accounts.length}</div>
           </div>
           <div
             style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%)' }}
-            className="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(2,132,199,0.20)]"
+            className="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(2,132,199,0.20)]"
           >
             <div className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Total Opening Balance</div>
-            <div className="mt-1 text-lg font-display font-bold tabular-nums">{formatMoney(totalOpening, cur)}</div>
-            <div className="mt-0.5 text-[10px] text-white/80">Initial Account Seeded Capital</div>
+            <div className="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight">{formatMoney(totalOpening, cur)}</div>
           </div>
           <div
             style={{ background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)' }}
-            className="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(5,150,105,0.20)]"
+            className="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(5,150,105,0.20)]"
           >
             <div className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Total Current Balance</div>
-            <div className="mt-1 text-lg font-display font-bold tabular-nums">{formatMoney(totalCurrent, cur)}</div>
-            <div className="mt-0.5 text-[10px] text-white/80">Available Liquid Funds</div>
+            <div className="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight">{formatMoney(totalCurrent, cur)}</div>
           </div>
         </div>
 

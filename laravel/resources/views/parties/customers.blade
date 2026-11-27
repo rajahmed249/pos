@@ -33,22 +33,19 @@
     {{-- Compact KPI Strip --}}
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
         <div style="background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);"
-             class="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(37,99,235,0.20)]">
+             class="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(37,99,235,0.20)]">
             <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Total Customers</div>
-            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ number_format($customers->total()) }}</div>
-            <div class="mt-0.5 text-[10px] text-white/80">Registered Buyer Accounts</div>
+            <div class="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight">{{ number_format($customers->total()) }}</div>
         </div>
         <div style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);"
-             class="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(5,150,105,0.20)]">
+             class="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(5,150,105,0.20)]">
             <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Page Billed Total</div>
-            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ $cur }}{{ number_format($pageBilled, 2) }}</div>
-            <div class="mt-0.5 text-[10px] text-white/80">{{ $customers->count() }} entries shown</div>
+            <div class="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight">{{ $cur }}{{ number_format($pageBilled, 2) }}</div>
         </div>
         <div style="background: linear-gradient(135deg, #e11d48 0%, #f43f5e 100%);"
-             class="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(225,29,72,0.20)]">
+             class="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(225,29,72,0.20)]">
             <div class="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Page Receivable Due</div>
-            <div class="mt-1 text-lg font-display font-bold tabular-nums">{{ $cur }}{{ number_format($pageDue, 2) }}</div>
-            <div class="mt-0.5 text-[10px] text-white/80">Uncollected Customer Balances</div>
+            <div class="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight">{{ $cur }}{{ number_format($pageDue, 2) }}</div>
         </div>
     </div>
 

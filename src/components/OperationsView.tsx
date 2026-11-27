@@ -295,7 +295,7 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
           <div
             style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)' }}
-            className="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(79,70,229,0.20)]"
+            className="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(79,70,229,0.20)]"
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">Total Owners</span>
@@ -303,15 +303,12 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
                 <UserCheck className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="mt-1 text-lg font-display font-bold tabular-nums leading-tight">{owners.length}</div>
-            <div className="mt-0.5 text-[10px] text-white/80 truncate">
-              {activeOwners.length} Active &middot; {totalShare.toFixed(1)}% Equity
-            </div>
+            <div className="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight">{owners.length}</div>
           </div>
 
           <div
             style={{ background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)' }}
-            className="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(5,150,105,0.20)]"
+            className="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(5,150,105,0.20)]"
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">Total Invested</span>
@@ -319,13 +316,12 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="mt-1 text-lg font-display font-bold tabular-nums leading-tight truncate">{formatMoney(totalInvested, cur)}</div>
-            <div className="mt-0.5 text-[10px] text-white/80 truncate">Total Capital Contributed</div>
+            <div className="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight truncate">{formatMoney(totalInvested, cur)}</div>
           </div>
 
           <div
             style={{ background: 'linear-gradient(135deg, #e11d48 0%, #f43f5e 100%)' }}
-            className="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(225,29,72,0.20)]"
+            className="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(225,29,72,0.20)]"
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">Total Withdrawn</span>
@@ -333,13 +329,12 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
                 <ArrowDownLeft className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="mt-1 text-lg font-display font-bold tabular-nums leading-tight truncate">{formatMoney(totalWithdrawn, cur)}</div>
-            <div className="mt-0.5 text-[10px] text-white/80 truncate">Total Drawings Taken</div>
+            <div className="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight truncate">{formatMoney(totalWithdrawn, cur)}</div>
           </div>
 
           <div
             style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%)' }}
-            className="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(2,132,199,0.20)]"
+            className="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(2,132,199,0.20)]"
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85 truncate">Net Balance</span>
@@ -347,8 +342,7 @@ export function OperationsView({ section, bootstrap, onRefreshBootstrap }: Opera
                 <Landmark className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="mt-1 text-lg font-display font-bold tabular-nums leading-tight truncate">{formatMoney(netBalance, cur)}</div>
-            <div className="mt-0.5 text-[10px] text-white/80 truncate">Invested Minus Withdrawn</div>
+            <div className="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight truncate">{formatMoney(netBalance, cur)}</div>
           </div>
         </div>
 

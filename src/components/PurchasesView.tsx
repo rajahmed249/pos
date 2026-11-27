@@ -309,27 +309,24 @@ export function PurchasesView({ currency, onRefreshBootstrap }: PurchasesViewPro
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
         <div
           style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)' }}
-          className="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(79,70,229,0.20)]"
+          className="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(79,70,229,0.20)]"
         >
           <div className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Page Purchase Total</div>
-          <div className="mt-1 text-lg font-display font-bold tabular-nums">{formatMoney(pageTotal, currency)}</div>
-          <div className="mt-0.5 text-[10px] text-white/80">{purchases.length} entries shown</div>
+          <div className="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight">{formatMoney(pageTotal, currency)}</div>
         </div>
         <div
           style={{ background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)' }}
-          className="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(5,150,105,0.20)]"
+          className="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(5,150,105,0.20)]"
         >
           <div className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Paid to Suppliers</div>
-          <div className="mt-1 text-lg font-display font-bold tabular-nums">{formatMoney(pagePaid, currency)}</div>
-          <div className="mt-0.5 text-[10px] text-white/80">Settled on Current Page</div>
+          <div className="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight">{formatMoney(pagePaid, currency)}</div>
         </div>
         <div
           style={{ background: 'linear-gradient(135deg, #e11d48 0%, #f43f5e 100%)' }}
-          className="rounded-xl px-3.5 py-2.5 text-white shadow-[0_6px_16px_rgba(225,29,72,0.20)]"
+          className="rounded-xl px-4 py-3 text-white shadow-[0_6px_16px_rgba(225,29,72,0.20)]"
         >
           <div className="text-[10.5px] font-semibold uppercase tracking-wide text-white/85">Payable Due</div>
-          <div className="mt-1 text-lg font-display font-bold tabular-nums">{formatMoney(pageDue, currency)}</div>
-          <div className="mt-0.5 text-[10px] text-white/80">Supplier Balances Due</div>
+          <div className="mt-1 text-lg sm:text-xl font-display font-bold tabular-nums leading-tight">{formatMoney(pageDue, currency)}</div>
         </div>
       </div>
 
